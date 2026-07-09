@@ -25,7 +25,7 @@ export const sendJson = (response: ServerResponse, statusCode: number, payload: 
   const body = JSON.stringify(payload);
 
   response.writeHead(statusCode, {
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'content-type,x-telegram-init-data',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
     'access-control-allow-origin': '*',
     'content-length': Buffer.byteLength(body),
@@ -36,7 +36,7 @@ export const sendJson = (response: ServerResponse, statusCode: number, payload: 
 
 export const sendNoContent = (response: ServerResponse) => {
   response.writeHead(204, {
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'content-type,x-telegram-init-data',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
     'access-control-allow-origin': '*',
   });

@@ -25,6 +25,12 @@ Backend API:
 npm run server:dev
 ```
 
+Telegram auth режим для backend:
+
+```bash
+TELEGRAM_BOT_TOKEN=<bot-token-from-botfather> npm run server:dev
+```
+
 Frontend зі станом через backend:
 
 ```bash
@@ -41,6 +47,12 @@ Lint:
 
 ```bash
 npm run lint
+```
+
+Server тести:
+
+```bash
+npm run test:server
 ```
 
 ## Поточна структура
@@ -65,7 +77,8 @@ npm run lint
 
 - Backend persistence має локальний SQLite scaffold, а frontend вже може працювати через backend adapter, якщо задано `VITE_GAME_API_URL`.
 - Без `VITE_GAME_API_URL` frontend лишається в автономному `localStorage` fallback для швидкого прототипування.
-- Telegram user binding читає `Telegram.WebApp.initDataUnsafe.user.id`, але server-side initData validation ще не підключена.
+- Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
+- Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback для локального прототипування.
 - Economy винесена в typed balance-конфіг, але самі формули ще прототипні й потребують плейтесту.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
 
@@ -73,14 +86,16 @@ npm run lint
 
 - `GET /api/health`
 - `GET /api/game/content`
-- `GET /api/game/state?playerId=<id>`
+- `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі
 - `POST /api/game/action`
 
 Action payload:
 
 ```json
 {
-  "playerId": "telegram-or-dev-id",
+  "playerId": "dev-player-only-without-TELEGRAM_BOT_TOKEN",
   "action": { "type": "deal_damage", "amount": 25, "source": "tap" }
 }
 ```
+
+У Telegram auth режимі `playerId` у body не потрібен і не є джерелом правди; backend бере гравця з валідованого `x-telegram-init-data`.
