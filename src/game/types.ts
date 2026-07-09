@@ -50,19 +50,28 @@ export interface GameSnapshot {
   stage: number;
   monsterMaxHealth: number;
   monsterHealth: number;
+  lastSeenAt: string;
   updatedAt: string;
 }
 
 export type GameAction =
   | { type: 'deal_damage'; amount: number; source: 'tap' | 'passive' | 'skill' }
   | { type: 'summon'; randomValue?: number }
-  | { type: 'upgrade_hero'; heroId: string };
+  | { type: 'upgrade_hero'; heroId: string }
+  | { type: 'claim_offline_rewards' };
 
 export type GameEvent =
   | { type: 'monster_hit'; damage: number; monsterHealth: number }
   | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: number; gemReward: number }
   | { type: 'hero_summoned'; hero: Hero; costGems: number }
   | { type: 'hero_upgraded'; heroId: string; goldCost: number; level: number; power: number }
+  | {
+      type: 'offline_rewards_claimed';
+      elapsedSeconds: number;
+      cappedSeconds: number;
+      passivePower: number;
+      goldReward: number;
+    }
   | { type: 'action_rejected'; reason: string };
 
 export interface GameActionResult {

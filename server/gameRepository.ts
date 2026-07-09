@@ -15,7 +15,14 @@ export interface PlayerState {
 }
 
 const parseSnapshot = (snapshotJson: string): GameSnapshot => {
-  return JSON.parse(snapshotJson) as GameSnapshot;
+  const snapshot = JSON.parse(snapshotJson) as GameSnapshot;
+  const fallbackTimestamp = typeof snapshot.updatedAt === 'string' ? snapshot.updatedAt : new Date().toISOString();
+
+  return {
+    ...snapshot,
+    lastSeenAt: typeof snapshot.lastSeenAt === 'string' ? snapshot.lastSeenAt : fallbackTimestamp,
+    updatedAt: fallbackTimestamp,
+  };
 };
 
 export class GameRepository {

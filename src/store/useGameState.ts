@@ -68,6 +68,9 @@ const sanitizeSnapshot = (value: unknown): GameSnapshot | null => {
     stage,
     monsterMaxHealth,
     monsterHealth,
+    lastSeenAt: typeof value.lastSeenAt === 'string'
+      ? value.lastSeenAt
+      : (typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString()),
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
   };
 };
@@ -148,6 +151,7 @@ export const useGameState = () => {
   const playerIdRef = useRef(getOrCreateDevPlayerId());
   const snapshotRef = useRef(initialSnapshot);
   const actionQueueRef = useRef(Promise.resolve());
+  const offlineClaimRequestedRef = useRef(false);
 
   const applySnapshot = useCallback((nextSnapshot: GameSnapshot) => {
     snapshotRef.current = nextSnapshot;
@@ -208,6 +212,15 @@ export const useGameState = () => {
     actionQueueRef.current = nextAction.then(() => undefined);
     return nextAction;
   }, [applySnapshot]);
+
+  useEffect(() => {
+    if (!isGameApiEnabled() || backendStatus !== 'synced' || offlineClaimRequestedRef.current) {
+      return;
+    }
+
+    offlineClaimRequestedRef.current = true;
+    void runGameAction({ type: 'claim_offline_rewards' });
+  }, [backendStatus, runGameAction]);
 
   const isBoss = isBossStage(snapshot.stage);
   const baseClickPower = getBaseClickPower(snapshot.heroes);

@@ -81,6 +81,7 @@ npm run test:server
 - Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
 - Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback для локального прототипування.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
+- Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
 
 ## Backend API
@@ -100,3 +101,11 @@ Action payload:
 ```
 
 У Telegram auth режимі `playerId` у body не потрібен і не є джерелом правди; backend бере гравця з валідованого `x-telegram-init-data`.
+
+Offline reward action:
+
+```json
+{
+  "action": { "type": "claim_offline_rewards" }
+}
+```

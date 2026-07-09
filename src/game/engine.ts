@@ -19,14 +19,28 @@ const createHeroId = () => {
   return Math.random().toString(36).slice(2);
 };
 
-const touchSnapshot = (snapshot: Omit<GameSnapshot, 'updatedAt'>): GameSnapshot => {
-  return { ...snapshot, updatedAt: nowIso() };
+const touchSnapshot = (snapshot: GameSnapshot, now = nowIso()): GameSnapshot => {
+  return { ...snapshot, lastSeenAt: now, updatedAt: now };
+};
+
+const getHeroPassivePower = (snapshot: Pick<GameSnapshot, 'heroes'>) => {
+  return snapshot.heroes.reduce((total, hero) => total + hero.power, 0);
+};
+
+const getOfflineElapsedSeconds = (lastSeenAt: string, nowMs: number) => {
+  const lastSeenMs = Date.parse(lastSeenAt);
+  if (!Number.isFinite(lastSeenMs)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((nowMs - lastSeenMs) / 1000));
 };
 
 export const createInitialGameSnapshot = (): GameSnapshot => {
   const stage = GAME_BALANCE.initialStage;
   const monsterMaxHealth = getMonsterMaxHealth(stage);
 
+  const now = nowIso();
   return {
     gold: GAME_BALANCE.initialGold,
     gems: GAME_BALANCE.initialGems,
@@ -34,7 +48,8 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
     stage,
     monsterMaxHealth,
     monsterHealth: monsterMaxHealth,
-    updatedAt: nowIso(),
+    lastSeenAt: now,
+    updatedAt: now,
   };
 };
 
@@ -175,6 +190,31 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
   };
 };
 
+export const claimOfflineRewardsAction = (snapshot: GameSnapshot, nowMs = Date.now()): GameActionResult => {
+  const now = new Date(nowMs).toISOString();
+  const elapsedSeconds = getOfflineElapsedSeconds(snapshot.lastSeenAt, nowMs);
+  const cappedSeconds = Math.min(elapsedSeconds, GAME_BALANCE.offlineRewardMaxSeconds);
+  const rewardedSeconds = cappedSeconds >= GAME_BALANCE.offlineRewardMinSeconds ? cappedSeconds : 0;
+  const passivePower = getHeroPassivePower(snapshot);
+  const goldReward = Math.floor(passivePower * rewardedSeconds * GAME_BALANCE.offlineGoldPerPowerSecond);
+
+  const updatedSnapshot = touchSnapshot({
+    ...snapshot,
+    gold: snapshot.gold + goldReward,
+  }, now);
+
+  return {
+    snapshot: updatedSnapshot,
+    events: [{
+      type: 'offline_rewards_claimed',
+      elapsedSeconds,
+      cappedSeconds,
+      passivePower,
+      goldReward,
+    }],
+  };
+};
+
 export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): GameActionResult => {
   switch (action.type) {
     case 'deal_damage':
@@ -183,5 +223,7 @@ export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): Gam
       return summonHeroAction(snapshot, action.randomValue);
     case 'upgrade_hero':
       return upgradeHeroAction(snapshot, action.heroId);
+    case 'claim_offline_rewards':
+      return claimOfflineRewardsAction(snapshot);
   }
 };
