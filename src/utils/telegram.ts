@@ -8,6 +8,7 @@ interface TelegramHapticFeedback {
 
 interface TelegramWebApp {
   HapticFeedback?: TelegramHapticFeedback;
+  initData?: string;
   initDataUnsafe?: {
     user?: {
       id?: number;
@@ -49,6 +50,11 @@ export const initializeTelegramApp = () => {
 export const getTelegramPlayerId = () => {
   const userId = getTelegramWebApp()?.initDataUnsafe?.user?.id;
   return typeof userId === 'number' ? `telegram:${userId}` : null;
+};
+
+export const getTelegramInitData = () => {
+  const initData = getTelegramWebApp()?.initData;
+  return typeof initData === 'string' && initData.length > 0 ? initData : null;
 };
 
 export type { HapticImpactStyle, HapticNotificationType };

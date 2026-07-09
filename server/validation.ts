@@ -26,14 +26,14 @@ export const normalizePlayerId = (value: unknown) => {
   return trimmed;
 };
 
-export const parseGameActionRequest = (value: unknown): { playerId: string; action: GameAction } | null => {
+export const parseGameActionRequest = (value: unknown): { requestedPlayerId: string | null; action: GameAction } | null => {
   if (!isRecord(value)) {
     return null;
   }
 
   const request = value as GameActionRequest;
-  const playerId = normalizePlayerId(request.playerId);
-  if (!playerId || !isRecord(request.action)) {
+  const requestedPlayerId = request.playerId === undefined ? null : normalizePlayerId(request.playerId);
+  if ((request.playerId !== undefined && !requestedPlayerId) || !isRecord(request.action)) {
     return null;
   }
 
@@ -50,7 +50,7 @@ export const parseGameActionRequest = (value: unknown): { playerId: string; acti
     }
 
     return {
-      playerId,
+      requestedPlayerId,
       action: {
         type: 'deal_damage',
         amount: request.action.amount,
@@ -65,7 +65,7 @@ export const parseGameActionRequest = (value: unknown): { playerId: string; acti
     }
 
     return {
-      playerId,
+      requestedPlayerId,
       action: {
         type: 'summon',
         randomValue: request.action.randomValue,
@@ -79,7 +79,7 @@ export const parseGameActionRequest = (value: unknown): { playerId: string; acti
     }
 
     return {
-      playerId,
+      requestedPlayerId,
       action: {
         type: 'upgrade_hero',
         heroId: request.action.heroId,

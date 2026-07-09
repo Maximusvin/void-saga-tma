@@ -4,8 +4,9 @@ import { applyGameAction } from '../src/game/engine';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
 import { getRequestUrl, readJsonBody, sendJson, sendNoContent } from './http';
+import { resolvePlayerIdentity } from './playerIdentity';
 import { runPlayerMutation } from './playerLocks';
-import { normalizePlayerId, parseGameActionRequest } from './validation';
+import { parseGameActionRequest } from './validation';
 
 const PORT = Number(process.env.PORT ?? 8787);
 
@@ -35,13 +36,13 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/game/state') {
-      const playerId = normalizePlayerId(url.searchParams.get('playerId'));
-      if (!playerId) {
-        sendJson(response, 400, { error: 'playerId_required' });
+      const identity = resolvePlayerIdentity(request, url.searchParams.get('playerId'));
+      if (!identity.ok) {
+        sendJson(response, identity.statusCode, { error: identity.error });
         return;
       }
 
-      sendJson(response, 200, gameRepository.getOrCreatePlayer(playerId));
+      sendJson(response, 200, gameRepository.getOrCreatePlayer(identity.playerId));
       return;
     }
 
@@ -52,10 +53,16 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      const actionResult = await runPlayerMutation(parsedRequest.playerId, () => {
-        const playerState = gameRepository.getOrCreatePlayer(parsedRequest.playerId);
+      const identity = resolvePlayerIdentity(request, parsedRequest.requestedPlayerId);
+      if (!identity.ok) {
+        sendJson(response, identity.statusCode, { error: identity.error });
+        return;
+      }
+
+      const actionResult = await runPlayerMutation(identity.playerId, () => {
+        const playerState = gameRepository.getOrCreatePlayer(identity.playerId);
         const result = applyGameAction(playerState.snapshot, parsedRequest.action);
-        const savedState = gameRepository.savePlayer(parsedRequest.playerId, result.snapshot);
+        const savedState = gameRepository.savePlayer(identity.playerId, result.snapshot);
 
         return {
           ...savedState,

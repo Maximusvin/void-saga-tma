@@ -1,4 +1,5 @@
 import type { GameAction, GameEvent, GameSnapshot } from '../game/types';
+import { getTelegramInitData } from '../utils/telegram';
 
 interface PlayerStateResponse {
   playerId: string;
@@ -18,10 +19,12 @@ export const GAME_API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_GAME_API_
 export const isGameApiEnabled = () => GAME_API_BASE_URL.length > 0;
 
 const requestJson = async <TResponse>(url: string, init?: RequestInit): Promise<TResponse> => {
+  const telegramInitData = getTelegramInitData();
   const response = await fetch(url, {
     ...init,
     headers: {
       'content-type': 'application/json',
+      ...(telegramInitData ? { 'x-telegram-init-data': telegramInitData } : {}),
       ...init?.headers,
     },
   });
