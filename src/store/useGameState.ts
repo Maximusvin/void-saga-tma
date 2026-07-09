@@ -243,7 +243,7 @@ export const useGameState = () => {
   };
 
   const dealDamage = useCallback((amount: number, isPassive = false) => {
-    void runGameAction({
+    return runGameAction({
       type: 'deal_damage',
       amount: Math.max(0, amount),
       source: isPassive ? 'passive' : 'tap',

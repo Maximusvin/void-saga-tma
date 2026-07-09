@@ -3,14 +3,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
-import { GAME_BALANCE } from '../game/balance';
+import { GAME_BALANCE, isBossStage } from '../game/balance';
+import type { GameEvent } from '../game/types';
 import { RiftPixiScene } from './RiftPixiScene';
 import './TheRift.css';
 
 interface TheRiftProps {
   monsterHealth: number;
   monsterMaxHealth: number;
-  dealDamage: (amount: number) => void;
+  dealDamage: (amount: number) => Promise<GameEvent[]>;
   clickPower: number;
   stage: number;
   isBoss: boolean;
@@ -41,7 +42,15 @@ interface DefeatTransition {
   defeatedStage: number;
   nextStage: number;
   wasBoss: boolean;
+  goldReward: number | null;
+  gemReward: number | null;
 }
+
+type MonsterDefeatedEvent = Extract<GameEvent, { type: 'monster_defeated' }>;
+
+const getMonsterDefeatedEvent = (events: GameEvent[]) => {
+  return events.find((event): event is MonsterDefeatedEvent => event.type === 'monster_defeated') ?? null;
+};
 
 export const TheRift: React.FC<TheRiftProps> = ({
   monsterHealth,
@@ -108,14 +117,45 @@ export const TheRift: React.FC<TheRiftProps> = ({
     return () => clearInterval(interval);
   }, [passivePower]);
 
-  const triggerDefeatTransition = (defeatedStage: number, nextStage: number, wasBoss: boolean) => {
+  const triggerDefeatTransition = (
+    defeatedStage: number,
+    nextStage: number,
+    wasBoss: boolean,
+    rewards?: Pick<MonsterDefeatedEvent, 'goldReward' | 'gemReward'>,
+  ) => {
     lastDefeatStageRef.current = defeatedStage;
     setDefeatTransition(current => ({
       id: (current?.id ?? 0) + 1,
       defeatedStage,
       nextStage,
       wasBoss,
+      goldReward: rewards?.goldReward ?? null,
+      gemReward: rewards?.gemReward ?? null,
     }));
+  };
+
+  const applyDefeatRewardEvent = (defeatedEvent: MonsterDefeatedEvent) => {
+    lastDefeatStageRef.current = defeatedEvent.stage;
+    setDefeatTransition(current => {
+      if (current?.defeatedStage === defeatedEvent.stage) {
+        return {
+          ...current,
+          nextStage: defeatedEvent.nextStage,
+          wasBoss: isBossStage(defeatedEvent.stage),
+          goldReward: defeatedEvent.goldReward,
+          gemReward: defeatedEvent.gemReward,
+        };
+      }
+
+      return {
+        id: (current?.id ?? 0) + 1,
+        defeatedStage: defeatedEvent.stage,
+        nextStage: defeatedEvent.nextStage,
+        wasBoss: isBossStage(defeatedEvent.stage),
+        goldReward: defeatedEvent.goldReward,
+        gemReward: defeatedEvent.gemReward,
+      };
+    });
   };
 
   useEffect(() => {
@@ -135,7 +175,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
       return;
     }
 
-    const timeout = setTimeout(() => setDefeatTransition(null), defeatTransition.wasBoss ? 1500 : 1050);
+    const timeout = setTimeout(() => setDefeatTransition(null), defeatTransition.wasBoss ? 2100 : 1650);
     return () => clearTimeout(timeout);
   }, [defeatTransition]);
 
@@ -161,7 +201,12 @@ export const TheRift: React.FC<TheRiftProps> = ({
       triggerDefeatTransition(stage, stage + 1, isBoss);
     }
 
-    dealDamage(finalDamage);
+    void dealDamage(finalDamage).then(events => {
+      const defeatedEvent = getMonsterDefeatedEvent(events);
+      if (defeatedEvent) {
+        applyDefeatRewardEvent(defeatedEvent);
+      }
+    });
     registerHit();
     triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
     setIsHit(true);
@@ -297,8 +342,26 @@ export const TheRift: React.FC<TheRiftProps> = ({
               exit={{ opacity: 0, x: '-50%', y: -22, scale: 0.94 }}
               transition={{ duration: 0.26, ease: 'easeOut' }}
             >
-              <span>{defeatTransition.wasBoss ? 'Boss Rift Cleared' : 'Rift Cleared'}</span>
-              <strong>Stage {defeatTransition.nextStage}</strong>
+              <div className="reward-chest" aria-hidden="true">
+                <span className="reward-chest-glow" />
+                <span className="reward-chest-lid" />
+                <span className="reward-chest-body" />
+                <span className="reward-chest-shine" />
+              </div>
+              <div className="rift-clear-copy">
+                <span>{defeatTransition.wasBoss ? 'Boss Rift Cleared' : 'Rift Cleared'}</span>
+                <strong>Stage {defeatTransition.nextStage}</strong>
+              </div>
+              <div className="rift-reward-row">
+                {defeatTransition.goldReward === null ? (
+                  <span className="reward-pill claimed">Rewards claimed</span>
+                ) : (
+                  <span className="reward-pill gold">+{formatNumber(defeatTransition.goldReward)} Gold</span>
+                )}
+                {(defeatTransition.gemReward ?? 0) > 0 && (
+                  <span className="reward-pill gem">+{formatNumber(defeatTransition.gemReward ?? 0)} Gems</span>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
