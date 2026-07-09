@@ -12,6 +12,14 @@ import {
   getStageBandForStage,
 } from './content';
 import type { Hero, HeroRarity, SummonHeroTemplate } from './types';
+import {
+  ONE_GAME_NUMBER,
+  addGameNumbers,
+  floorGameNumber,
+  gameNumber,
+  multiplyGameNumbers,
+  powGameNumber,
+} from './gameNumber';
 
 export {
   BOSS_EMOJI,
@@ -65,26 +73,40 @@ export const GAME_BALANCE = {
   autoProjectileTravelMs: 400,
 } as const;
 
+const normalizeStage = (stage: number) => {
+  return Number.isFinite(stage) && Number.isSafeInteger(Math.floor(stage))
+    ? Math.max(1, Math.floor(stage))
+    : GAME_BALANCE.initialStage;
+};
+
 export const isBossStage = (stage: number) => {
-  const stageBand = getStageBandForStage(stage);
-  return stage % stageBand.boss.everyStages === 0;
+  const normalizedStage = normalizeStage(stage);
+  const stageBand = getStageBandForStage(normalizedStage);
+  return normalizedStage % stageBand.boss.everyStages === 0;
 };
 
 export const getMonsterMaxHealth = (stage: number) => {
-  const stageBand = getStageBandForStage(stage);
-  const scaledHealth = Math.floor(
-    stageBand.baseMonsterHealth * Math.pow(stageBand.monsterHealthGrowth, stage - 1),
+  const normalizedStage = normalizeStage(stage);
+  const stageBand = getStageBandForStage(normalizedStage);
+  const scaledHealth = floorGameNumber(
+    multiplyGameNumbers(
+      stageBand.baseMonsterHealth,
+      powGameNumber(stageBand.monsterHealthGrowth, normalizedStage - 1),
+    ),
   );
 
-  return scaledHealth * (isBossStage(stage) ? stageBand.boss.healthMultiplier : 1);
+  return multiplyGameNumbers(scaledHealth, isBossStage(normalizedStage) ? stageBand.boss.healthMultiplier : 1);
 };
 
 export const getBaseClickPower = (heroes: Hero[]) => {
-  return 1 + heroes.reduce((acc, hero) => acc + hero.power * GAME_BALANCE.clickHeroPowerMultiplier, 0);
+  return addGameNumbers(
+    ONE_GAME_NUMBER,
+    ...heroes.map(hero => multiplyGameNumbers(hero.power, GAME_BALANCE.clickHeroPowerMultiplier)),
+  );
 };
 
 export const getPassivePower = (heroes: Hero[]) => {
-  return heroes.reduce((acc, hero) => acc + hero.power, 0);
+  return addGameNumbers(...heroes.map(hero => hero.power));
 };
 
 export const getComboMultiplier = (comboCount: number) => {
@@ -94,11 +116,11 @@ export const getComboMultiplier = (comboCount: number) => {
 export const MAX_COMBO_HITS = Math.ceil(GAME_BALANCE.comboMaxBonus / GAME_BALANCE.comboBonusPerHit);
 
 export const getUpgradeCost = (hero: Pick<Hero, 'level'>) => {
-  return hero.level * GAME_BALANCE.upgradeGoldPerLevel;
+  return gameNumber(hero.level * GAME_BALANCE.upgradeGoldPerLevel);
 };
 
 export const getNextHeroPower = (hero: Pick<Hero, 'power'>) => {
-  return Math.floor(hero.power * GAME_BALANCE.upgradePowerMultiplier);
+  return floorGameNumber(multiplyGameNumbers(hero.power, GAME_BALANCE.upgradePowerMultiplier));
 };
 
 export const getHeroIcon = (rarity: HeroRarity) => {

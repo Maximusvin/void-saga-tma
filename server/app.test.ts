@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { GameEvent, GameSnapshot } from '../src/game/types';
+import { subtractGameNumbers } from '../src/game/gameNumber';
 import { createGameRequestHandler } from './app';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
@@ -74,6 +75,9 @@ describe('game API persistence', () => {
 
       assert.equal(initialState.response.status, 200);
       assert.equal(initialState.body.playerId, playerId);
+      assert.equal(initialState.body.snapshot.schemaVersion, 2);
+      assert.equal(typeof initialState.body.snapshot.gold, 'string');
+      assert.equal(typeof initialState.body.snapshot.monsterHealth, 'string');
 
       const actionResult = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
         body: JSON.stringify({
@@ -95,7 +99,7 @@ describe('game API persistence', () => {
       assert.equal(hitEvent.type, 'monster_hit');
       assert.equal(
         actionResult.body.snapshot.monsterHealth,
-        initialState.body.snapshot.monsterHealth - hitEvent.damage,
+        subtractGameNumbers(initialState.body.snapshot.monsterHealth, hitEvent.damage),
       );
       assert.equal(actionResult.body.replayed, false);
 

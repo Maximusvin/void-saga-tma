@@ -11,7 +11,24 @@ import {
   isBossStage,
   rollSummonTemplate,
 } from './balance';
-import type { GameAction, GameActionResult, GameSnapshot, Hero } from './types';
+import {
+  ZERO_GAME_NUMBER,
+  addGameNumbers,
+  compareGameNumbers,
+  floorGameNumber,
+  gameNumber,
+  isPositiveGameNumber,
+  multiplyGameNumbers,
+  subtractGameNumbers,
+  type GameNumber,
+} from './gameNumber';
+import {
+  GAME_SNAPSHOT_SCHEMA_VERSION,
+  type GameAction,
+  type GameActionResult,
+  type GameSnapshot,
+  type Hero,
+} from './types';
 
 const nowIso = () => new Date().toISOString();
 
@@ -28,7 +45,7 @@ const touchSnapshot = (snapshot: GameSnapshot, now = nowIso()): GameSnapshot => 
 };
 
 const getHeroPassivePower = (snapshot: Pick<GameSnapshot, 'heroes'>) => {
-  return snapshot.heroes.reduce((total, hero) => total + hero.power, 0);
+  return getPassivePower(snapshot.heroes);
 };
 
 const getOfflineElapsedSeconds = (lastSeenAt: string, nowMs: number) => {
@@ -46,9 +63,10 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
 
   const now = nowIso();
   return {
+    schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
     comboCount: 0,
     comboExpiresAt: null,
-    gold: GAME_BALANCE.initialGold,
+    gold: gameNumber(GAME_BALANCE.initialGold),
     gems: GAME_BALANCE.initialGems,
     heroes: [],
     stage,
@@ -61,7 +79,7 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
 
 export const applyDamageAction = (
   snapshot: GameSnapshot,
-  amount: number,
+  damage: GameNumber,
   source: 'tap' | 'passive',
   options: {
     comboCount?: number;
@@ -69,35 +87,36 @@ export const applyDamageAction = (
     now?: string;
   } = {},
 ): GameActionResult => {
-  const damage = Math.max(0, amount);
-  if (damage <= 0) {
+  if (!isPositiveGameNumber(damage)) {
     return {
       snapshot,
       events: [{ type: 'action_rejected', reason: 'damage_must_be_positive' }],
     };
   }
 
-  if (snapshot.monsterHealth <= 0) {
+  if (!isPositiveGameNumber(snapshot.monsterHealth)) {
     return {
       snapshot,
       events: [{ type: 'action_rejected', reason: 'monster_already_defeated' }],
     };
   }
 
-  const nextMonsterHealth = snapshot.monsterHealth - damage;
+  const nextMonsterHealth = subtractGameNumbers(snapshot.monsterHealth, damage);
   const hitEvent = {
     type: 'monster_hit' as const,
     comboCount: options.comboCount ?? snapshot.comboCount,
     damage,
     isCrit: options.isCrit ?? false,
-    monsterHealth: Math.max(0, nextMonsterHealth),
+    monsterHealth: nextMonsterHealth,
     source,
     stage: snapshot.stage,
   };
-  if (nextMonsterHealth > 0) {
+  if (isPositiveGameNumber(nextMonsterHealth)) {
     const updatedSnapshot = touchSnapshot({
       ...snapshot,
-      gold: source === 'tap' ? snapshot.gold + damage * GAME_BALANCE.clickGoldMultiplier : snapshot.gold,
+      gold: source === 'tap'
+        ? addGameNumbers(snapshot.gold, multiplyGameNumbers(damage, GAME_BALANCE.clickGoldMultiplier))
+        : snapshot.gold,
       monsterHealth: nextMonsterHealth,
     }, options.now);
 
@@ -113,13 +132,17 @@ export const applyDamageAction = (
   const defeatedStageBand = getStageBandForStage(defeatedStage);
   const defeatedBoss = isBossStage(defeatedStage);
   const goldReward = defeatedBoss
-    ? snapshot.monsterMaxHealth * defeatedStageBand.boss.goldMultiplier
-    : snapshot.monsterMaxHealth * GAME_BALANCE.killGoldMultiplier;
+    ? multiplyGameNumbers(snapshot.monsterMaxHealth, defeatedStageBand.boss.goldMultiplier)
+    : multiplyGameNumbers(snapshot.monsterMaxHealth, GAME_BALANCE.killGoldMultiplier);
   const gemReward = defeatedBoss ? defeatedStageBand.boss.gemReward : 0;
 
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
-    gold: snapshot.gold + goldReward + (source === 'tap' ? damage * GAME_BALANCE.clickGoldMultiplier : 0),
+    gold: addGameNumbers(
+      snapshot.gold,
+      goldReward,
+      source === 'tap' ? multiplyGameNumbers(damage, GAME_BALANCE.clickGoldMultiplier) : ZERO_GAME_NUMBER,
+    ),
     gems: snapshot.gems + gemReward,
     stage: nextStage,
     monsterMaxHealth: nextMonsterMaxHealth,
@@ -174,9 +197,11 @@ export const applyCombatBatchAction = (
 
   for (let index = 0; index < normalizedTapCount; index += 1) {
     const isCrit = random() < GAME_BALANCE.critChance;
-    const damage = baseClickPower
-      * getComboMultiplier(comboCount)
-      * (isCrit ? GAME_BALANCE.critMultiplier : 1);
+    const damage = multiplyGameNumbers(
+      baseClickPower,
+      getComboMultiplier(comboCount),
+      isCrit ? GAME_BALANCE.critMultiplier : 1,
+    );
     comboCount = Math.min(MAX_COMBO_HITS, comboCount + 1);
 
     const result = applyDamageAction(currentSnapshot, damage, 'tap', {
@@ -189,7 +214,7 @@ export const applyCombatBatchAction = (
   }
 
   const passivePower = getPassivePower(snapshot.heroes);
-  for (let index = 0; index < normalizedPassiveTicks && passivePower > 0; index += 1) {
+  for (let index = 0; index < normalizedPassiveTicks && isPositiveGameNumber(passivePower); index += 1) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
       comboCount,
       now,
@@ -226,7 +251,7 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
     name: template.name,
     rarity: template.rarity,
     level: 1,
-    power: template.power,
+    power: gameNumber(template.power),
   };
 
   const updatedSnapshot = touchSnapshot({
@@ -251,7 +276,7 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
   }
 
   const goldCost = getUpgradeCost(heroToUpgrade);
-  if (snapshot.gold < goldCost) {
+  if (compareGameNumbers(snapshot.gold, goldCost) < 0) {
     return {
       snapshot,
       events: [{ type: 'action_rejected', reason: 'not_enough_gold' }],
@@ -262,7 +287,7 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
   const nextPower = getNextHeroPower(heroToUpgrade);
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
-    gold: snapshot.gold - goldCost,
+    gold: subtractGameNumbers(snapshot.gold, goldCost),
     heroes: snapshot.heroes.map(hero => {
       if (hero.id !== heroId) {
         return hero;
@@ -288,11 +313,13 @@ export const claimOfflineRewardsAction = (snapshot: GameSnapshot, nowMs = Date.n
   const cappedSeconds = Math.min(elapsedSeconds, GAME_BALANCE.offlineRewardMaxSeconds);
   const rewardedSeconds = cappedSeconds >= GAME_BALANCE.offlineRewardMinSeconds ? cappedSeconds : 0;
   const passivePower = getHeroPassivePower(snapshot);
-  const goldReward = Math.floor(passivePower * rewardedSeconds * GAME_BALANCE.offlineGoldPerPowerSecond);
+  const goldReward = floorGameNumber(
+    multiplyGameNumbers(passivePower, rewardedSeconds, GAME_BALANCE.offlineGoldPerPowerSecond),
+  );
 
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
-    gold: snapshot.gold + goldReward,
+    gold: addGameNumbers(snapshot.gold, goldReward),
   }, now);
 
   return {

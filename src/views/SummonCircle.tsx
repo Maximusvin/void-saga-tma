@@ -11,6 +11,7 @@ import {
   getSummonDropPercent,
 } from '../game/balance';
 import type { Hero } from '../game/types';
+import { formatNumber } from '../utils/formatNumber';
 import './SummonCircle.css';
 
 interface SummonCircleProps {
@@ -272,7 +273,7 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
               <p style={{ fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '15px', position: 'relative', zIndex: 1 }}>{summonedHero.name}</p>
               
               <div style={{ background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '12px', marginBottom: '30px', position: 'relative', zIndex: 1 }}>
-                <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>⚡ Power: {summonedHero.power}</p>
+                <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>⚡ Power: {formatNumber(summonedHero.power)}</p>
               </div>
 
               <motion.button 

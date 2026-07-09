@@ -1,12 +1,16 @@
+import type { GameNumber } from './gameNumber';
+
 export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type ActiveView = 'rift' | 'summon' | 'roster';
+
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 2;
 
 export interface Hero {
   id: string;
   name: string;
   rarity: HeroRarity;
   level: number;
-  power: number;
+  power: GameNumber;
 }
 
 export interface SummonHeroTemplate {
@@ -44,14 +48,15 @@ export interface GameContent {
 }
 
 export interface GameSnapshot {
+  schemaVersion: typeof GAME_SNAPSHOT_SCHEMA_VERSION;
   comboCount: number;
   comboExpiresAt: string | null;
-  gold: number;
+  gold: GameNumber;
   gems: number;
   heroes: Hero[];
   stage: number;
-  monsterMaxHealth: number;
-  monsterHealth: number;
+  monsterMaxHealth: GameNumber;
+  monsterHealth: GameNumber;
   lastSeenAt: string;
   updatedAt: string;
 }
@@ -66,21 +71,21 @@ export type GameEvent =
   | {
       type: 'monster_hit';
       comboCount: number;
-      damage: number;
+      damage: GameNumber;
       isCrit: boolean;
-      monsterHealth: number;
+      monsterHealth: GameNumber;
       source: 'tap' | 'passive';
       stage: number;
     }
-  | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: number; gemReward: number }
+  | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: GameNumber; gemReward: number }
   | { type: 'hero_summoned'; hero: Hero; costGems: number }
-  | { type: 'hero_upgraded'; heroId: string; goldCost: number; level: number; power: number }
+  | { type: 'hero_upgraded'; heroId: string; goldCost: GameNumber; level: number; power: GameNumber }
   | {
       type: 'offline_rewards_claimed';
       elapsedSeconds: number;
       cappedSeconds: number;
-      passivePower: number;
-      goldReward: number;
+      passivePower: GameNumber;
+      goldReward: GameNumber;
     }
   | { type: 'action_rejected'; reason: string };
 

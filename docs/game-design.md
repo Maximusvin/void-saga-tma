@@ -50,6 +50,8 @@ src/views/*       Telegram Mini App UI
 
 Backend приймає action із `commandId`, читає player snapshot із SQLite, застосовує shared game engine і транзакційно зберігає snapshot та command events. Повтор останньої команди повертає актуальний snapshot без повторного damage/reward. Так combat, summon і upgrade rules не живуть у UI-компонентах.
 
+Economy-значення (`gold`, power, HP, damage, costs і rewards) передаються та зберігаються як канонічні decimal-рядки `GameNumber`. Рішення, межі precision і backward migration описані в [ADR 0001](adr/0001-big-number-economy.md).
+
 ## Перший backend slice
 
 - `GET /api/health`

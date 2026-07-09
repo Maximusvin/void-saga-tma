@@ -3,10 +3,11 @@ import { Coins, Gem } from 'lucide-react';
 import './TopBar.css';
 import { formatNumber } from '../utils/formatNumber';
 import type { BackendStatus } from '../store/useGameState';
+import type { GameNumber } from '../game/gameNumber';
 
 interface TopBarProps {
   backendStatus: BackendStatus;
-  gold: number;
+  gold: GameNumber;
   gems: number;
 }
 

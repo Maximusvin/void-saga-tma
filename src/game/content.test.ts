@@ -58,8 +58,8 @@ describe('game content invariants', () => {
     assert.equal(getStageBandForStage(1).id, 'rift-outskirts');
     assert.equal(isBossStage(4), false);
     assert.equal(isBossStage(5), true);
-    assert.equal(getMonsterMaxHealth(1), 100);
-    assert.equal(getMonsterMaxHealth(5), 1035);
+    assert.equal(getMonsterMaxHealth(1), '100');
+    assert.equal(getMonsterMaxHealth(5), '1035');
   });
 
   it('keeps deterministic summon roll boundaries stable', () => {

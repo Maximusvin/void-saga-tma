@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createInitialGameSnapshot } from '../src/game/engine';
+import { normalizeGameSnapshot, normalizeStoredGameEvents } from '../src/game/snapshot';
 import type { GameActionResult, GameEvent, GameSnapshot } from '../src/game/types';
 
 const COMMAND_RETENTION_PER_PLAYER = 128;
@@ -25,16 +26,12 @@ export interface GameCommandResult extends PlayerState {
 }
 
 const parseSnapshot = (snapshotJson: string): GameSnapshot => {
-  const snapshot = JSON.parse(snapshotJson) as GameSnapshot;
-  const fallbackTimestamp = typeof snapshot.updatedAt === 'string' ? snapshot.updatedAt : new Date().toISOString();
+  const snapshot = normalizeGameSnapshot(JSON.parse(snapshotJson) as unknown);
+  if (!snapshot) {
+    throw new Error('Stored game snapshot is invalid');
+  }
 
-  return {
-    ...snapshot,
-    comboCount: Number.isFinite(snapshot.comboCount) ? Math.max(0, Math.floor(snapshot.comboCount)) : 0,
-    comboExpiresAt: typeof snapshot.comboExpiresAt === 'string' ? snapshot.comboExpiresAt : null,
-    lastSeenAt: typeof snapshot.lastSeenAt === 'string' ? snapshot.lastSeenAt : fallbackTimestamp,
-    updatedAt: fallbackTimestamp,
-  };
+  return snapshot;
 };
 
 export class GameRepository {
@@ -46,9 +43,17 @@ export class GameRepository {
       .get(playerId) as PlayerRow | undefined;
 
     if (existing) {
+      const snapshot = parseSnapshot(existing.snapshot_json);
+      const normalizedSnapshotJson = JSON.stringify(snapshot);
+      if (normalizedSnapshotJson !== existing.snapshot_json) {
+        this.database
+          .prepare('UPDATE players SET snapshot_json = ? WHERE id = ?')
+          .run(normalizedSnapshotJson, existing.id);
+      }
+
       return {
         playerId: existing.id,
-        snapshot: parseSnapshot(existing.snapshot_json),
+        snapshot,
       };
     }
 
@@ -86,7 +91,7 @@ export class GameRepository {
         const playerState = this.getOrCreatePlayer(playerId);
         const result: GameCommandResult = {
           ...playerState,
-          events: JSON.parse(existing.events_json) as GameEvent[],
+          events: normalizeStoredGameEvents(JSON.parse(existing.events_json) as unknown),
         };
         this.database.exec('COMMIT');
         return { replayed: true, result };

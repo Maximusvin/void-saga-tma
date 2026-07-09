@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
+import { compareGameNumbers, type GameNumber } from '../game/gameNumber';
 import {
   RARITY_COLORS,
   RARITY_GRADIENTS,
@@ -16,7 +17,7 @@ import './HeroesRoster.css';
 interface HeroesRosterProps {
   heroes: Hero[];
   upgradeHero: (id: string) => boolean;
-  gold: number;
+  gold: GameNumber;
 }
 
 export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero, gold }) => {
@@ -71,7 +72,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
           <AnimatePresence>
             {sortedHeroes.map((hero) => {
               const upgradeCost = getUpgradeCost(hero);
-              const canUpgrade = gold >= upgradeCost;
+              const canUpgrade = compareGameNumbers(gold, upgradeCost) >= 0;
               const color = RARITY_COLORS[hero.rarity];
               const nextPower = getNextHeroPower(hero);
               const isUpgrading = justUpgradedId === hero.id;
