@@ -1,0 +1,30 @@
+FROM node:24-bookworm-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.server.json ./
+COPY server ./server
+COPY src/game ./src/game
+
+RUN npm run server:check && npm run server:bundle
+
+FROM node:24-bookworm-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS runtime
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=8787
+ENV VOID_SAGA_DB_PATH=/data/void-saga.sqlite
+
+RUN mkdir -p /data && chown node:node /data
+
+COPY --from=build --chown=node:node /app/dist-server/index.mjs ./index.mjs
+
+USER node
+
+EXPOSE 8787
+
+CMD ["node", "index.mjs"]

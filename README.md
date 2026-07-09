@@ -50,6 +50,8 @@ Production build:
 npm run build
 ```
 
+VPS deployment через наявний Coolify/Traefik reverse proxy описано в [`docs/vps-deployment.md`](docs/vps-deployment.md). Production compose не публікує host-порти та зберігає SQLite у named volume.
+
 Lint:
 
 ```bash
