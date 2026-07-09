@@ -25,6 +25,12 @@ Backend API:
 npm run server:dev
 ```
 
+SQLite файл за замовчуванням створюється в `data/void-saga.sqlite`. Для локального smoke або ізольованого середовища можна задати інший шлях:
+
+```bash
+VOID_SAGA_DB_PATH=data/dev.sqlite npm run server:dev
+```
+
 Telegram auth режим для backend:
 
 ```bash
