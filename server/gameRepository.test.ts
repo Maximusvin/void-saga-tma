@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
-import { applyGameAction } from '../src/game/engine';
+import { applyCombatBatchAction, applyDamageAction } from '../src/game/engine';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
 
@@ -19,11 +19,11 @@ describe('game repository persistence', () => {
       firstDatabase = openDatabase(databasePath);
       const firstRepository = new GameRepository(firstDatabase);
       const initialState = firstRepository.getOrCreatePlayer('dev:persistent-player');
-      const killResult = applyGameAction(initialState.snapshot, {
-        type: 'deal_damage',
-        amount: initialState.snapshot.monsterMaxHealth,
-        source: 'tap',
-      });
+      const killResult = applyDamageAction(
+        initialState.snapshot,
+        initialState.snapshot.monsterMaxHealth,
+        'tap',
+      );
 
       firstRepository.savePlayer('dev:persistent-player', killResult.snapshot);
       firstDatabase.close();
@@ -42,6 +42,82 @@ describe('game repository persistence', () => {
     } finally {
       firstDatabase?.close();
       secondDatabase?.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('replays a persisted command result without applying its mutation twice', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-command-'));
+    const databasePath = join(tempDir, 'game.sqlite');
+    let firstDatabase: DatabaseSync | null = null;
+    let secondDatabase: DatabaseSync | null = null;
+    let mutationCount = 0;
+
+    try {
+      firstDatabase = openDatabase(databasePath);
+      const firstRepository = new GameRepository(firstDatabase);
+      const applyMutation = (snapshot: ReturnType<GameRepository['getOrCreatePlayer']>['snapshot']) => {
+        mutationCount += 1;
+        return applyCombatBatchAction(snapshot, 3, 0, { random: () => 0.5 });
+      };
+
+      const first = firstRepository.runIdempotentCommand('dev:command-player', 'cmd:test-0001', applyMutation);
+      const replay = firstRepository.runIdempotentCommand('dev:command-player', 'cmd:test-0001', applyMutation);
+
+      assert.equal(first.replayed, false);
+      assert.equal(replay.replayed, true);
+      assert.equal(mutationCount, 1);
+      assert.deepEqual(replay.result, first.result);
+      firstDatabase.close();
+      firstDatabase = null;
+
+      secondDatabase = openDatabase(databasePath);
+      const secondRepository = new GameRepository(secondDatabase);
+      const replayAfterRestart = secondRepository.runIdempotentCommand(
+        'dev:command-player',
+        'cmd:test-0001',
+        applyMutation,
+      );
+
+      assert.equal(replayAfterRestart.replayed, true);
+      assert.equal(mutationCount, 1);
+      assert.deepEqual(replayAfterRestart.result, first.result);
+    } finally {
+      firstDatabase?.close();
+      secondDatabase?.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds the idempotency ledger per player', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-command-retention-'));
+    const databasePath = join(tempDir, 'game.sqlite');
+    let database: DatabaseSync | null = null;
+
+    try {
+      database = openDatabase(databasePath);
+      const repository = new GameRepository(database);
+
+      for (let index = 0; index < 130; index += 1) {
+        repository.runIdempotentCommand(
+          'dev:retention-player',
+          `cmd:retention-${String(index).padStart(4, '0')}`,
+          snapshot => ({ snapshot, events: [] }),
+        );
+      }
+
+      const commandCount = database
+        .prepare('SELECT COUNT(*) AS count FROM game_commands WHERE player_id = ?')
+        .get('dev:retention-player') as { count: number };
+      assert.equal(commandCount.count, 128);
+      assert.equal(
+        database.prepare(
+          'SELECT 1 FROM game_commands WHERE player_id = ? AND command_id = ?',
+        ).get('dev:retention-player', 'cmd:retention-0129') !== undefined,
+        true,
+      );
+    } finally {
+      database?.close();
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

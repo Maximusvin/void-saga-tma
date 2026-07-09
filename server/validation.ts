@@ -1,16 +1,20 @@
 import type { GameAction } from '../src/game/types';
 
 interface GameActionRequest {
+  commandId?: unknown;
   playerId?: unknown;
   action?: unknown;
 }
+
+const MAX_COMBAT_TAPS_PER_BATCH = 20;
+const COMMAND_ID_PATTERN = /^[A-Za-z0-9:_-]{8,96}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
 };
 
-const isFiniteNumber = (value: unknown): value is number => {
-  return typeof value === 'number' && Number.isFinite(value);
+const isSafeInteger = (value: unknown): value is number => {
+  return typeof value === 'number' && Number.isSafeInteger(value);
 };
 
 export const normalizePlayerId = (value: unknown) => {
@@ -26,34 +30,51 @@ export const normalizePlayerId = (value: unknown) => {
   return trimmed;
 };
 
-export const parseGameActionRequest = (value: unknown): { requestedPlayerId: string | null; action: GameAction } | null => {
+export const normalizeCommandId = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return COMMAND_ID_PATTERN.test(trimmed) ? trimmed : null;
+};
+
+export const parseGameActionRequest = (
+  value: unknown,
+): { commandId: string; requestedPlayerId: string | null; action: GameAction } | null => {
   if (!isRecord(value)) {
     return null;
   }
 
   const request = value as GameActionRequest;
+  const commandId = normalizeCommandId(request.commandId);
   const requestedPlayerId = request.playerId === undefined ? null : normalizePlayerId(request.playerId);
-  if ((request.playerId !== undefined && !requestedPlayerId) || !isRecord(request.action)) {
+  if (!commandId || (request.playerId !== undefined && !requestedPlayerId) || !isRecord(request.action)) {
     return null;
   }
 
-  if (request.action.type === 'deal_damage') {
+  if (request.action.type === 'combat_batch') {
+    const tapCount = request.action.tapCount;
+    const passiveTicks = request.action.passiveTicks;
     if (
-      !isFiniteNumber(request.action.amount) ||
-      (
-        request.action.source !== 'tap' &&
-        request.action.source !== 'passive'
-      )
+      !isSafeInteger(tapCount) ||
+      tapCount < 0 ||
+      tapCount > MAX_COMBAT_TAPS_PER_BATCH ||
+      !isSafeInteger(passiveTicks) ||
+      passiveTicks < 0 ||
+      passiveTicks > 1 ||
+      (tapCount === 0 && passiveTicks === 0)
     ) {
       return null;
     }
 
     return {
+      commandId,
       requestedPlayerId,
       action: {
-        type: 'deal_damage',
-        amount: request.action.amount,
-        source: request.action.source,
+        type: 'combat_batch',
+        tapCount,
+        passiveTicks,
       },
     };
   }
@@ -64,6 +85,7 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
     }
 
     return {
+      commandId,
       requestedPlayerId,
       action: {
         type: 'summon',
@@ -77,6 +99,7 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
     }
 
     return {
+      commandId,
       requestedPlayerId,
       action: {
         type: 'upgrade_hero',
@@ -87,6 +110,7 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
 
   if (request.action.type === 'claim_offline_rewards') {
     return {
+      commandId,
       requestedPlayerId,
       action: {
         type: 'claim_offline_rewards',

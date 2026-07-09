@@ -17,7 +17,7 @@ export class ActionRateLimiter {
   private lastPrunedAt = 0;
 
   getRejection(playerId: string, action: GameAction, nowMs = Date.now()) {
-    if (action.type !== 'deal_damage') {
+    if (action.type !== 'combat_batch') {
       return null;
     }
 
@@ -28,28 +28,25 @@ export class ActionRateLimiter {
       tapCount: 0,
       tapWindowStartedAt: nowMs,
     };
-    rate.lastSeenAt = nowMs;
-    this.players.set(playerId, rate);
-
-    if (action.source === 'passive') {
-      if (nowMs - rate.lastPassiveAt < PASSIVE_MIN_INTERVAL_MS) {
-        return 'action_rate_limited';
-      }
-
-      rate.lastPassiveAt = nowMs;
-      return null;
-    }
-
     if (nowMs - rate.tapWindowStartedAt >= TAP_WINDOW_MS) {
       rate.tapWindowStartedAt = nowMs;
       rate.tapCount = 0;
     }
 
-    if (rate.tapCount >= MAX_TAPS_PER_WINDOW) {
+    if (rate.tapCount + action.tapCount > MAX_TAPS_PER_WINDOW) {
       return 'action_rate_limited';
     }
 
-    rate.tapCount += 1;
+    if (action.passiveTicks > 0 && nowMs - rate.lastPassiveAt < PASSIVE_MIN_INTERVAL_MS) {
+      return 'action_rate_limited';
+    }
+
+    rate.lastSeenAt = nowMs;
+    rate.tapCount += action.tapCount;
+    if (action.passiveTicks > 0) {
+      rate.lastPassiveAt = nowMs;
+    }
+    this.players.set(playerId, rate);
     return null;
   }
 

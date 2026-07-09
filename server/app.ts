@@ -1,6 +1,5 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
 import { GAME_BALANCE, GAME_CONTENT, SUMMON_POOL } from '../src/game/balance';
-import { getServerActionRejection } from '../src/game/actionPolicy';
 import { applyGameAction } from '../src/game/engine';
 import type { GameRepository } from './gameRepository';
 import { ActionRateLimiter } from './actionRateLimiter';
@@ -61,24 +60,25 @@ export const createGameRequestHandler = (gameRepository: GameRepository): Reques
         }
 
         const actionResult = await runPlayerMutation(identity.playerId, () => {
-          const playerState = gameRepository.getOrCreatePlayer(identity.playerId);
-          const rejectionReason = getServerActionRejection(playerState.snapshot, parsedRequest.action);
-          const rateLimitReason = rejectionReason
-            ? null
-            : actionRateLimiter.getRejection(identity.playerId, parsedRequest.action);
-          if (rejectionReason || rateLimitReason) {
-            return {
-              ...playerState,
-              events: [{ type: 'action_rejected' as const, reason: rejectionReason ?? rateLimitReason ?? 'action_rejected' }],
-            };
-          }
+          const command = gameRepository.runIdempotentCommand(
+            identity.playerId,
+            parsedRequest.commandId,
+            snapshot => {
+              const rateLimitReason = actionRateLimiter.getRejection(identity.playerId, parsedRequest.action);
+              if (rateLimitReason) {
+                return {
+                  snapshot,
+                  events: [{ type: 'action_rejected' as const, reason: rateLimitReason }],
+                };
+              }
 
-          const result = applyGameAction(playerState.snapshot, parsedRequest.action);
-          const savedState = gameRepository.savePlayer(identity.playerId, result.snapshot);
+              return applyGameAction(snapshot, parsedRequest.action);
+            },
+          );
 
           return {
-            ...savedState,
-            events: result.events,
+            ...command.result,
+            replayed: command.replayed,
           };
         });
 

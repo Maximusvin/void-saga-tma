@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_BALANCE } from './balance';
-import { applyGameAction, claimOfflineRewardsAction } from './engine';
+import { applyCombatBatchAction, applyGameAction, claimOfflineRewardsAction } from './engine';
 import type { GameSnapshot, Hero } from './types';
 
 const NOW_MS = Date.parse('2026-07-09T12:00:00.000Z');
@@ -15,6 +15,8 @@ const hero = (power: number): Hero => ({
 });
 
 const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot => ({
+  comboCount: 0,
+  comboExpiresAt: null,
   gold: 1000,
   gems: 50,
   heroes,
@@ -70,5 +72,61 @@ describe('offline rewards', () => {
     const result = applyGameAction(snapshot, { type: 'claim_offline_rewards' });
 
     assert.equal(result.events[0].type, 'offline_rewards_claimed');
+  });
+});
+
+describe('server-authoritative combat batches', () => {
+  it('keeps hit and defeat events ordered while a batch crosses a stage', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      monsterHealth: 2,
+    };
+    const result = applyCombatBatchAction(snapshot, 3, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+
+    assert.deepEqual(result.events.map(event => event.type), [
+      'monster_hit',
+      'monster_hit',
+      'monster_defeated',
+      'monster_hit',
+    ]);
+    assert.equal(result.snapshot.stage, 2);
+    assert.equal(result.snapshot.comboCount, 3);
+    assert.equal(result.snapshot.comboExpiresAt, '2026-07-09T12:00:01.500Z');
+    assert.ok(result.snapshot.monsterHealth < result.snapshot.monsterMaxHealth);
+  });
+
+  it('rolls critical damage inside the engine instead of accepting client damage', () => {
+    const result = applyCombatBatchAction(
+      createSnapshot('2026-07-09T11:59:00.000Z', [hero(10)]),
+      1,
+      0,
+      { nowMs: NOW_MS, random: () => 0 },
+    );
+    const hit = result.events[0];
+
+    assert.equal(hit.type, 'monster_hit');
+    assert.equal(hit.isCrit, true);
+    assert.equal(hit.damage, 4);
+    assert.equal(hit.comboCount, 1);
+  });
+
+  it('resets an expired combo before resolving the next batch', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      comboCount: 100,
+      comboExpiresAt: '2026-07-09T11:59:59.000Z',
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+    const hit = result.events[0];
+
+    assert.equal(hit.type, 'monster_hit');
+    assert.equal(hit.damage, 1);
+    assert.equal(result.snapshot.comboCount, 1);
   });
 });

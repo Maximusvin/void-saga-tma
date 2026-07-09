@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && npm run server:check && vite build",
     "lint": "oxlint",
-    "test:server": "tsx --test server/**/*.test.ts src/game/**/*.test.ts",
+    "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/game/**/*.test.ts",
     "preview": "vite preview",
     "server:check": "tsc -p tsconfig.server.json",
     "server:dev": "tsx server/index.ts"

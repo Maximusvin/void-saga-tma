@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { applyGameMigrations } from './migrations';
 
 const DEFAULT_DB_PATH = 'data/void-saga.sqlite';
 
@@ -16,14 +17,8 @@ export const openDatabase = (configuredPath?: string) => {
   database.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS players (
-      id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      snapshot_json TEXT NOT NULL
-    );
   `);
+  applyGameMigrations(database);
 
   return database;
 };
