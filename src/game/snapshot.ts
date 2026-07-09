@@ -196,11 +196,16 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         return null;
       }
 
+      const level = normalizeInteger(value.level, 1, 1);
+      const levelsGained = normalizeInteger(value.levelsGained, 1, 1);
+
       return {
         type: 'hero_upgraded',
         heroId: value.heroId,
+        fromLevel: normalizeInteger(value.fromLevel, Math.max(1, level - levelsGained), 1),
         goldCost: parseGameNumber(value.goldCost),
-        level: normalizeInteger(value.level, 1, 1),
+        level,
+        levelsGained,
         power: parseGameNumber(value.power),
       };
     }

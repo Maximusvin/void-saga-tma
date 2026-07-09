@@ -11,13 +11,17 @@ import {
   SUMMON_POOL,
   getStageBandForStage,
 } from './content';
-import type { Hero, HeroRarity, SummonHeroTemplate } from './types';
+import type { Hero, HeroRarity, HeroUpgradeAmount, SummonHeroTemplate } from './types';
 import {
   ONE_GAME_NUMBER,
+  ZERO_GAME_NUMBER,
   addGameNumbers,
+  compareGameNumbers,
   floorGameNumber,
+  gameNumber,
   multiplyGameNumbers,
   powGameNumber,
+  type GameNumberInput,
 } from './gameNumber';
 
 export {
@@ -78,6 +82,7 @@ export const GAME_BALANCE = {
     Legendary: 10,
   },
   upgradePowerMultiplier: 1.5,
+  maxBulkUpgradeLevels: 50,
   critChance: 0.1,
   critMultiplier: 2,
   hitFlashMs: 50,
@@ -157,6 +162,43 @@ export const isHeroAtLevelCap = (hero: Pick<Hero, 'ascension' | 'level'>) => {
 
 export const getNextHeroPower = (hero: Pick<Hero, 'power'>) => {
   return multiplyGameNumbers(hero.power, GAME_BALANCE.upgradePowerMultiplier);
+};
+
+export const getHeroUpgradeQuote = (
+  hero: Pick<Hero, 'ascension' | 'level' | 'power' | 'rarity'>,
+  availableGold: GameNumberInput,
+  amount: HeroUpgradeAmount = 1,
+) => {
+  const levelCap = getHeroLevelCap(hero);
+  const requestedLevels = amount === 'max' ? GAME_BALANCE.maxBulkUpgradeLevels : amount;
+  const maximumLevels = Math.min(
+    requestedLevels,
+    GAME_BALANCE.maxBulkUpgradeLevels,
+    Math.max(0, levelCap - hero.level),
+  );
+  const gold = gameNumber(availableGold);
+  let goldCost = ZERO_GAME_NUMBER;
+  let level = hero.level;
+  let power = hero.power;
+
+  for (let index = 0; index < maximumLevels; index += 1) {
+    const nextCost = getUpgradeCost({ level, rarity: hero.rarity });
+    const nextTotalCost = addGameNumbers(goldCost, nextCost);
+    if (compareGameNumbers(nextTotalCost, gold) > 0) {
+      break;
+    }
+
+    goldCost = nextTotalCost;
+    level += 1;
+    power = getNextHeroPower({ power });
+  }
+
+  return {
+    goldCost,
+    level,
+    levelsGained: level - hero.level,
+    power,
+  };
 };
 
 export const getHeroIcon = (rarity: HeroRarity) => {

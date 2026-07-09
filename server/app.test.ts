@@ -166,7 +166,7 @@ describe('game API persistence', () => {
     }
   });
 
-  it('persists a server-authoritative hero ascension action', async () => {
+  it('persists ascension and replays a bulk upgrade without charging twice', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-ascension-'));
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
@@ -178,6 +178,7 @@ describe('game API persistence', () => {
       const player = repository.getOrCreatePlayer(playerId);
       repository.savePlayer(playerId, {
         ...player.snapshot,
+        gold: gameNumber('1e30'),
         heroes: [{
           ascension: 0,
           id: 'void-grunt',
@@ -210,11 +211,43 @@ describe('game API persistence', () => {
       assert.equal(result.body.snapshot.heroes[0]?.ascension, 1);
       assert.equal(result.body.snapshot.heroes[0]?.shards, 0);
 
+      const bulkUpgrade = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          commandId: 'cmd:http-bulk-0001',
+          action: { type: 'upgrade_hero', heroId: 'void-grunt', amount: 'max' },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const upgradeEvent = bulkUpgrade.body.events[0];
+
+      assert.equal(bulkUpgrade.response.status, 200);
+      assert.equal(bulkUpgrade.body.replayed, false);
+      assert.equal(upgradeEvent.type, 'hero_upgraded');
+      assert.equal(upgradeEvent.fromLevel, 50);
+      assert.equal(upgradeEvent.levelsGained, 50);
+      assert.equal(upgradeEvent.level, 100);
+
+      const replay = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          commandId: 'cmd:http-bulk-0001',
+          action: { type: 'upgrade_hero', heroId: 'void-grunt', amount: 'max' },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(replay.body.replayed, true);
+      assert.deepEqual(replay.body.snapshot, bulkUpgrade.body.snapshot);
+      assert.deepEqual(replay.body.events, bulkUpgrade.body.events);
+
       const restored = await requestJson<PlayerStateResponse>(
         `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
       );
       assert.equal(restored.body.snapshot.heroes[0]?.ascension, 1);
       assert.equal(restored.body.snapshot.heroes[0]?.shards, 0);
+      assert.equal(restored.body.snapshot.heroes[0]?.level, 100);
     } finally {
       if (serverStarted) {
         await closeServer(server);

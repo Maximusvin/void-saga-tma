@@ -6,11 +6,10 @@ import {
   getComboMultiplier,
   getDuplicateShardReward,
   getHeroLevelCap,
+  getHeroUpgradeQuote,
   getMonsterMaxHealth,
-  getNextHeroPower,
   getPassivePower,
   getStageBandForStage,
-  getUpgradeCost,
   isHeroAtLevelCap,
   isBossStage,
   rollSummonTemplate,
@@ -18,7 +17,6 @@ import {
 import {
   ZERO_GAME_NUMBER,
   addGameNumbers,
-  compareGameNumbers,
   floorGameNumber,
   gameNumber,
   isPositiveGameNumber,
@@ -32,6 +30,7 @@ import {
   type GameActionResult,
   type GameSnapshot,
   type Hero,
+  type HeroUpgradeAmount,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -296,7 +295,11 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
   };
 };
 
-export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameActionResult => {
+export const upgradeHeroAction = (
+  snapshot: GameSnapshot,
+  heroId: string,
+  amount: HeroUpgradeAmount = 1,
+): GameActionResult => {
   const heroToUpgrade = snapshot.heroes.find(hero => hero.id === heroId);
   if (!heroToUpgrade) {
     return {
@@ -312,19 +315,17 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
     };
   }
 
-  const goldCost = getUpgradeCost(heroToUpgrade);
-  if (compareGameNumbers(snapshot.gold, goldCost) < 0) {
+  const quote = getHeroUpgradeQuote(heroToUpgrade, snapshot.gold, amount);
+  if (quote.levelsGained === 0) {
     return {
       snapshot,
       events: [{ type: 'action_rejected', reason: 'not_enough_gold' }],
     };
   }
 
-  const nextLevel = heroToUpgrade.level + 1;
-  const nextPower = getNextHeroPower(heroToUpgrade);
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
-    gold: subtractGameNumbers(snapshot.gold, goldCost),
+    gold: subtractGameNumbers(snapshot.gold, quote.goldCost),
     heroes: snapshot.heroes.map(hero => {
       if (hero.id !== heroId) {
         return hero;
@@ -332,15 +333,23 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
 
       return {
         ...hero,
-        level: nextLevel,
-        power: nextPower,
+        level: quote.level,
+        power: quote.power,
       };
     }),
   });
 
   return {
     snapshot: updatedSnapshot,
-    events: [{ type: 'hero_upgraded', heroId, goldCost, level: nextLevel, power: nextPower }],
+    events: [{
+      type: 'hero_upgraded',
+      heroId,
+      fromLevel: heroToUpgrade.level,
+      goldCost: quote.goldCost,
+      level: quote.level,
+      levelsGained: quote.levelsGained,
+      power: quote.power,
+    }],
   };
 };
 
@@ -425,7 +434,7 @@ export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): Gam
     case 'summon':
       return summonHeroAction(snapshot, action.randomValue);
     case 'upgrade_hero':
-      return upgradeHeroAction(snapshot, action.heroId);
+      return upgradeHeroAction(snapshot, action.heroId, action.amount);
     case 'ascend_hero':
       return ascendHeroAction(snapshot, action.heroId);
     case 'claim_offline_rewards':

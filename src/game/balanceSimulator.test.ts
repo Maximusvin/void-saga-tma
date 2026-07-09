@@ -7,6 +7,7 @@ import {
   getAscensionShardCost,
   getDuplicateShardReward,
   getHeroLevelCap,
+  getHeroUpgradeQuote,
   getNextHeroPower,
   getUpgradeCost,
 } from './balance';
@@ -34,6 +35,45 @@ describe('balance formulas', () => {
     assert.equal(getAscensionShardCost({ ascension: 99 }), 2);
     assert.equal(getDuplicateShardReward('Common'), 1);
     assert.equal(getDuplicateShardReward('Legendary'), 5);
+  });
+
+  it('quotes exact partial, capped, and bounded bulk upgrades', () => {
+    const common = {
+      ascension: 0,
+      level: 1,
+      power: gameNumber(5),
+      rarity: 'Common' as const,
+    };
+    const tenLevels = getHeroUpgradeQuote(common, 20_000, 10);
+    const partial = getHeroUpgradeQuote(common, 1_000, 10);
+    const nearCap = getHeroUpgradeQuote({ ...common, level: 48 }, '1e30', 'max');
+    const boundedMax = getHeroUpgradeQuote({ ...common, ascension: 1 }, '1e100', 'max');
+
+    assert.deepEqual(tenLevels, {
+      goldCost: '11330',
+      level: 11,
+      levelsGained: 10,
+      power: '288.3251953125',
+    });
+    assert.equal(partial.levelsGained, 4);
+    assert.equal(partial.goldCost, '812');
+    assert.equal(partial.power, '25.3125');
+    assert.equal(nearCap.levelsGained, 2);
+    assert.equal(nearCap.level, 50);
+    assert.equal(boundedMax.levelsGained, GAME_BALANCE.maxBulkUpgradeLevels);
+    assert.equal(boundedMax.level, 51);
+  });
+
+  it('keeps late-game MAX quotes finite without converting through Number', () => {
+    const quote = getHeroUpgradeQuote({
+      ascension: 100,
+      level: 4_000,
+      power: gameNumber('1e700'),
+      rarity: 'Legendary',
+    }, '1e800', 'max');
+
+    assert.equal(quote.levelsGained, GAME_BALANCE.maxBulkUpgradeLevels);
+    assert.doesNotMatch(JSON.stringify(quote), /Infinity|NaN/);
   });
 });
 

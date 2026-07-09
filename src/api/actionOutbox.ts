@@ -40,7 +40,21 @@ const isGameAction = (value: unknown): value is GameAction => {
     return true;
   }
 
-  return value.type === 'upgrade_hero' && typeof value.heroId === 'string' && value.heroId.trim().length > 0;
+  const hasHeroId = typeof value.heroId === 'string' && value.heroId.trim().length > 0;
+  if (value.type === 'ascend_hero') {
+    return hasHeroId;
+  }
+
+  if (value.type === 'upgrade_hero') {
+    return hasHeroId && (
+      value.amount === undefined ||
+      value.amount === 1 ||
+      value.amount === 10 ||
+      value.amount === 'max'
+    );
+  }
+
+  return false;
 };
 
 const isPendingCommand = (value: unknown): value is PendingGameCommand => {

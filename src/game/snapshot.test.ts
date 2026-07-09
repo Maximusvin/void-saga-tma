@@ -98,6 +98,13 @@ describe('game snapshot normalization', () => {
         costGems: 10,
       },
       {
+        type: 'hero_upgraded',
+        heroId: 'void-grunt',
+        goldCost: 100,
+        level: 2,
+        power: 7.5,
+      },
+      {
         type: 'hero_ascended',
         heroId: 'void-grunt',
         ascension: 1,
@@ -112,6 +119,8 @@ describe('game snapshot normalization', () => {
     assert.equal(events[1]?.type === 'monster_defeated' ? events[1].goldReward : null, '50');
     assert.equal(events[2]?.type === 'hero_summoned' ? events[2].isDuplicate : null, false);
     assert.equal(events[2]?.type === 'hero_summoned' ? events[2].hero.templateId : null, 'void-grunt');
-    assert.equal(events[3]?.type === 'hero_ascended' ? events[3].levelCap : null, 100);
+    assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].fromLevel : null, 1);
+    assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].levelsGained : null, 1);
+    assert.equal(events[4]?.type === 'hero_ascended' ? events[4].levelCap : null, 100);
   });
 });
