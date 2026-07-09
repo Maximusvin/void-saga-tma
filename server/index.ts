@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { GAME_BALANCE, SUMMON_POOL } from '../src/game/balance';
+import { GAME_BALANCE, GAME_CONTENT, SUMMON_POOL } from '../src/game/balance';
 import { applyGameAction } from '../src/game/engine';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
@@ -29,6 +29,8 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'GET' && url.pathname === '/api/game/content') {
       sendJson(response, 200, {
+        contentVersion: GAME_CONTENT.version,
+        content: GAME_CONTENT,
         balance: GAME_BALANCE,
         summonPool: SUMMON_POOL,
       });

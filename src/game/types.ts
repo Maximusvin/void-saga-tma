@@ -10,11 +10,37 @@ export interface Hero {
 }
 
 export interface SummonHeroTemplate {
+  id: string;
   name: string;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
   icon: string;
+}
+
+export interface BossRule {
+  everyStages: number;
+  healthMultiplier: number;
+  goldMultiplier: number;
+  gemReward: number;
+  emoji: string;
+}
+
+export interface StageBand {
+  id: string;
+  name: string;
+  fromStage: number;
+  baseMonsterHealth: number;
+  monsterHealthGrowth: number;
+  monsterEmojis: readonly string[];
+  boss: BossRule;
+}
+
+export interface GameContent {
+  version: string;
+  heroRarities: readonly HeroRarity[];
+  summonPool: readonly SummonHeroTemplate[];
+  stageBands: readonly StageBand[];
 }
 
 export interface GameSnapshot {

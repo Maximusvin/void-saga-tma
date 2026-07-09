@@ -58,7 +58,8 @@ npm run test:server
 ## Поточна структура
 
 - `server/` - Node API з локальною SQLite persistence для player snapshots.
-- `src/game/balance.ts` - єдине місце для economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost, summon pool, rarity colors/icons.
+- `src/game/content.ts` - versioned content seed: heroes, summon pool, rarity metadata, stage bands і boss rules.
+- `src/game/balance.ts` - формули economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost і helper exports для UI.
 - `src/game/engine.ts` - чисті action-розрахунки для бою, summon і upgrade.
 - `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - React state adapter: backend API source of truth через `VITE_GAME_API_URL` або `localStorage` fallback без API.
@@ -79,13 +80,13 @@ npm run test:server
 - Без `VITE_GAME_API_URL` frontend лишається в автономному `localStorage` fallback для швидкого прототипування.
 - Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
 - Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback для локального прототипування.
-- Economy винесена в typed balance-конфіг, але самі формули ще прототипні й потребують плейтесту.
+- Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
 
 ## Backend API
 
 - `GET /api/health`
-- `GET /api/game/content`
+- `GET /api/game/content` повертає `contentVersion`, `content`, `balance` і backward-compatible `summonPool`
 - `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі
 - `POST /api/game/action`
 
