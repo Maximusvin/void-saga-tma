@@ -1,0 +1,32 @@
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 20px;
+  margin: 16px;
+  border-radius: 20px;
+  z-index: 10;
+}
+
+.resource-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+}
+
+.resource-pill.gold {
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
+.resource-pill.gem {
+  color: var(--gem);
+  text-shadow: 0 0 8px rgba(255, 0, 255, 0.4);
+}
+
+.resource-pill .icon {
+  filter: drop-shadow(0 0 4px currentColor);
+}
