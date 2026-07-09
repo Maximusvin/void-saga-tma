@@ -16,7 +16,6 @@ import {
   ONE_GAME_NUMBER,
   addGameNumbers,
   floorGameNumber,
-  gameNumber,
   multiplyGameNumbers,
   powGameNumber,
 } from './gameNumber';
@@ -61,7 +60,14 @@ export const GAME_BALANCE = {
   summonCostGems: 10,
   summonChargeMs: 1500,
   summonRevealMs: 1500,
-  upgradeGoldPerLevel: 100,
+  upgradeBaseGold: 100,
+  upgradeCostGrowth: 1.5,
+  upgradeRarityCostMultiplier: {
+    Common: 1,
+    Rare: 2,
+    Epic: 4,
+    Legendary: 10,
+  },
   upgradePowerMultiplier: 1.5,
   critChance: 0.1,
   critMultiplier: 2,
@@ -115,12 +121,16 @@ export const getComboMultiplier = (comboCount: number) => {
 
 export const MAX_COMBO_HITS = Math.ceil(GAME_BALANCE.comboMaxBonus / GAME_BALANCE.comboBonusPerHit);
 
-export const getUpgradeCost = (hero: Pick<Hero, 'level'>) => {
-  return gameNumber(hero.level * GAME_BALANCE.upgradeGoldPerLevel);
+export const getUpgradeCost = (hero: Pick<Hero, 'level' | 'rarity'>) => {
+  return floorGameNumber(multiplyGameNumbers(
+    GAME_BALANCE.upgradeBaseGold,
+    GAME_BALANCE.upgradeRarityCostMultiplier[hero.rarity],
+    powGameNumber(GAME_BALANCE.upgradeCostGrowth, Math.max(0, hero.level - 1)),
+  ));
 };
 
 export const getNextHeroPower = (hero: Pick<Hero, 'power'>) => {
-  return floorGameNumber(multiplyGameNumbers(hero.power, GAME_BALANCE.upgradePowerMultiplier));
+  return multiplyGameNumbers(hero.power, GAME_BALANCE.upgradePowerMultiplier);
 };
 
 export const getHeroIcon = (rarity: HeroRarity) => {

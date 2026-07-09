@@ -62,6 +62,14 @@ export const multiplyGameNumbers = (...values: readonly GameNumberInput[]): Game
   return toCanonicalString(values.reduce<Decimal>((total, value) => total.times(value), new GameDecimal(1)));
 };
 
+export const divideGameNumbers = (dividend: GameNumberInput, divisor: GameNumberInput): GameNumber => {
+  if (compareGameNumbers(divisor, 0) === 0) {
+    throw new RangeError('Game number divisor must be positive');
+  }
+
+  return toCanonicalString(toDecimal(dividend).div(divisor));
+};
+
 export const powGameNumber = (base: GameNumberInput, exponent: number): GameNumber => {
   if (!Number.isSafeInteger(exponent) || exponent < 0) {
     throw new RangeError('Game number exponents must be non-negative safe integers');

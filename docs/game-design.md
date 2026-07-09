@@ -52,6 +52,8 @@ Backend приймає action із `commandId`, читає player snapshot із 
 
 Economy-значення (`gold`, power, HP, damage, costs і rewards) передаються та зберігаються як канонічні decimal-рядки `GameNumber`. Рішення, межі precision і backward migration описані в [ADR 0001](adr/0001-big-number-economy.md).
 
+Формули прогресії перевіряє детермінований [balance simulator](balance/README.md): він рахує TTK, upgrade ROI, spend і rewards до сцени 10 000 та зберігає контрольні CSV-таблиці. Симуляція вже показує окрему продуктову прогалину: без ascension або level cap один Common не має причини поступатися повному roster на довгій дистанції.
+
 ## Перший backend slice
 
 - `GET /api/health`

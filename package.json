@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "balance:simulate": "tsx scripts/simulate-balance.ts",
     "dev": "vite",
     "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
