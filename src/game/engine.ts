@@ -1,7 +1,11 @@
 import {
   GAME_BALANCE,
+  MAX_COMBO_HITS,
+  getBaseClickPower,
+  getComboMultiplier,
   getMonsterMaxHealth,
   getNextHeroPower,
+  getPassivePower,
   getStageBandForStage,
   getUpgradeCost,
   isBossStage,
@@ -42,6 +46,8 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
 
   const now = nowIso();
   return {
+    comboCount: 0,
+    comboExpiresAt: null,
     gold: GAME_BALANCE.initialGold,
     gems: GAME_BALANCE.initialGems,
     heroes: [],
@@ -56,7 +62,12 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
 export const applyDamageAction = (
   snapshot: GameSnapshot,
   amount: number,
-  source: 'tap' | 'passive' | 'skill',
+  source: 'tap' | 'passive',
+  options: {
+    comboCount?: number;
+    isCrit?: boolean;
+    now?: string;
+  } = {},
 ): GameActionResult => {
   const damage = Math.max(0, amount);
   if (damage <= 0) {
@@ -74,16 +85,25 @@ export const applyDamageAction = (
   }
 
   const nextMonsterHealth = snapshot.monsterHealth - damage;
+  const hitEvent = {
+    type: 'monster_hit' as const,
+    comboCount: options.comboCount ?? snapshot.comboCount,
+    damage,
+    isCrit: options.isCrit ?? false,
+    monsterHealth: Math.max(0, nextMonsterHealth),
+    source,
+    stage: snapshot.stage,
+  };
   if (nextMonsterHealth > 0) {
     const updatedSnapshot = touchSnapshot({
       ...snapshot,
       gold: source === 'tap' ? snapshot.gold + damage * GAME_BALANCE.clickGoldMultiplier : snapshot.gold,
       monsterHealth: nextMonsterHealth,
-    });
+    }, options.now);
 
     return {
       snapshot: updatedSnapshot,
-      events: [{ type: 'monster_hit', damage, monsterHealth: nextMonsterHealth }],
+      events: [hitEvent],
     };
   }
 
@@ -104,11 +124,12 @@ export const applyDamageAction = (
     stage: nextStage,
     monsterMaxHealth: nextMonsterMaxHealth,
     monsterHealth: nextMonsterMaxHealth,
-  });
+  }, options.now);
 
   return {
     snapshot: updatedSnapshot,
     events: [
+      hitEvent,
       {
         type: 'monster_defeated',
         stage: defeatedStage,
@@ -117,6 +138,77 @@ export const applyDamageAction = (
         gemReward,
       },
     ],
+  };
+};
+
+interface CombatBatchOptions {
+  nowMs?: number;
+  random?: () => number;
+}
+
+export const applyCombatBatchAction = (
+  snapshot: GameSnapshot,
+  tapCount: number,
+  passiveTicks: number,
+  options: CombatBatchOptions = {},
+): GameActionResult => {
+  const normalizedTapCount = Math.max(0, Math.floor(tapCount));
+  const normalizedPassiveTicks = Math.max(0, Math.floor(passiveTicks));
+  if (normalizedTapCount === 0 && normalizedPassiveTicks === 0) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'combat_batch_empty' }],
+    };
+  }
+
+  const nowMs = options.nowMs ?? Date.now();
+  const now = new Date(nowMs).toISOString();
+  const comboExpiresAtMs = snapshot.comboExpiresAt ? Date.parse(snapshot.comboExpiresAt) : 0;
+  let comboCount = Number.isFinite(comboExpiresAtMs) && comboExpiresAtMs > nowMs
+    ? Math.max(0, Math.floor(snapshot.comboCount))
+    : 0;
+  let currentSnapshot = snapshot;
+  const events: GameActionResult['events'] = [];
+  const random = options.random ?? Math.random;
+  const baseClickPower = getBaseClickPower(snapshot.heroes);
+
+  for (let index = 0; index < normalizedTapCount; index += 1) {
+    const isCrit = random() < GAME_BALANCE.critChance;
+    const damage = baseClickPower
+      * getComboMultiplier(comboCount)
+      * (isCrit ? GAME_BALANCE.critMultiplier : 1);
+    comboCount = Math.min(MAX_COMBO_HITS, comboCount + 1);
+
+    const result = applyDamageAction(currentSnapshot, damage, 'tap', {
+      comboCount,
+      isCrit,
+      now,
+    });
+    currentSnapshot = result.snapshot;
+    events.push(...result.events);
+  }
+
+  const passivePower = getPassivePower(snapshot.heroes);
+  for (let index = 0; index < normalizedPassiveTicks && passivePower > 0; index += 1) {
+    const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
+      comboCount,
+      now,
+    });
+    currentSnapshot = result.snapshot;
+    events.push(...result.events);
+  }
+
+  const comboExpiresAt = normalizedTapCount > 0
+    ? new Date(nowMs + GAME_BALANCE.comboDecayMs).toISOString()
+    : (comboExpiresAtMs > nowMs ? snapshot.comboExpiresAt : null);
+
+  return {
+    snapshot: touchSnapshot({
+      ...currentSnapshot,
+      comboCount,
+      comboExpiresAt,
+    }, now),
+    events,
   };
 };
 
@@ -217,8 +309,8 @@ export const claimOfflineRewardsAction = (snapshot: GameSnapshot, nowMs = Date.n
 
 export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): GameActionResult => {
   switch (action.type) {
-    case 'deal_damage':
-      return applyDamageAction(snapshot, action.amount, action.source);
+    case 'combat_batch':
+      return applyCombatBatchAction(snapshot, action.tapCount, action.passiveTicks);
     case 'summon':
       return summonHeroAction(snapshot, action.randomValue);
     case 'upgrade_hero':

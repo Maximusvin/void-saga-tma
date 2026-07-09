@@ -17,6 +17,7 @@ interface PlayerStateResponse {
 
 interface GameActionResponse extends PlayerStateResponse {
   events: GameEvent[];
+  replayed: boolean;
 }
 
 const listen = async (server: Server) => {
@@ -77,10 +78,11 @@ describe('game API persistence', () => {
       const actionResult = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
         body: JSON.stringify({
           playerId,
+          commandId: 'cmd:http-0001',
           action: {
-            type: 'deal_damage',
-            amount: 1,
-            source: 'tap',
+            type: 'combat_batch',
+            tapCount: 1,
+            passiveTicks: 0,
           },
         }),
         headers: { 'content-type': 'application/json' },
@@ -88,8 +90,33 @@ describe('game API persistence', () => {
       });
 
       assert.equal(actionResult.response.status, 200);
-      assert.equal(actionResult.body.snapshot.monsterHealth, initialState.body.snapshot.monsterHealth - 1);
       assert.equal(actionResult.body.events[0]?.type, 'monster_hit');
+      const hitEvent = actionResult.body.events[0];
+      assert.equal(hitEvent.type, 'monster_hit');
+      assert.equal(
+        actionResult.body.snapshot.monsterHealth,
+        initialState.body.snapshot.monsterHealth - hitEvent.damage,
+      );
+      assert.equal(actionResult.body.replayed, false);
+
+      const replayedAction = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          commandId: 'cmd:http-0001',
+          action: {
+            type: 'combat_batch',
+            tapCount: 1,
+            passiveTicks: 0,
+          },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+
+      assert.equal(replayedAction.response.status, 200);
+      assert.equal(replayedAction.body.replayed, true);
+      assert.deepEqual(replayedAction.body.snapshot, actionResult.body.snapshot);
+      assert.deepEqual(replayedAction.body.events, actionResult.body.events);
 
       const restoredState = await requestJson<PlayerStateResponse>(
         `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
@@ -98,18 +125,18 @@ describe('game API persistence', () => {
       assert.equal(restoredState.response.status, 200);
       assert.deepEqual(restoredState.body.snapshot, actionResult.body.snapshot);
 
-      const rejectedDamage = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+      const rejectedDamage = await requestJson<{ error: string }>(`${baseUrl}/api/game/action`, {
         body: JSON.stringify({
           playerId,
+          commandId: 'cmd:http-0002',
           action: { type: 'deal_damage', amount: 1_000_000, source: 'tap' },
         }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       });
 
-      assert.equal(rejectedDamage.response.status, 200);
-      assert.equal(rejectedDamage.body.events[0]?.type, 'action_rejected');
-      assert.deepEqual(rejectedDamage.body.snapshot, restoredState.body.snapshot);
+      assert.equal(rejectedDamage.response.status, 400);
+      assert.equal(rejectedDamage.body.error, 'invalid_action_request');
 
       const invalidJson = await requestJson<{ error: string }>(`${baseUrl}/api/game/action`, {
         body: '{broken',

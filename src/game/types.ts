@@ -44,6 +44,8 @@ export interface GameContent {
 }
 
 export interface GameSnapshot {
+  comboCount: number;
+  comboExpiresAt: string | null;
   gold: number;
   gems: number;
   heroes: Hero[];
@@ -55,13 +57,21 @@ export interface GameSnapshot {
 }
 
 export type GameAction =
-  | { type: 'deal_damage'; amount: number; source: 'tap' | 'passive' | 'skill' }
+  | { type: 'combat_batch'; tapCount: number; passiveTicks: number }
   | { type: 'summon'; randomValue?: number }
   | { type: 'upgrade_hero'; heroId: string }
   | { type: 'claim_offline_rewards' };
 
 export type GameEvent =
-  | { type: 'monster_hit'; damage: number; monsterHealth: number }
+  | {
+      type: 'monster_hit';
+      comboCount: number;
+      damage: number;
+      isCrit: boolean;
+      monsterHealth: number;
+      source: 'tap' | 'passive';
+      stage: number;
+    }
   | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: number; gemReward: number }
   | { type: 'hero_summoned'; hero: Hero; costGems: number }
   | { type: 'hero_upgraded'; heroId: string; goldCost: number; level: number; power: number }

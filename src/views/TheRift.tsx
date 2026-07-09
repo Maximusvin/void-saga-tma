@@ -15,7 +15,7 @@ const RiftPixiScene = lazy(async () => {
 interface TheRiftProps {
   monsterHealth: number;
   monsterMaxHealth: number;
-  dealDamage: (amount: number) => Promise<GameEvent[]>;
+  dealDamage: () => Promise<GameEvent[]>;
   clickPower: number;
   stage: number;
   isBoss: boolean;
@@ -51,9 +51,16 @@ interface DefeatTransition {
 }
 
 type MonsterDefeatedEvent = Extract<GameEvent, { type: 'monster_defeated' }>;
+type MonsterHitEvent = Extract<GameEvent, { type: 'monster_hit' }>;
 
 const getMonsterDefeatedEvent = (events: GameEvent[]) => {
   return events.find((event): event is MonsterDefeatedEvent => event.type === 'monster_defeated') ?? null;
+};
+
+const getTapHitEvent = (events: GameEvent[]) => {
+  return events.find(
+    (event): event is MonsterHitEvent => event.type === 'monster_hit' && event.source === 'tap',
+  ) ?? null;
 };
 
 export const TheRift: React.FC<TheRiftProps> = ({
@@ -221,32 +228,39 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, [defeatTransition, scheduleTimeout]);
 
   const attackAt = (clientX: number, clientY: number) => {
-    const isCrit = Math.random() < GAME_BALANCE.critChance;
-    const finalDamage = isCrit ? clickPower * GAME_BALANCE.critMultiplier : clickPower;
-    const nextClick = {
-      id: clickCounterRef.current,
-      x: clientX,
-      y: clientY,
-      damage: finalDamage,
-      isCrit,
-      driftX: (Math.random() - 0.5) * 92,
-    };
+    const clickId = clickCounterRef.current;
     clickCounterRef.current += 1;
 
-    void dealDamage(finalDamage).then(events => {
+    void dealDamage().then(events => {
+      const hitEvent = getTapHitEvent(events);
       const defeatedEvent = getMonsterDefeatedEvent(events);
+      if (hitEvent) {
+        const nextClick = {
+          id: clickId,
+          x: clientX,
+          y: clientY,
+          damage: hitEvent.damage,
+          isCrit: hitEvent.isCrit,
+          driftX: (Math.random() - 0.5) * 92,
+        };
+        setDamagePops(current => [...current.slice(-23), nextClick]);
+        scheduleTimeout(() => {
+          setDamagePops(current => current.filter(item => item.id !== nextClick.id));
+        }, GAME_BALANCE.damageTextLifetimeMs);
+
+        if (hitEvent.isCrit) {
+          triggerHaptic('heavy');
+          setImpactState(current => ({ id: current.id + 1, isCrit: true }));
+        }
+      }
       if (defeatedEvent) {
         applyDefeatRewardEvent(defeatedEvent);
       }
     });
     registerHit();
-    triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
+    triggerHaptic(isBoss ? 'medium' : 'light');
     flashHit();
-    setImpactState(current => ({ id: current.id + 1, isCrit }));
-    setDamagePops(current => [...current.slice(-23), nextClick]);
-    scheduleTimeout(() => {
-      setDamagePops(current => current.filter(item => item.id !== nextClick.id));
-    }, GAME_BALANCE.damageTextLifetimeMs);
+    setImpactState(current => ({ id: current.id + 1, isCrit: false }));
   };
 
   const handleAttack = (event: React.PointerEvent<HTMLButtonElement>) => {

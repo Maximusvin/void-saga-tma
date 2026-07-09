@@ -91,6 +91,8 @@ export const getComboMultiplier = (comboCount: number) => {
   return 1 + Math.min(comboCount * GAME_BALANCE.comboBonusPerHit, GAME_BALANCE.comboMaxBonus);
 };
 
+export const MAX_COMBO_HITS = Math.ceil(GAME_BALANCE.comboMaxBonus / GAME_BALANCE.comboBonusPerHit);
+
 export const getUpgradeCost = (hero: Pick<Hero, 'level'>) => {
   return hero.level * GAME_BALANCE.upgradeGoldPerLevel;
 };

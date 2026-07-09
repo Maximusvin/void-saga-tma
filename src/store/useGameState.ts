@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
+import {
+  appendActionOutbox,
+  loadActionOutbox,
+  removeActionOutbox,
+  type PendingGameCommand,
+} from '../api/actionOutbox';
+import { createGameCommandId, fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
 import {
   GAME_BALANCE,
   HERO_RARITIES,
@@ -20,6 +26,12 @@ export type BackendStatus = 'local' | 'loading' | 'synced' | 'error';
 
 const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
+const TAP_BATCH_MAX_SIZE = 20;
+const TAP_BATCH_WINDOW_MS = 80;
+
+interface PendingTap {
+  resolve: (events: GameEvent[]) => void;
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -63,6 +75,8 @@ const sanitizeSnapshot = (value: unknown): GameSnapshot | null => {
   );
 
   return {
+    comboCount: Math.max(0, Math.floor(numberOrDefault(value.comboCount, 0))),
+    comboExpiresAt: typeof value.comboExpiresAt === 'string' ? value.comboExpiresAt : null,
     gold: Math.max(0, numberOrDefault(value.gold, GAME_BALANCE.initialGold)),
     gems: Math.max(0, numberOrDefault(value.gems, GAME_BALANCE.initialGems)),
     heroes: Array.isArray(value.heroes) ? value.heroes.filter(isHero) : [],
@@ -149,11 +163,35 @@ const getSummonedHero = (events: GameEvent[]) => {
   return events.find((event): event is Extract<GameEvent, { type: 'hero_summoned' }> => event.type === 'hero_summoned')?.hero ?? null;
 };
 
+const getActiveComboCount = (snapshot: GameSnapshot) => {
+  const expiresAt = snapshot.comboExpiresAt ? Date.parse(snapshot.comboExpiresAt) : 0;
+  return Number.isFinite(expiresAt) && expiresAt > Date.now() ? snapshot.comboCount : 0;
+};
+
+const splitTapEvents = (events: GameEvent[], tapCount: number) => {
+  const groups = Array.from({ length: tapCount }, () => [] as GameEvent[]);
+  let tapIndex = -1;
+
+  for (const event of events) {
+    if (event.type === 'monster_hit' && event.source === 'tap') {
+      tapIndex += 1;
+    }
+
+    if (tapIndex >= 0 && tapIndex < groups.length) {
+      groups[tapIndex].push(event);
+    } else if (event.type === 'action_rejected') {
+      groups.forEach(group => group.push(event));
+    }
+  }
+
+  return groups;
+};
+
 export const useGameState = () => {
   const apiEnabled = isGameApiEnabled();
   const [snapshot, setSnapshot] = useState<GameSnapshot>(loadLocalSnapshot);
   const [activeView, setActiveView] = useState<ActiveView>('rift');
-  const [comboCount, setComboCount] = useState(0);
+  const [comboCount, setComboCount] = useState(() => getActiveComboCount(snapshot));
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
   const playerIdRef = useRef<string | null>(null);
   const snapshotRef = useRef(snapshot);
@@ -162,6 +200,8 @@ export const useGameState = () => {
   const pendingLocalSnapshotRef = useRef<GameSnapshot | null>(null);
   const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comboResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTapsRef = useRef<PendingTap[]>([]);
+  const tapBatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerId = playerIdRef.current ?? getOrCreateDevPlayerId();
   playerIdRef.current = playerId;
 
@@ -195,6 +235,26 @@ export const useGameState = () => {
     scheduleLocalSnapshot(nextSnapshot);
   }, [scheduleLocalSnapshot]);
 
+  const executePendingCommand = useCallback(async (command: PendingGameCommand) => {
+    const response = await postGameAction(playerId, command.commandId, command.action);
+    applySnapshot(requireSnapshot(response.snapshot));
+    removeActionOutbox(playerId, command.commandId);
+    return response.events;
+  }, [applySnapshot, playerId]);
+
+  const replayActionOutbox = useCallback(async (targetCommandId?: string) => {
+    let targetEvents: GameEvent[] = [];
+
+    for (const command of loadActionOutbox(playerId)) {
+      const events = await executePendingCommand(command);
+      if (command.commandId === targetCommandId) {
+        targetEvents = events;
+      }
+    }
+
+    return targetEvents;
+  }, [executePendingCommand, playerId]);
+
   useEffect(() => {
     const flushWhenHidden = () => {
       if (document.visibilityState === 'hidden') {
@@ -220,13 +280,17 @@ export const useGameState = () => {
     let isCancelled = false;
     setBackendStatus('loading');
 
-    fetchGameState(playerId)
-      .then(response => {
+    const bootstrap = fetchGameState(playerId)
+      .then(async response => {
         if (isCancelled) {
           return;
         }
 
         applySnapshot(requireSnapshot(response.snapshot));
+        await replayActionOutbox();
+        if (isCancelled) {
+          return;
+        }
         setBackendStatus('synced');
       })
       .catch(error => {
@@ -235,11 +299,12 @@ export const useGameState = () => {
           setBackendStatus('error');
         }
       });
+    actionQueueRef.current = bootstrap.then(() => undefined);
 
     return () => {
       isCancelled = true;
     };
-  }, [apiEnabled, applySnapshot, playerId]);
+  }, [apiEnabled, applySnapshot, playerId, replayActionOutbox]);
 
   const runGameAction = useCallback((action: GameAction) => {
     if (!apiEnabled) {
@@ -248,13 +313,25 @@ export const useGameState = () => {
       return Promise.resolve(result.events);
     }
 
+    const command: PendingGameCommand = {
+      action,
+      commandId: createGameCommandId(),
+    };
+
+    try {
+      appendActionOutbox(playerId, command);
+    } catch (error) {
+      console.error(error);
+      setBackendStatus('error');
+      return Promise.resolve([] as GameEvent[]);
+    }
+
     const nextAction = actionQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const response = await postGameAction(playerId, action);
-        applySnapshot(requireSnapshot(response.snapshot));
+        const events = await replayActionOutbox(command.commandId);
         setBackendStatus('synced');
-        return response.events;
+        return events;
       })
       .catch(error => {
         console.error(error);
@@ -264,7 +341,30 @@ export const useGameState = () => {
 
     actionQueueRef.current = nextAction.then(() => undefined);
     return nextAction;
-  }, [apiEnabled, applySnapshot, playerId]);
+  }, [apiEnabled, applySnapshot, playerId, replayActionOutbox]);
+
+  useEffect(() => {
+    if (!apiEnabled) {
+      return;
+    }
+
+    const retryPendingCommands = () => {
+      const retry = actionQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          await replayActionOutbox();
+          setBackendStatus('synced');
+        })
+        .catch(error => {
+          console.error(error);
+          setBackendStatus('error');
+        });
+      actionQueueRef.current = retry.then(() => undefined);
+    };
+
+    window.addEventListener('online', retryPendingCommands);
+    return () => window.removeEventListener('online', retryPendingCommands);
+  }, [apiEnabled, replayActionOutbox]);
 
   useEffect(() => {
     if ((apiEnabled && backendStatus !== 'synced') || offlineClaimRequestedRef.current) {
@@ -311,23 +411,65 @@ export const useGameState = () => {
     };
   }, []);
 
-  const dealDamage = useCallback((amount: number, isPassive = false) => {
-    return runGameAction({
-      type: 'deal_damage',
-      amount: Math.max(0, amount),
-      source: isPassive ? 'passive' : 'tap',
+  const flushTapBatch = useCallback(() => {
+    if (tapBatchTimeoutRef.current) {
+      clearTimeout(tapBatchTimeoutRef.current);
+      tapBatchTimeoutRef.current = null;
+    }
+
+    const taps = pendingTapsRef.current.splice(0, TAP_BATCH_MAX_SIZE);
+    if (taps.length === 0) {
+      return;
+    }
+
+    void runGameAction({
+      type: 'combat_batch',
+      tapCount: taps.length,
+      passiveTicks: 0,
+    }).then(events => {
+      const groupedEvents = splitTapEvents(events, taps.length);
+      taps.forEach((tap, index) => tap.resolve(groupedEvents[index] ?? []));
     });
+
+    if (pendingTapsRef.current.length > 0) {
+      tapBatchTimeoutRef.current = setTimeout(() => flushTapBatch(), TAP_BATCH_WINDOW_MS);
+    }
   }, [runGameAction]);
+
+  const dealDamage = useCallback(() => {
+    return new Promise<GameEvent[]>(resolve => {
+      pendingTapsRef.current.push({ resolve });
+
+      if (pendingTapsRef.current.length >= TAP_BATCH_MAX_SIZE) {
+        queueMicrotask(flushTapBatch);
+        return;
+      }
+
+      if (!tapBatchTimeoutRef.current) {
+        tapBatchTimeoutRef.current = setTimeout(flushTapBatch, TAP_BATCH_WINDOW_MS);
+      }
+    });
+  }, [flushTapBatch]);
+
+  useEffect(() => {
+    const flushPendingTaps = () => flushTapBatch();
+    window.addEventListener('pagehide', flushPendingTaps);
+
+    return () => {
+      window.removeEventListener('pagehide', flushPendingTaps);
+      flushTapBatch();
+    };
+  }, [flushTapBatch]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.heroes.length > 0) {
-        void dealDamage(passivePower, true);
+        void runGameAction({ type: 'combat_batch', tapCount: 0, passiveTicks: 1 });
       }
     }, GAME_BALANCE.passiveTickMs);
     
     return () => clearInterval(interval);
-  }, [activeView, passivePower, dealDamage, snapshot.heroes.length]);
+  }, [activeView, passivePower, runGameAction, snapshot.heroes.length]);
 
   const summonHero = useCallback(async () => {
     if (snapshotRef.current.gems < GAME_BALANCE.summonCostGems) {
