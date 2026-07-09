@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
-import {
-  BOSS_EMOJI,
-  GAME_BALANCE,
-  MONSTER_EMOJIS,
-} from '../game/balance';
+import { GAME_BALANCE } from '../game/balance';
+import './TheRift.css';
 
 interface TheRiftProps {
   monsterHealth: number;
@@ -21,392 +19,250 @@ interface TheRiftProps {
   passivePower: number;
 }
 
-export const TheRift: React.FC<TheRiftProps> = ({ 
-  monsterHealth, monsterMaxHealth, dealDamage, clickPower, stage, isBoss,
-  comboCount, comboMultiplier, registerHit, passivePower
+interface DamagePop {
+  id: number;
+  x: number;
+  y: number;
+  damage: number;
+  isCrit: boolean;
+  driftX: number;
+}
+
+interface Projectile {
+  id: number;
+  startX: number;
+  startY: number;
+  rotate: number;
+}
+
+export const TheRift: React.FC<TheRiftProps> = ({
+  monsterHealth,
+  monsterMaxHealth,
+  dealDamage,
+  clickPower,
+  stage,
+  isBoss,
+  comboCount,
+  comboMultiplier,
+  registerHit,
+  passivePower,
 }) => {
-  const [clicks, setClicks] = useState<{ id: number, x: number, y: number, damage: number, isCrit: boolean }[]>([]);
-  const [projectiles, setProjectiles] = useState<{ id: number, startX: number, startY: number }[]>([]);
+  const [damagePops, setDamagePops] = useState<DamagePop[]>([]);
+  const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [clickCounter, setClickCounter] = useState(0);
   const [isHit, setIsHit] = useState(false);
-  const backgroundParticles = useMemo(() => {
-    return Array.from({ length: 20 }, (_, id) => ({
+
+  const sparks = useMemo(() => {
+    return Array.from({ length: 18 }, (_, id) => ({
       id,
-      size: Math.random() * 6 + 2,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      blur: Math.random() * 2,
-      y: -150 - Math.random() * 100,
-      x: (Math.random() - 0.5) * 50,
-      duration: Math.random() * 4 + 4,
+      left: 8 + ((id * 37) % 84),
+      delay: (id % 6) * 0.42,
+      duration: 4.6 + (id % 5) * 0.32,
+      scale: 0.65 + (id % 4) * 0.18,
     }));
   }, []);
 
-  // Auto-attack visual projectiles
   useEffect(() => {
-    if (passivePower <= 1) return;
-    
+    if (passivePower <= GAME_BALANCE.passiveFallbackPower) {
+      return;
+    }
+
     const interval = setInterval(() => {
       const angle = Math.random() * Math.PI * 2;
-      const radius = window.innerWidth > 500 ? 250 : window.innerWidth / 1.5;
+      const radius = window.innerWidth > 500 ? 280 : window.innerWidth * 0.82;
       const startX = Math.cos(angle) * radius;
       const startY = Math.sin(angle) * radius;
-      
-      const newProj = { id: Date.now() + Math.random(), startX, startY };
-      setProjectiles(p => [...p, newProj]);
-      
+      const projectile = {
+        id: Date.now() + Math.random(),
+        startX,
+        startY,
+        rotate: Math.atan2(-startY, -startX) * 180 / Math.PI,
+      };
+
+      setProjectiles(current => [...current, projectile]);
+
       setTimeout(() => {
-        setProjectiles(p => p.filter(proj => proj.id !== newProj.id));
+        setProjectiles(current => current.filter(item => item.id !== projectile.id));
         setIsHit(true);
         setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
-      }, GAME_BALANCE.autoProjectileTravelMs); 
-      
+      }, GAME_BALANCE.autoProjectileTravelMs);
     }, Math.max(
       GAME_BALANCE.autoProjectileMinIntervalMs,
       GAME_BALANCE.autoProjectileBaseIntervalMs - passivePower * GAME_BALANCE.autoProjectilePowerSpeedupMs,
     ));
+
     return () => clearInterval(interval);
   }, [passivePower]);
 
-  const handleAttack = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if ('cancelable' in e && e.cancelable) e.preventDefault();
-    
-    let clientX = 0;
-    let clientY = 0;
-    
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
+  const handleAttack = (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    if ('cancelable' in event && event.cancelable) {
+      event.preventDefault();
     }
 
+    const point = 'touches' in event ? event.touches[0] : event;
     const isCrit = Math.random() < GAME_BALANCE.critChance;
     const finalDamage = isCrit ? clickPower * GAME_BALANCE.critMultiplier : clickPower;
+    const nextClick = {
+      id: clickCounter,
+      x: point.clientX,
+      y: point.clientY,
+      damage: finalDamage,
+      isCrit,
+      driftX: (Math.random() - 0.5) * 92,
+    };
 
     dealDamage(finalDamage);
     registerHit();
-    
     triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
-
     setIsHit(true);
     setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
-
-    const newClick = { id: clickCounter, x: clientX, y: clientY, damage: finalDamage, isCrit };
-    setClicks((prev) => [...prev, newClick]);
-    setClickCounter((c) => c + 1);
-
+    setDamagePops(current => [...current, nextClick]);
+    setClickCounter(value => value + 1);
     setTimeout(() => {
-      setClicks((prev) => prev.filter(c => c.id !== newClick.id));
+      setDamagePops(current => current.filter(item => item.id !== nextClick.id));
     }, GAME_BALANCE.damageTextLifetimeMs);
   };
 
   const healthPercent = Math.max(0, Math.min(100, (monsterHealth / monsterMaxHealth) * 100));
-  const currentEmoji = isBoss ? BOSS_EMOJI : MONSTER_EMOJIS[(stage - 1) % MONSTER_EMOJIS.length];
-
-  // Theme colors based on boss/normal
-  const themeColor = isBoss ? '#ff00ff' : '#00ffff';
-  const themeGlow = isBoss ? 'rgba(255, 0, 255, 0.5)' : 'rgba(0, 255, 255, 0.5)';
-  const themeGradient = isBoss ? 'linear-gradient(135deg, #4a004a, #1a001a)' : 'linear-gradient(135deg, #003333, #001111)';
+  const combatTone = isBoss ? 'boss' : 'normal';
 
   return (
-    <motion.div 
-      className="view-container"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        flex: 1,
-        position: 'relative',
-        overflow: 'hidden',
-        background: 'radial-gradient(circle at 50% 50%, rgba(31, 40, 51, 0.8) 0%, rgba(11, 12, 16, 1) 100%)'
-      }}
+    <motion.section
+      className={`rift-view ${combatTone}`}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.28, ease: 'easeOut' }}
     >
-      {/* Immersive Background Grid & Particles */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.1, backgroundImage: 'linear-gradient(rgba(102, 252, 241, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 252, 241, 0.2) 1px, transparent 1px)', backgroundSize: '30px 30px', zIndex: 0 }} />
-      
-      {backgroundParticles.map((particle) => (
-        <motion.div
-          key={particle.id}
-          style={{
-            position: 'absolute',
-            width: `${particle.size}px`,
-            height: `${particle.size}px`,
-            backgroundColor: isBoss ? '#ff00ff' : '#00ffff',
-            borderRadius: '50%',
-            left: `${particle.left}%`,
-            top: `${particle.top}%`,
-            zIndex: 0,
-            filter: `blur(${particle.blur}px)`,
-            opacity: 0
-          }}
-          animate={{ 
-            y: [0, particle.y], 
-            x: [0, particle.x],
-            opacity: [0, 0.6, 0] 
-          }}
-          transition={{ duration: particle.duration, repeat: Infinity, ease: 'linear' }}
+      <div className="rift-skyline" />
+      {sparks.map(spark => (
+        <motion.span
+          key={spark.id}
+          className="rift-spark"
+          style={{ left: `${spark.left}%`, scale: spark.scale }}
+          animate={{ y: ['18vh', '-76vh'], opacity: [0, 0.78, 0] }}
+          transition={{ duration: spark.duration, delay: spark.delay, repeat: Infinity, ease: 'linear' }}
         />
       ))}
 
-      {/* Top Stats HUD */}
-      <div style={{ position: 'absolute', top: 20, width: '100%', display: 'flex', justifyContent: 'space-between', padding: '0 20px', zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ 
-          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', border: '1px solid rgba(102, 252, 241, 0.3)',
-          padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
-        }}>
-          <span style={{ fontSize: '1.2rem' }}>⚔️</span>
-          <div>
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Auto DPS</div>
-            <div style={{ color: '#00ffff', fontWeight: '900' }}>{formatNumber(passivePower)}/s</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-          <AnimatePresence>
-            {comboCount > 0 && (
-              <motion.div 
-                initial={{ scale: 0, x: 50 }}
-                animate={{ scale: 1, x: 0 }}
-                exit={{ scale: 0.5, opacity: 0, x: 50 }}
-                style={{ 
-                  background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', 
-                  border: comboMultiplier >= 2 ? '2px solid #ff00ff' : '1px solid #00ffff',
-                  padding: '8px 16px', borderRadius: '20px', fontSize: '0.9rem',
-                  boxShadow: comboMultiplier >= 2 ? '0 0 20px rgba(255,0,255,0.4)' : '0 4px 15px rgba(0,0,0,0.5)',
-                  display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-              >
-                <span style={{ color: comboMultiplier >= 2 ? '#ff00ff' : '#00ffff', fontWeight: '900', fontStyle: 'italic' }}>
-                  {comboCount} HITS
-                </span>
-                <span style={{ background: comboMultiplier >= 2 ? '#ff00ff' : '#00ffff', color: '#000', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                  x{comboMultiplier.toFixed(2)}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Stage Info */}
-      <div style={{ zIndex: 1, textAlign: 'center', marginTop: '60px', marginBottom: '20px' }}>
-        <motion.div 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          style={{ 
-            display: 'inline-block',
-            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
-            padding: '5px 40px',
-            borderTop: `1px solid ${themeColor}`,
-            borderBottom: `1px solid ${themeColor}`
-          }}
-        >
-          <h1 style={{ 
-            fontSize: '2rem', margin: 0, 
-            background: isBoss ? 'linear-gradient(to right, #ff00ff, #ff88ff)' : 'linear-gradient(to right, #00ffff, #88ffff)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            textTransform: 'uppercase', letterSpacing: '4px', fontWeight: '900'
-          }}>
-            Stage {stage}
-          </h1>
-        </motion.div>
-        
+      <header className="rift-stage-hud">
+        <div className="stage-kicker">{isBoss ? 'Boss Rift' : 'Void Rift'}</div>
+        <h1>Stage {stage}</h1>
         {isBoss && (
-          <motion.div 
-            animate={{ opacity: [1, 0.5, 1], scale: [1, 1.05, 1] }}
-            transition={{ duration: 1, repeat: Infinity }}
-            style={{ 
-              color: '#ff00ff', textShadow: '0 0 15px #ff00ff', 
-              fontSize: '1rem', fontWeight: 'bold', letterSpacing: '2px', marginTop: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-            }}
+          <motion.div
+            className="boss-alert"
+            animate={{ opacity: [0.72, 1, 0.72] }}
+            transition={{ duration: 1.2, repeat: Infinity }}
           >
-            <span>⚠️</span> EPIC BOSS <span>⚠️</span>
+            Epic boss breach
           </motion.div>
         )}
-      </div>
-      
-      {/* Health Bar UI */}
-      <div style={{ width: '280px', zIndex: 1, position: 'relative', marginBottom: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: 'rgba(255,255,255,0.7)', padding: '0 5px' }}>
-          <span>HP</span>
-          <span>{formatNumber(Math.ceil(monsterHealth))} / {formatNumber(monsterMaxHealth)}</span>
+      </header>
+
+      <div className="combat-dashboard">
+        <div className="combat-chip">
+          <Activity size={16} />
+          <span>Auto</span>
+          <strong>{formatNumber(passivePower)}/s</strong>
         </div>
-        <div style={{ 
-          height: '24px', background: 'rgba(0,0,0,0.8)', borderRadius: '12px', 
-          border: '2px solid rgba(255,255,255,0.1)', overflow: 'hidden', position: 'relative',
-          boxShadow: 'inset 0 0 10px rgba(0,0,0,1)'
-        }}>
-          {/* Health Fill */}
-          <motion.div 
-            style={{ 
-              height: '100%', 
-              background: isBoss 
-                ? 'linear-gradient(90deg, #aa0000, #ff0055, #ff00ff)' 
-                : 'linear-gradient(90deg, #005555, #00aaaa, #00ffff)',
-              boxShadow: isHit ? `0 0 20px ${themeColor}` : 'none'
-            }}
-            animate={{ width: `${healthPercent}%` }}
-            transition={{ duration: 0.1, ease: 'easeOut' }}
-          >
-            {/* Health Bar shine */}
+        <AnimatePresence>
+          {comboCount > 0 && (
             <motion.div
-              animate={{ x: ['-100%', '200%'] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-              style={{
-                width: '50%', height: '100%',
-                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
-                transform: 'skewX(-20deg)'
-              }}
-            />
-          </motion.div>
+              className="combo-chip"
+              initial={{ opacity: 0, x: 26, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 26, scale: 0.9 }}
+            >
+              <span>{comboCount} hits</span>
+              <strong>x{comboMultiplier.toFixed(2)}</strong>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div className="health-panel">
+        <div className="health-meta">
+          <span>Enemy integrity</span>
+          <strong>{formatNumber(Math.ceil(monsterHealth))} / {formatNumber(monsterMaxHealth)}</strong>
+        </div>
+        <div className="health-track">
+          <motion.div
+            className="health-fill"
+            animate={{ width: `${healthPercent}%` }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
+          />
         </div>
       </div>
 
-      {/* Interactive Monster Arena */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, width: '100%' }}>
-        
-        {/* Passive Projectiles */}
+      <div className="rift-arena">
         <AnimatePresence>
-          {projectiles.map(proj => (
-            <motion.div
-              key={proj.id}
-              initial={{ x: proj.startX, y: proj.startY, opacity: 0, scale: 0, rotate: Math.atan2(-proj.startY, -proj.startX) * 180 / Math.PI }}
-              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 3 }}
+          {projectiles.map(projectile => (
+            <motion.span
+              key={projectile.id}
+              className="auto-projectile"
+              initial={{ x: projectile.startX, y: projectile.startY, opacity: 0, scaleX: 0.4, rotate: projectile.rotate }}
+              animate={{ x: 0, y: 0, opacity: 1, scaleX: 1 }}
+              exit={{ opacity: 0, scale: 2.4 }}
               transition={{ duration: 0.4, ease: 'easeIn' }}
-              style={{
-                position: 'absolute',
-                width: '15px', height: '4px',
-                borderRadius: '2px',
-                background: '#00ffff',
-                boxShadow: '0 0 15px #00ffff, 0 0 5px #fff',
-                zIndex: 2,
-                pointerEvents: 'none'
-              }}
             />
           ))}
         </AnimatePresence>
 
-        {/* The Monster Entity */}
-        <motion.div 
-          style={{
-            position: 'relative',
-            width: isBoss ? '240px' : '200px',
-            height: isBoss ? '240px' : '200px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'crosshair',
-            userSelect: 'none',
-            touchAction: 'none',
-            zIndex: 1,
-            filter: isHit ? 'brightness(1.5) contrast(1.2)' : 'none'
-          }}
-          animate={{ y: [0, -20, 0] }}
-          transition={{ duration: isBoss ? 3 : 2, repeat: Infinity, ease: 'easeInOut' }}
+        <motion.button
+          type="button"
+          aria-label="Attack rift monster"
+          className={`monster-button ${isHit ? 'hit' : ''}`}
           onMouseDown={handleAttack}
           onTouchStart={handleAttack}
+          animate={{ y: [0, -16, 0] }}
+          transition={{ duration: isBoss ? 3.1 : 2.35, repeat: Infinity, ease: 'easeInOut' }}
         >
-          {/* Monster Aura / Portal */}
-          <motion.div 
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              borderRadius: '50%',
-              background: themeGradient,
-              boxShadow: `0 0 50px ${themeGlow}, inset 0 0 30px ${themeGlow}`,
-              border: `2px dashed ${themeColor}`,
-              opacity: 0.8
-            }}
-            animate={{ 
-              rotate: isHit ? [0, 10, -10, 0] : [0, 360],
-              scale: isHit ? 0.95 : 1
-            }}
-            transition={{ 
-              rotate: isHit ? { duration: 0.2 } : { duration: 20, repeat: Infinity, ease: 'linear' },
-              scale: { duration: 0.1 }
-            }}
-          />
-
-          <motion.div 
-            style={{
-              position: 'absolute', top: '15%', left: '15%', right: '15%', bottom: '15%',
-              borderRadius: '50%',
-              background: `radial-gradient(circle, #000 0%, ${themeColor}40 100%)`,
-              border: `1px solid ${themeColor}`,
-            }}
-            animate={{ rotate: -360 }}
-            transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
-          />
-
-          {/* The Emoji */}
-          <motion.div 
-            style={{ 
-              fontSize: isBoss ? '7rem' : '6rem', 
-              filter: `drop-shadow(0 0 20px ${themeColor})`,
-              position: 'relative',
-              zIndex: 2,
-              pointerEvents: 'none'
-            }}
-            animate={{ 
-              scale: isHit ? 0.9 : 1,
-              x: isHit ? (Math.random() - 0.5) * 20 : 0,
-              y: isHit ? (Math.random() - 0.5) * 20 : 0
-            }}
-            transition={{ duration: 0.1 }}
+          <span className="monster-ring outer" />
+          <span className="monster-ring inner" />
+          <motion.span
+            className="rift-beast"
+            animate={isHit ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] } : { scale: [1, 1.035, 1] }}
+            transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
           >
-            {currentEmoji}
-          </motion.div>
-        </motion.div>
+            <span className="beast-shadow" />
+            <span className="beast-wing left" />
+            <span className="beast-wing right" />
+            <span className="beast-body">
+              <span className="beast-core" />
+              <span className="beast-eye left" />
+              <span className="beast-eye right" />
+              <span className="beast-mouth" />
+            </span>
+            <span className="beast-horn left" />
+            <span className="beast-horn right" />
+            <span className="beast-claw left" />
+            <span className="beast-claw right" />
+          </motion.span>
+        </motion.button>
       </div>
 
-      {/* Floating Damage Numbers */}
+      <footer className="rift-footer">
+        <Crosshair size={17} />
+        <span>Tap power</span>
+        <strong>{formatNumber(clickPower)}</strong>
+        <Zap size={16} />
+      </footer>
+
       <AnimatePresence>
-        {clicks.map((click) => (
+        {damagePops.map(pop => (
           <motion.div
-            key={click.id}
-            initial={{ opacity: 1, y: click.y - 50, x: click.x - 30, scale: click.isCrit ? 0.5 : 0.2, rotate: (Math.random() - 0.5) * 30 }}
-            animate={{ opacity: 0, y: click.y - 150 - Math.random() * 50, x: click.x - 30 + (Math.random() - 0.5) * 100, scale: click.isCrit ? 1.5 : 1 }}
+            key={pop.id}
+            className={`damage-pop ${pop.isCrit ? 'crit' : ''}`}
+            initial={{ opacity: 1, x: pop.x - 30, y: pop.y - 44, scale: pop.isCrit ? 0.7 : 0.45 }}
+            animate={{ opacity: 0, x: pop.x - 30 + pop.driftX, y: pop.y - 142, scale: pop.isCrit ? 1.48 : 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            style={{
-              position: 'fixed',
-              color: click.isCrit ? '#ff00ff' : '#fff',
-              fontWeight: '900',
-              fontSize: click.isCrit ? '2.5rem' : '1.8rem',
-              WebkitTextStroke: '1px black',
-              textShadow: click.isCrit ? '0 0 15px #ff00ff' : '0 0 10px #00ffff',
-              pointerEvents: 'none',
-              zIndex: 100,
-              left: 0,
-              top: 0
-            }}
+            transition={{ duration: 0.78, ease: 'easeOut' }}
           >
-            {click.isCrit && <span style={{ fontSize: '1rem', display: 'block', textAlign: 'center', marginBottom: '-10px' }}>CRIT!</span>}
-            -{formatNumber(click.damage)}
+            {pop.isCrit && <span>CRIT</span>}
+            -{formatNumber(pop.damage)}
           </motion.div>
         ))}
       </AnimatePresence>
-
-      {/* Footer Info */}
-      <div style={{ position: 'absolute', bottom: 20, pointerEvents: 'none', zIndex: 10 }}>
-        <div style={{ 
-          background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)',
-          padding: '8px 24px', borderRadius: '30px', color: 'rgba(255,255,255,0.7)',
-          fontSize: '0.9rem', fontWeight: 'bold', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', gap: '8px'
-        }}>
-          🎯 Click Power: <span style={{ color: '#fff' }}>{formatNumber(clickPower)}</span>
-        </div>
-      </div>
-    </motion.div>
+    </motion.section>
   );
 };

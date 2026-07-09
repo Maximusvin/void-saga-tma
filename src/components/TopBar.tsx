@@ -10,7 +10,11 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ gold, gems }) => {
   return (
-    <div className="topbar glass-panel">
+    <div className="topbar">
+      <div className="topbar-status">
+        <span className="status-dot" />
+        <span>Rift Stable</span>
+      </div>
       <div className="resource-pill gold">
         <Coins size={18} className="icon" />
         <span className="amount">{formatNumber(gold)}</span>
