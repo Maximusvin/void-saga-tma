@@ -1,5 +1,11 @@
 name: void_saga_prod
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   api:
     image: void-saga-api:${VOID_SAGA_IMAGE_TAG:-latest}
@@ -7,6 +13,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     restart: unless-stopped
+    logging: *default-logging
     security_opt:
       - no-new-privileges:true
     environment:
@@ -60,6 +67,7 @@ services:
       - game_data:/data:ro
       - ${VOID_SAGA_BACKUP_DIR:-/srv/void-saga/backups}:/backup
     network_mode: none
+    logging: *default-logging
     security_opt:
       - no-new-privileges:true
 
@@ -71,6 +79,7 @@ services:
       args:
         VITE_GAME_API_URL: https://${VOID_SAGA_HOST:-game.riy.contact}
     restart: unless-stopped
+    logging: *default-logging
     security_opt:
       - no-new-privileges:true
     expose:

@@ -8,6 +8,7 @@ RUN npm ci
 COPY tsconfig.server.json ./
 COPY server ./server
 COPY src/game ./src/game
+COPY src/observability ./src/observability
 
 RUN npm run server:check && npm run server:bundle
 

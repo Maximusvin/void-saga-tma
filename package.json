@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
-    "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/game/**/*.test.ts src/views/**/*.test.ts",
+    "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/components/**/*.test.ts src/game/**/*.test.ts src/observability/**/*.test.ts src/views/**/*.test.ts",
+    "test:e2e": "playwright test",
     "preview": "vite preview",
     "prod:compose:check": "node scripts/assert-production-compose.mjs",
     "server:check": "tsc -p tsconfig.server.json",
@@ -25,6 +26,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",

@@ -64,6 +64,14 @@ Server тести:
 npm run test:server
 ```
 
+Browser navigation regression:
+
+```bash
+npx playwright install chromium
+npm run build
+npm run test:e2e
+```
+
 Детермінована перевірка economy від сцени 1 до 10 000:
 
 ```bash
@@ -86,6 +94,7 @@ npm run balance:simulate
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - список героїв і upgrade.
 - `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
+- `src/observability/` - privacy-safe client error contract і доставлення Telegram-authenticated telemetry у backend runtime logs.
 
 ## Анімаційний підхід
 
@@ -100,6 +109,7 @@ npm run balance:simulate
 - Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
 - Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback лише поза `NODE_ENV=production`; production працює fail-closed.
 - Frontend підключає офіційний `telegram-web-app.js` у `<head>`, використовує stable Telegram viewport і передає лише raw `initData`, який перевіряє backend.
+- React render crash показує відновлюваний fallback замість чорного екрана; render/global errors надсилаються у bounded endpoint `POST /api/client-errors`, який редагує credential-like дані, хешує player id і rate-limit-ить події.
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
 - Snapshot schema v3 зберігає одного героя на content template: duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
@@ -115,6 +125,7 @@ npm run balance:simulate
 - `GET /api/game/content` повертає `contentVersion`, `content`, `balance` і backward-compatible `summonPool`
 - `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі
 - `POST /api/game/action`
+- `POST /api/client-errors` приймає bounded client telemetry з Telegram auth і записує privacy-safe structured event у backend runtime logs
 
 Action payload:
 

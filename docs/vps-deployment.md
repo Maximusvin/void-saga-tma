@@ -114,6 +114,20 @@ curl -i https://game.riy.contact/api/game/state
 - game endpoint без `x-telegram-init-data` повертає `401`, а не frontend HTML;
 - після запуску через Telegram запити отримують валідний signed `initData`, а стан зберігається у SQLite volume.
 
+## Клієнтські помилки
+
+Критичні помилки React, `window.error` та `unhandledrejection` надсилаються на `POST /api/client-errors`. Ендпойнт приймає лише автентифікований Telegram `initData`, обмежує розмір і частоту подій, редагує чутливі фрагменти та записує структурований JSON без сирого Telegram user id.
+
+Перегляд останніх подій на VPS:
+
+```bash
+docker logs void_saga_prod-api-1 2>&1 \
+  | grep '"event":"client_error"' \
+  | tail -n 20
+```
+
+Docker-логи всіх production-сервісів ротуються драйвером `json-file`: не більше `10m` на файл і не більше п'яти файлів на контейнер. Відсутність зовнішнього сервісу моніторингу не впливає на запуск або роботу гри.
+
 ## Rollback
 
 Безпечний app rollback не видаляє volume:

@@ -15,7 +15,7 @@ const normalizeBaseUrl = (value: string | undefined) => {
   return value?.trim().replace(/\/$/, '') ?? '';
 };
 
-export const GAME_API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_GAME_API_URL);
+export const GAME_API_BASE_URL = normalizeBaseUrl(import.meta.env?.VITE_GAME_API_URL);
 
 export const isGameApiEnabled = () => GAME_API_BASE_URL.length > 0;
 

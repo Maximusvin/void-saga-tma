@@ -34,6 +34,13 @@ for (const serviceName of ['api', 'web']) {
   assert.deepEqual(Object.keys(service.networks ?? {}), ['proxy'], `${serviceName} must only use the proxy network`);
 }
 
+for (const serviceName of ['api', 'backup', 'web']) {
+  const logging = config.services[serviceName].logging;
+  assert.equal(logging?.driver, 'json-file', `${serviceName} logs must use the bounded json-file driver`);
+  assert.equal(logging?.options?.['max-size'], '10m', `${serviceName} logs must rotate at 10 MB`);
+  assert.equal(logging?.options?.['max-file'], '5', `${serviceName} must retain exactly five log files`);
+}
+
 const backupService = config.services.backup;
 assert.deepEqual(backupService.profiles, ['backup'], 'backup must require the explicit backup profile');
 assert.equal(backupService.network_mode, 'none', 'backup must not have network access');
