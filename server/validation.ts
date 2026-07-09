@@ -87,5 +87,14 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
     };
   }
 
+  if (request.action.type === 'claim_offline_rewards') {
+    return {
+      requestedPlayerId,
+      action: {
+        type: 'claim_offline_rewards',
+      },
+    };
+  }
+
   return null;
 };
