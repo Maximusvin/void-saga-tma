@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
-import { compareGameNumbers, type GameNumber } from '../game/gameNumber';
+import type { GameNumber } from '../game/gameNumber';
 import {
   RARITY_COLORS,
   RARITY_GRADIENTS,
@@ -10,32 +10,40 @@ import {
   getAscensionShardCost,
   getHeroIcon,
   getHeroLevelCap,
+  getHeroUpgradeQuote,
   getNextHeroPower,
   getUpgradeCost,
   isHeroAtLevelCap,
 } from '../game/balance';
-import type { Hero } from '../game/types';
+import type { Hero, HeroUpgradeAmount } from '../game/types';
 import './HeroesRoster.css';
 
 interface HeroesRosterProps {
   ascendHero: (id: string) => boolean;
   heroes: Hero[];
-  upgradeHero: (id: string) => boolean;
+  upgradeHero: (id: string, amount: HeroUpgradeAmount) => boolean;
   gold: GameNumber;
 }
 
 export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, upgradeHero, gold }) => {
   const [progressFeedback, setProgressFeedback] = useState<{
     heroId: string;
+    levelsGained?: number;
     type: 'ascend' | 'upgrade';
   } | null>(null);
+  const [upgradeAmount, setUpgradeAmount] = useState<HeroUpgradeAmount>(1);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showProgressFeedback = (heroId: string, type: 'ascend' | 'upgrade', durationMs: number) => {
+  const showProgressFeedback = (
+    heroId: string,
+    type: 'ascend' | 'upgrade',
+    durationMs: number,
+    levelsGained?: number,
+  ) => {
     if (feedbackTimeoutRef.current) {
       clearTimeout(feedbackTimeoutRef.current);
     }
-    setProgressFeedback({ heroId, type });
+    setProgressFeedback({ heroId, levelsGained, type });
     feedbackTimeoutRef.current = setTimeout(() => {
       feedbackTimeoutRef.current = null;
       setProgressFeedback(null);
@@ -50,14 +58,14 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
     };
   }, []);
 
-  const handleUpgrade = (id: string) => {
-    const wasUpgraded = upgradeHero(id);
+  const handleUpgrade = (id: string, levelsGained: number) => {
+    const wasUpgraded = upgradeHero(id, upgradeAmount);
     if (!wasUpgraded) {
       return;
     }
 
     triggerHaptic('heavy');
-    showProgressFeedback(id, 'upgrade', 500);
+    showProgressFeedback(id, 'upgrade', 500, levelsGained);
   };
 
   const handleAscend = (id: string) => {
@@ -97,6 +105,21 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
       <div className="roster-header">
         <span>Warband</span>
         <h2 className="text-gradient">Your Heroes ({heroes.length})</h2>
+        {heroes.length > 0 && (
+          <div className="upgrade-mode" aria-label="Upgrade amount">
+            {([1, 10, 'max'] as const).map(amount => (
+              <button
+                key={amount}
+                type="button"
+                className={upgradeAmount === amount ? 'active' : ''}
+                aria-pressed={upgradeAmount === amount}
+                onClick={() => setUpgradeAmount(amount)}
+              >
+                {amount === 'max' ? 'MAX' : `+${amount}`}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       
       {sortedHeroes.length === 0 ? (
@@ -107,14 +130,17 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
         <div className="roster-grid">
           <AnimatePresence>
             {sortedHeroes.map((hero) => {
-              const upgradeCost = getUpgradeCost(hero);
               const atLevelCap = isHeroAtLevelCap(hero);
               const levelCap = getHeroLevelCap(hero);
               const ascensionCost = getAscensionShardCost(hero);
               const canAscend = atLevelCap && hero.shards >= ascensionCost;
-              const canUpgrade = !atLevelCap && compareGameNumbers(gold, upgradeCost) >= 0;
+              const upgradeQuote = getHeroUpgradeQuote(hero, gold, upgradeAmount);
+              const canUpgrade = !atLevelCap && upgradeQuote.levelsGained > 0;
+              const displayedUpgradeCost = canUpgrade ? upgradeQuote.goldCost : getUpgradeCost(hero);
               const color = RARITY_COLORS[hero.rarity];
-              const nextPower = getNextHeroPower(hero);
+              const nextPower = upgradeQuote.levelsGained > 0
+                ? upgradeQuote.power
+                : getNextHeroPower(hero);
               const isUpgrading = progressFeedback?.heroId === hero.id && progressFeedback.type === 'upgrade';
               const isAscending = progressFeedback?.heroId === hero.id && progressFeedback.type === 'ascend';
 
@@ -166,7 +192,9 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
                           color: '#fff', fontWeight: 'bold', textShadow: `0 0 5px ${color}`, zIndex: 21, pointerEvents: 'none'
                         }}
                       >
-                        {isAscending ? 'ASCENDED!' : 'LEVEL UP!'}
+                        {isAscending
+                          ? 'ASCENDED!'
+                          : `+${progressFeedback?.levelsGained ?? 1} LEVEL${progressFeedback?.levelsGained === 1 ? '' : 'S'}!`}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -210,13 +238,15 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
                   <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
                     {atLevelCap
                       ? `Ascension ${hero.ascension} · ${hero.shards}/${ascensionCost} shards`
-                      : `Next ⚡ ${formatNumber(nextPower)}`}
+                      : `${upgradeQuote.levelsGained > 0 ? `+${upgradeQuote.levelsGained}` : 'Next'} ⚡ ${formatNumber(nextPower)}`}
                   </div>
                   
                   {/* Upgrade Button */}
                   <button 
                     className="btn-primary"
-                    onClick={() => atLevelCap ? handleAscend(hero.id) : handleUpgrade(hero.id)}
+                    onClick={() => atLevelCap
+                      ? handleAscend(hero.id)
+                      : handleUpgrade(hero.id, upgradeQuote.levelsGained)}
                     disabled={atLevelCap ? !canAscend : !canUpgrade}
                     style={{
                       padding: '8px',
@@ -233,11 +263,13 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, 
                   >
                     {atLevelCap
                       ? (canAscend ? 'ASCEND' : 'NEED SHARDS')
-                      : (canUpgrade ? 'UPGRADE' : 'NEED GOLD')}
+                      : (canUpgrade
+                          ? `UPGRADE${upgradeQuote.levelsGained > 1 ? ` +${upgradeQuote.levelsGained}` : ''}`
+                          : 'NEED GOLD')}
                     <div style={{ fontSize: '0.65rem', marginTop: '2px', fontWeight: 'normal' }}>
                       {atLevelCap
                         ? `${hero.shards}/${ascensionCost} shards`
-                        : <>{formatNumber(upgradeCost)} <span style={{ color: canUpgrade ? '#000' : 'var(--gold)' }}>g</span></>}
+                        : <>{formatNumber(displayedUpgradeCost)} <span style={{ color: canUpgrade ? '#000' : 'var(--gold)' }}>g</span></>}
                     </div>
                   </button>
                 </motion.div>

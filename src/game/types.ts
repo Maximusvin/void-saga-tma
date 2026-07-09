@@ -1,6 +1,7 @@
 import type { GameNumber } from './gameNumber';
 
 export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
+export type HeroUpgradeAmount = 1 | 10 | 'max';
 export type ActiveView = 'rift' | 'summon' | 'roster';
 
 export const GAME_SNAPSHOT_SCHEMA_VERSION = 3;
@@ -67,7 +68,7 @@ export interface GameSnapshot {
 export type GameAction =
   | { type: 'combat_batch'; tapCount: number; passiveTicks: number }
   | { type: 'summon'; randomValue?: number }
-  | { type: 'upgrade_hero'; heroId: string }
+  | { type: 'upgrade_hero'; heroId: string; amount?: HeroUpgradeAmount }
   | { type: 'ascend_hero'; heroId: string }
   | { type: 'claim_offline_rewards' };
 
@@ -89,7 +90,15 @@ export type GameEvent =
       isDuplicate: boolean;
       shardsGranted: number;
     }
-  | { type: 'hero_upgraded'; heroId: string; goldCost: GameNumber; level: number; power: GameNumber }
+  | {
+      type: 'hero_upgraded';
+      heroId: string;
+      fromLevel: number;
+      goldCost: GameNumber;
+      level: number;
+      levelsGained: number;
+      power: GameNumber;
+    }
   | {
       type: 'hero_ascended';
       heroId: string;

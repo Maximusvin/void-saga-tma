@@ -12,15 +12,15 @@ import {
   getBaseClickPower,
   getComboMultiplier,
   getHeroLevelCap,
+  getHeroUpgradeQuote,
   getPassivePower,
-  getUpgradeCost,
   isHeroAtLevelCap,
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
-import { compareGameNumbers, multiplyGameNumbers } from '../game/gameNumber';
+import { multiplyGameNumbers } from '../game/gameNumber';
 import { normalizeGameSnapshot } from '../game/snapshot';
-import type { ActiveView, GameAction, GameEvent, GameSnapshot } from '../game/types';
+import type { ActiveView, GameAction, GameEvent, GameSnapshot, HeroUpgradeAmount } from '../game/types';
 import { getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
@@ -428,18 +428,18 @@ export const useGameState = () => {
     return getSummonEvent(events);
   }, [runGameAction]);
 
-  const upgradeHero = (heroId: string) => {
+  const upgradeHero = (heroId: string, amount: HeroUpgradeAmount = 1) => {
     const currentSnapshot = snapshotRef.current;
     const heroToUpgrade = currentSnapshot.heroes.find(hero => hero.id === heroId);
     if (
       !heroToUpgrade ||
       isHeroAtLevelCap(heroToUpgrade) ||
-      compareGameNumbers(currentSnapshot.gold, getUpgradeCost(heroToUpgrade)) < 0
+      getHeroUpgradeQuote(heroToUpgrade, currentSnapshot.gold, amount).levelsGained === 0
     ) {
       return false;
     }
 
-    void runGameAction({ type: 'upgrade_hero', heroId });
+    void runGameAction({ type: 'upgrade_hero', heroId, amount });
     return true;
   };
 
