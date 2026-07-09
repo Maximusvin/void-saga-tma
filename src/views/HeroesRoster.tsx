@@ -1,28 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Hero } from '../store/useGameState';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
+import {
+  RARITY_COLORS,
+  RARITY_GRADIENTS,
+  RARITY_ORDER,
+  getHeroIcon,
+  getNextHeroPower,
+  getUpgradeCost,
+} from '../game/balance';
+import type { Hero } from '../game/types';
 
 interface HeroesRosterProps {
   heroes: Hero[];
   upgradeHero: (id: string) => boolean;
   gold: number;
 }
-
-const rarityColors = {
-  Common: '#a0a0a0',
-  Rare: '#3498db',
-  Epic: '#ff00ff',
-  Legendary: '#ffd700'
-};
-
-const rarityGradients = {
-  Common: 'linear-gradient(135deg, rgba(160,160,160,0.1), rgba(160,160,160,0))',
-  Rare: 'linear-gradient(135deg, rgba(52,152,219,0.2), rgba(52,152,219,0))',
-  Epic: 'linear-gradient(135deg, rgba(255,0,255,0.2), rgba(255,0,255,0))',
-  Legendary: 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.05))'
-};
 
 export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero, gold }) => {
   const [justUpgradedId, setJustUpgradedId] = useState<string | null>(null);
@@ -40,9 +34,8 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
 
   // Sort heroes: Legendary > Epic > Rare > Common, then by level desc
   const sortedHeroes = [...heroes].sort((a, b) => {
-    const order = { Legendary: 4, Epic: 3, Rare: 2, Common: 1 };
-    if (order[b.rarity] !== order[a.rarity]) {
-      return order[b.rarity] - order[a.rarity];
+    if (RARITY_ORDER[b.rarity] !== RARITY_ORDER[a.rarity]) {
+      return RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity];
     }
     return b.level - a.level;
   });
@@ -75,10 +68,10 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', padding: '16px 0 30px 0' }}>
           <AnimatePresence>
             {sortedHeroes.map((hero) => {
-              const upgradeCost = hero.level * 100;
+              const upgradeCost = getUpgradeCost(hero);
               const canUpgrade = gold >= upgradeCost;
-              const color = rarityColors[hero.rarity];
-              const nextPower = Math.floor(hero.power * 1.5);
+              const color = RARITY_COLORS[hero.rarity];
+              const nextPower = getNextHeroPower(hero);
               const isUpgrading = justUpgradedId === hero.id;
 
               return (
@@ -97,7 +90,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
                     alignItems: 'center',
                     gap: '6px',
                     border: `1px solid ${color}40`,
-                    background: rarityGradients[hero.rarity],
+                    background: RARITY_GRADIENTS[hero.rarity],
                     boxShadow: isUpgrading ? `0 0 20px ${color}` : `0 4px 12px ${color}15`,
                     position: 'relative',
                     overflow: 'hidden'
@@ -156,7 +149,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
                     boxShadow: `inset 0 0 10px ${color}40, 0 0 10px ${color}20`,
                     marginTop: '10px'
                   }}>
-                    {hero.rarity === 'Legendary' ? '👑' : hero.rarity === 'Epic' ? '🔮' : hero.rarity === 'Rare' ? '⚔️' : '🛡️'}
+                    {getHeroIcon(hero.rarity)}
                   </div>
                   
                   {/* Info */}

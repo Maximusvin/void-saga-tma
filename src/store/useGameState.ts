@@ -1,15 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  GAME_BALANCE,
+  HERO_RARITIES,
+  getBaseClickPower,
+  getComboMultiplier,
+  getMonsterMaxHealth,
+  getNextHeroPower,
+  getPassivePower,
+  getUpgradeCost,
+  isBossStage,
+} from '../game/balance';
+import type { ActiveView, Hero, HeroRarity } from '../game/types';
 
-type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
-type ActiveView = 'rift' | 'summon' | 'roster';
-
-export interface Hero {
-  id: string;
-  name: string;
-  rarity: HeroRarity;
-  level: number;
-  power: number;
-}
+export type { Hero } from '../game/types';
 
 interface GameSave {
   gold: number;
@@ -19,9 +22,6 @@ interface GameSave {
   monsterMaxHealth: number;
   monsterHealth: number;
 }
-
-const STORAGE_KEY = 'rift_heroes_save';
-const HERO_RARITIES: HeroRarity[] = ['Common', 'Rare', 'Epic', 'Legendary'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -57,17 +57,17 @@ const sanitizeSave = (value: unknown): GameSave | null => {
     return null;
   }
 
-  const monsterMaxHealth = Math.max(1, numberOrDefault(value.monsterMaxHealth, 100));
+  const monsterMaxHealth = Math.max(1, numberOrDefault(value.monsterMaxHealth, GAME_BALANCE.baseMonsterHealth));
   const monsterHealth = Math.min(
     monsterMaxHealth,
     Math.max(0, numberOrDefault(value.monsterHealth, monsterMaxHealth)),
   );
 
   return {
-    gold: Math.max(0, numberOrDefault(value.gold, 1000)),
-    gems: Math.max(0, numberOrDefault(value.gems, 50)),
+    gold: Math.max(0, numberOrDefault(value.gold, GAME_BALANCE.initialGold)),
+    gems: Math.max(0, numberOrDefault(value.gems, GAME_BALANCE.initialGems)),
     heroes: Array.isArray(value.heroes) ? value.heroes.filter(isHero) : [],
-    stage: Math.max(1, Math.floor(numberOrDefault(value.stage, 1))),
+    stage: Math.max(GAME_BALANCE.initialStage, Math.floor(numberOrDefault(value.stage, GAME_BALANCE.initialStage))),
     monsterMaxHealth,
     monsterHealth,
   };
@@ -79,7 +79,7 @@ const loadState = (): GameSave | null => {
   }
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(GAME_BALANCE.storageKey);
     if (saved) {
       return sanitizeSave(JSON.parse(saved));
     }
@@ -92,12 +92,12 @@ const loadState = (): GameSave | null => {
 
 export const useGameState = () => {
   const initialState = loadState();
-  const initialStage = initialState?.stage ?? 1;
-  const initialMonsterMaxHealth = initialState?.monsterMaxHealth ?? 100;
-  const initialMonsterHealth = initialState?.monsterHealth ?? 100;
+  const initialStage = initialState?.stage ?? GAME_BALANCE.initialStage;
+  const initialMonsterMaxHealth = initialState?.monsterMaxHealth ?? getMonsterMaxHealth(initialStage);
+  const initialMonsterHealth = initialState?.monsterHealth ?? initialMonsterMaxHealth;
 
-  const [gold, setGold] = useState(initialState?.gold ?? 1000);
-  const [gems, setGems] = useState(initialState?.gems ?? 50);
+  const [gold, setGold] = useState(initialState?.gold ?? GAME_BALANCE.initialGold);
+  const [gems, setGems] = useState(initialState?.gems ?? GAME_BALANCE.initialGems);
   const [heroes, setHeroes] = useState<Hero[]>(initialState?.heroes ?? []);
   const [activeView, setActiveView] = useState<ActiveView>('rift');
 
@@ -114,13 +114,13 @@ export const useGameState = () => {
   const [comboCount, setComboCount] = useState(0);
   const [lastHitTime, setLastHitTime] = useState(0);
 
-  const isBoss = stage % 5 === 0;
+  const isBoss = isBossStage(stage);
 
   // Auto-save
   useEffect(() => {
     const stateToSave = { gold, gems, heroes, stage, monsterMaxHealth, monsterHealth };
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+      localStorage.setItem(GAME_BALANCE.storageKey, JSON.stringify(stateToSave));
     } catch {
       console.error('Failed to persist save');
     }
@@ -130,20 +130,19 @@ export const useGameState = () => {
     combatRef.current = { stage, monsterMaxHealth, monsterHealth };
   }, [stage, monsterMaxHealth, monsterHealth]);
 
-  const baseClickPower = 1 + heroes.reduce((acc, hero) => acc + hero.power * 0.1, 0);
-  const passivePower = heroes.reduce((acc, hero) => acc + hero.power, 0) || 1;
+  const baseClickPower = getBaseClickPower(heroes);
+  const passivePower = getPassivePower(heroes);
 
-  // Calculate combo multiplier (max 3x at 100 combo)
-  const comboMultiplier = 1 + Math.min(comboCount * 0.02, 2);
+  const comboMultiplier = getComboMultiplier(comboCount);
   const clickPower = baseClickPower * comboMultiplier;
 
   // Combo decay
   useEffect(() => {
     const interval = setInterval(() => {
-      if (comboCount > 0 && Date.now() - lastHitTime > 1500) {
+      if (comboCount > 0 && Date.now() - lastHitTime > GAME_BALANCE.comboDecayMs) {
         setComboCount(0);
       }
-    }, 500);
+    }, GAME_BALANCE.comboDecayTickMs);
     return () => clearInterval(interval);
   }, [comboCount, lastHitTime]);
 
@@ -166,9 +165,8 @@ export const useGameState = () => {
     const newHealth = currentCombat.monsterHealth - damageAmount;
     if (newHealth <= 0) {
       const nextStage = currentCombat.stage + 1;
-      const isNextBoss = nextStage % 5 === 0;
-      const nextHealth = Math.floor(100 * Math.pow(1.2, nextStage - 1)) * (isNextBoss ? 5 : 1);
-      const defeatedBoss = currentCombat.stage % 5 === 0;
+      const nextHealth = getMonsterMaxHealth(nextStage);
+      const defeatedBoss = isBossStage(currentCombat.stage);
       const defeatedMaxHealth = currentCombat.monsterMaxHealth;
 
       combatRef.current = {
@@ -182,10 +180,10 @@ export const useGameState = () => {
       setMonsterHealth(nextHealth);
 
       if (defeatedBoss) {
-        setGems(g => g + 2);
-        setGold((g) => g + defeatedMaxHealth * 2);
+        setGems(g => g + GAME_BALANCE.bossGemReward);
+        setGold((g) => g + defeatedMaxHealth * GAME_BALANCE.bossGoldMultiplier);
       } else {
-        setGold((g) => g + defeatedMaxHealth * 0.5);
+        setGold((g) => g + defeatedMaxHealth * GAME_BALANCE.killGoldMultiplier);
       }
     } else {
       combatRef.current = { ...currentCombat, monsterHealth: newHealth };
@@ -193,7 +191,7 @@ export const useGameState = () => {
     }
     
     if (!isPassive) {
-      setGold((g) => g + damageAmount * 0.5);
+      setGold((g) => g + damageAmount * GAME_BALANCE.clickGoldMultiplier);
     }
   }, []);
 
@@ -203,7 +201,7 @@ export const useGameState = () => {
       if (activeView === 'rift' && heroes.length > 0) {
         dealDamage(passivePower, true);
       }
-    }, 1000);
+    }, GAME_BALANCE.passiveTickMs);
     
     return () => clearInterval(interval);
   }, [activeView, passivePower, dealDamage, heroes.length]);
@@ -234,7 +232,7 @@ export const useGameState = () => {
       return false;
     }
 
-    const upgradeCost = heroToUpgrade.level * 100;
+    const upgradeCost = getUpgradeCost(heroToUpgrade);
     if (gold < upgradeCost) {
       return false;
     }
@@ -242,7 +240,7 @@ export const useGameState = () => {
     setGold(currentGold => currentGold - upgradeCost);
     setHeroes(prev => prev.map(hero => {
       if (hero.id === heroId && hero.level === heroToUpgrade.level) {
-        return { ...hero, level: hero.level + 1, power: Math.floor(hero.power * 1.5) };
+        return { ...hero, level: hero.level + 1, power: getNextHeroPower(hero) };
       }
       return hero;
     }));

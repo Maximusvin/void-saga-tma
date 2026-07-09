@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
+import {
+  BOSS_EMOJI,
+  GAME_BALANCE,
+  MONSTER_EMOJIS,
+} from '../game/balance';
 
 interface TheRiftProps {
   monsterHealth: number;
@@ -24,6 +29,18 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [projectiles, setProjectiles] = useState<{ id: number, startX: number, startY: number }[]>([]);
   const [clickCounter, setClickCounter] = useState(0);
   const [isHit, setIsHit] = useState(false);
+  const backgroundParticles = useMemo(() => {
+    return Array.from({ length: 20 }, (_, id) => ({
+      id,
+      size: Math.random() * 6 + 2,
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      blur: Math.random() * 2,
+      y: -150 - Math.random() * 100,
+      x: (Math.random() - 0.5) * 50,
+      duration: Math.random() * 4 + 4,
+    }));
+  }, []);
 
   // Auto-attack visual projectiles
   useEffect(() => {
@@ -41,10 +58,13 @@ export const TheRift: React.FC<TheRiftProps> = ({
       setTimeout(() => {
         setProjectiles(p => p.filter(proj => proj.id !== newProj.id));
         setIsHit(true);
-        setTimeout(() => setIsHit(false), 50);
-      }, 400); 
+        setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
+      }, GAME_BALANCE.autoProjectileTravelMs); 
       
-    }, Math.max(200, 1000 - passivePower * 5)); // shoots faster with more passive power, min 200ms
+    }, Math.max(
+      GAME_BALANCE.autoProjectileMinIntervalMs,
+      GAME_BALANCE.autoProjectileBaseIntervalMs - passivePower * GAME_BALANCE.autoProjectilePowerSpeedupMs,
+    ));
     return () => clearInterval(interval);
   }, [passivePower]);
 
@@ -62,8 +82,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
       clientY = (e as React.MouseEvent).clientY;
     }
 
-    const isCrit = Math.random() < 0.1;
-    const finalDamage = isCrit ? clickPower * 2 : clickPower;
+    const isCrit = Math.random() < GAME_BALANCE.critChance;
+    const finalDamage = isCrit ? clickPower * GAME_BALANCE.critMultiplier : clickPower;
 
     dealDamage(finalDamage);
     registerHit();
@@ -71,7 +91,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
 
     setIsHit(true);
-    setTimeout(() => setIsHit(false), 50);
+    setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
 
     const newClick = { id: clickCounter, x: clientX, y: clientY, damage: finalDamage, isCrit };
     setClicks((prev) => [...prev, newClick]);
@@ -79,12 +99,11 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
     setTimeout(() => {
       setClicks((prev) => prev.filter(c => c.id !== newClick.id));
-    }, 800);
+    }, GAME_BALANCE.damageTextLifetimeMs);
   };
 
   const healthPercent = Math.max(0, Math.min(100, (monsterHealth / monsterMaxHealth) * 100));
-  const monsterEmojis = ['👾', '👻', '💀', '👽', '👿', '🧌', '🕷️', '🦂', '🦇'];
-  const currentEmoji = isBoss ? '👹' : monsterEmojis[(stage - 1) % monsterEmojis.length];
+  const currentEmoji = isBoss ? BOSS_EMOJI : MONSTER_EMOJIS[(stage - 1) % MONSTER_EMOJIS.length];
 
   // Theme colors based on boss/normal
   const themeColor = isBoss ? '#ff00ff' : '#00ffff';
@@ -112,27 +131,27 @@ export const TheRift: React.FC<TheRiftProps> = ({
       {/* Immersive Background Grid & Particles */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.1, backgroundImage: 'linear-gradient(rgba(102, 252, 241, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 252, 241, 0.2) 1px, transparent 1px)', backgroundSize: '30px 30px', zIndex: 0 }} />
       
-      {[...Array(20)].map((_, i) => (
+      {backgroundParticles.map((particle) => (
         <motion.div
-          key={i}
+          key={particle.id}
           style={{
             position: 'absolute',
-            width: Math.random() * 6 + 2 + 'px',
-            height: Math.random() * 6 + 2 + 'px',
+            width: `${particle.size}px`,
+            height: `${particle.size}px`,
             backgroundColor: isBoss ? '#ff00ff' : '#00ffff',
             borderRadius: '50%',
-            left: Math.random() * 100 + '%',
-            top: Math.random() * 100 + '%',
+            left: `${particle.left}%`,
+            top: `${particle.top}%`,
             zIndex: 0,
-            filter: `blur(${Math.random() * 2}px)`,
+            filter: `blur(${particle.blur}px)`,
             opacity: 0
           }}
           animate={{ 
-            y: [0, -150 - Math.random() * 100], 
-            x: [0, (Math.random() - 0.5) * 50],
+            y: [0, particle.y], 
+            x: [0, particle.x],
             opacity: [0, 0.6, 0] 
           }}
-          transition={{ duration: Math.random() * 4 + 4, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: particle.duration, repeat: Infinity, ease: 'linear' }}
         />
       ))}
 

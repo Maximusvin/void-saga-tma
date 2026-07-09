@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Hero } from '../store/useGameState';
 import confetti from 'canvas-confetti';
 import { triggerHaptic } from '../utils/haptics';
+import {
+  GAME_BALANCE,
+  RARITY_COLORS,
+  RARITY_ORDER,
+  SUMMON_POOL,
+  getHeroIcon,
+  getSummonDropPercent,
+  rollSummonTemplate,
+} from '../game/balance';
+import type { Hero } from '../game/types';
 
 interface SummonCircleProps {
   gems: number;
@@ -10,13 +19,21 @@ interface SummonCircleProps {
   addHero: (hero: Hero) => void;
 }
 
+const createHeroId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return Math.random().toString(36).slice(2);
+};
+
 export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, addHero }) => {
   const [isSummoning, setIsSummoning] = useState(false);
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
   const [showSilhouette, setShowSilhouette] = useState(false);
 
   const handleSummon = () => {
-    if (spendGems(10)) {
+    if (spendGems(GAME_BALANCE.summonCostGems)) {
       setIsSummoning(true);
       setSummonedHero(null);
       setShowSilhouette(false);
@@ -25,22 +42,14 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
 
       // 1. Initial gacha spin delay
       setTimeout(() => {
-        const rand = Math.random();
-        let rarity: Hero['rarity'] = 'Common';
-        let name = 'Void Grunt';
-        let power = 5;
-
-        // Drop rates matching visual: Leg 10%, Epic 20%, Rare 30%, Com 40%
-        if (rand > 0.9) { rarity = 'Legendary'; name = 'Void Lord'; power = 50; }
-        else if (rand > 0.7) { rarity = 'Epic'; name = 'Void Knight'; power = 20; }
-        else if (rand > 0.4) { rarity = 'Rare'; name = 'Void Mage'; power = 10; }
+        const template = rollSummonTemplate();
 
         const newHero: Hero = {
-          id: Math.random().toString(),
-          name,
-          rarity,
+          id: createHeroId(),
+          name: template.name,
+          rarity: template.rarity,
           level: 1,
-          power
+          power: template.power,
         };
 
         setSummonedHero(newHero);
@@ -53,19 +62,21 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
           addHero(newHero);
           triggerHaptic('heavy');
           
-          if (rarity === 'Epic' || rarity === 'Legendary') {
+          if (template.rarity === 'Epic' || template.rarity === 'Legendary') {
             confetti({
               particleCount: 150,
               spread: 100,
               origin: { y: 0.6 },
-              colors: rarity === 'Legendary' ? ['#ffd700', '#ffaa00', '#ffffff'] : ['#ff00ff', '#aa00ff', '#00ffff']
+              colors: template.rarity === 'Legendary' ? ['#ffd700', '#ffaa00', '#ffffff'] : ['#ff00ff', '#aa00ff', '#00ffff']
             });
           }
-        }, 1500); // slightly longer silhouette for more suspense
+        }, GAME_BALANCE.summonRevealMs);
 
-      }, 1500);
+      }, GAME_BALANCE.summonChargeMs);
     }
   };
+
+  const sortedSummonPool = [...SUMMON_POOL].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]);
 
   return (
     <motion.div 
@@ -172,10 +183,12 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
         marginBottom: '30px', display: 'flex', justifyContent: 'space-between',
         fontSize: '0.8rem', fontWeight: 'bold'
       }}>
-        <div style={{ textAlign: 'center' }}><div style={{ color: '#ffd700' }}>10%</div><div style={{ color: '#aaa', fontSize: '0.7rem' }}>Legendary</div></div>
-        <div style={{ textAlign: 'center' }}><div style={{ color: '#ff00ff' }}>20%</div><div style={{ color: '#aaa', fontSize: '0.7rem' }}>Epic</div></div>
-        <div style={{ textAlign: 'center' }}><div style={{ color: '#3498db' }}>30%</div><div style={{ color: '#aaa', fontSize: '0.7rem' }}>Rare</div></div>
-        <div style={{ textAlign: 'center' }}><div style={{ color: '#a0a0a0' }}>40%</div><div style={{ color: '#aaa', fontSize: '0.7rem' }}>Common</div></div>
+        {sortedSummonPool.map(template => (
+          <div key={template.rarity} style={{ textAlign: 'center' }}>
+            <div style={{ color: RARITY_COLORS[template.rarity] }}>{getSummonDropPercent(template)}%</div>
+            <div style={{ color: '#aaa', fontSize: '0.7rem' }}>{template.rarity}</div>
+          </div>
+        ))}
       </div>
 
       {/* Summon Button */}
@@ -183,24 +196,24 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.02 }}
         onClick={handleSummon}
-        disabled={isSummoning || gems < 10 || showSilhouette}
+        disabled={isSummoning || gems < GAME_BALANCE.summonCostGems || showSilhouette}
         style={{ 
           width: '100%', maxWidth: '320px', 
           padding: '16px', borderRadius: '20px',
           border: 'none',
-          background: (isSummoning || showSilhouette || gems < 10) 
+          background: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) 
             ? 'rgba(255,255,255,0.1)' 
             : 'linear-gradient(45deg, #00ffff, #ff00ff)',
-          color: (isSummoning || showSilhouette || gems < 10) ? 'rgba(255,255,255,0.4)' : '#000',
+          color: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'rgba(255,255,255,0.4)' : '#000',
           fontWeight: '900', fontSize: '1.2rem',
-          boxShadow: (isSummoning || showSilhouette || gems < 10) ? 'none' : '0 10px 20px rgba(255,0,255,0.3)',
-          cursor: (isSummoning || showSilhouette || gems < 10) ? 'not-allowed' : 'pointer',
+          boxShadow: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'none' : '0 10px 20px rgba(255,0,255,0.3)',
+          cursor: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'not-allowed' : 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
         }}
       >
         <span>Summon</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '10px', fontSize: '1rem' }}>
-          10 <span style={{ color: '#fff', textShadow: '0 0 5px #ff00ff' }}>💎</span>
+          {GAME_BALANCE.summonCostGems} <span style={{ color: '#fff', textShadow: '0 0 5px #ff00ff' }}>💎</span>
         </span>
       </motion.button>
 
@@ -219,7 +232,7 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
               fontSize: '8rem', zIndex: 90
             }}
           >
-            {summonedHero.rarity === 'Legendary' ? '👑' : summonedHero.rarity === 'Epic' ? '🔮' : summonedHero.rarity === 'Rare' ? '⚔️' : '🛡️'}
+            {getHeroIcon(summonedHero.rarity)}
           </motion.div>
         )}
         {!showSilhouette && summonedHero && (
@@ -240,8 +253,8 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
               style={{
                 background: `linear-gradient(135deg, rgba(31,40,51,0.9), rgba(11,12,16,0.9))`,
-                border: `2px solid ${summonedHero.rarity === 'Legendary' ? '#ffd700' : summonedHero.rarity === 'Epic' ? '#ff00ff' : '#3498db'}`,
-                boxShadow: `0 0 50px ${summonedHero.rarity === 'Legendary' ? '#ffd700' : summonedHero.rarity === 'Epic' ? '#ff00ff' : '#3498db'}88`,
+                border: `2px solid ${RARITY_COLORS[summonedHero.rarity]}`,
+                boxShadow: `0 0 50px ${RARITY_COLORS[summonedHero.rarity]}88`,
                 padding: '40px', borderRadius: '24px', textAlign: 'center', width: '100%', maxWidth: '320px',
                 position: 'relative', overflow: 'hidden'
               }}
@@ -258,11 +271,11 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
                 }}
               />
 
-              <div style={{ fontSize: '5rem', marginBottom: '10px', position: 'relative', zIndex: 1, textShadow: `0 0 20px ${summonedHero.rarity === 'Legendary' ? '#ffd700' : summonedHero.rarity === 'Epic' ? '#ff00ff' : '#3498db'}` }}>
-                {summonedHero.rarity === 'Legendary' ? '👑' : summonedHero.rarity === 'Epic' ? '🔮' : summonedHero.rarity === 'Rare' ? '⚔️' : '🛡️'}
+              <div style={{ fontSize: '5rem', marginBottom: '10px', position: 'relative', zIndex: 1, textShadow: `0 0 20px ${RARITY_COLORS[summonedHero.rarity]}` }}>
+                {getHeroIcon(summonedHero.rarity)}
               </div>
               <h3 style={{ 
-                color: summonedHero.rarity === 'Legendary' ? '#ffd700' : summonedHero.rarity === 'Epic' ? '#ff00ff' : 'var(--text-light)', 
+                color: RARITY_COLORS[summonedHero.rarity], 
                 marginBottom: '5px', fontSize: '2rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '2px', position: 'relative', zIndex: 1
               }}>
                 {summonedHero.rarity}!
