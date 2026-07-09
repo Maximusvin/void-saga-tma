@@ -1,0 +1,52 @@
+.game-error-boundary {
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #f5fbff;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(62, 241, 224, 0.18), transparent 32%),
+    linear-gradient(180deg, #08111f, #03050b);
+}
+
+.game-error-card {
+  width: min(100%, 420px);
+  padding: 28px 24px;
+  border: 1px solid rgba(97, 255, 237, 0.28);
+  border-radius: 24px;
+  text-align: center;
+  background: rgba(8, 15, 28, 0.94);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.game-error-eyebrow {
+  color: #64f7e8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.game-error-card h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(1.65rem, 7vw, 2.2rem);
+}
+
+.game-error-card p {
+  margin: 0;
+  color: rgba(231, 241, 255, 0.74);
+  line-height: 1.55;
+}
+
+.game-error-card button {
+  width: 100%;
+  margin-top: 22px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 14px;
+  color: #03110f;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  background: linear-gradient(135deg, #5fffea, #82a9ff);
+}

@@ -13,6 +13,8 @@ dist-server
 dist-ssr
 *.local
 data/
+playwright-report/
+test-results/
 
 # Editor directories and files
 .vscode/*
