@@ -1,6 +1,6 @@
 import type { GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-001';
+export const GAME_CONTENT_VERSION = 'void-saga-content-002';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 

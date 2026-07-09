@@ -1,9 +1,12 @@
 import {
   GAME_BALANCE,
   HERO_RARITIES,
+  SUMMON_POOL,
+  getDuplicateShardReward,
   getMonsterMaxHealth,
 } from './balance';
 import {
+  addGameNumbers,
   compareGameNumbers,
   gameNumber,
   minGameNumbers,
@@ -53,13 +56,51 @@ export const normalizeHero = (value: unknown): Hero | null => {
     return null;
   }
 
+  const level = normalizeInteger(value.level, 1, 1);
+  const matchingTemplate = SUMMON_POOL.find(template => (
+    template.id === value.templateId ||
+    (template.name === value.name && template.rarity === value.rarity)
+  ));
+  const minimumAscension = Math.floor(
+    Math.max(0, level - 1) / GAME_BALANCE.ascensionLevelsPerRank,
+  );
+
   return {
+    ascension: Math.max(normalizeInteger(value.ascension, minimumAscension, 0), minimumAscension),
     id: value.id,
-    level: normalizeInteger(value.level, 1, 1),
+    level,
     name: value.name,
     power,
     rarity: value.rarity,
+    shards: normalizeInteger(value.shards, 0, 0),
+    templateId: matchingTemplate?.id ?? `legacy:${value.id}`,
   };
+};
+
+const mergeDuplicateHeroes = (heroes: readonly Hero[]) => {
+  const heroesByTemplate = new Map<string, Hero>();
+
+  for (const hero of heroes) {
+    const existing = heroesByTemplate.get(hero.templateId);
+    if (!existing) {
+      heroesByTemplate.set(hero.templateId, hero);
+      continue;
+    }
+
+    const level = Math.max(existing.level, hero.level);
+    const minimumAscension = Math.floor(
+      Math.max(0, level - 1) / GAME_BALANCE.ascensionLevelsPerRank,
+    );
+    heroesByTemplate.set(hero.templateId, {
+      ...existing,
+      ascension: Math.max(existing.ascension, hero.ascension, minimumAscension),
+      level,
+      power: addGameNumbers(existing.power, hero.power),
+      shards: existing.shards + hero.shards + getDuplicateShardReward(hero.rarity),
+    });
+  }
+
+  return [...heroesByTemplate.values()];
 };
 
 export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
@@ -87,7 +128,7 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
     gems: normalizeInteger(value.gems, GAME_BALANCE.initialGems, 0),
     gold: parseGameNumber(value.gold, gameNumber(GAME_BALANCE.initialGold)),
     heroes: Array.isArray(value.heroes)
-      ? value.heroes.map(normalizeHero).filter((hero): hero is Hero => hero !== null)
+      ? mergeDuplicateHeroes(value.heroes.map(normalizeHero).filter((hero): hero is Hero => hero !== null))
       : [],
     lastSeenAt: typeof value.lastSeenAt === 'string' ? value.lastSeenAt : updatedAt,
     monsterHealth,
@@ -146,6 +187,8 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         type: 'hero_summoned',
         hero,
         costGems: normalizeInteger(value.costGems, 0, 0),
+        isDuplicate: value.isDuplicate === true,
+        shardsGranted: normalizeInteger(value.shardsGranted, 0, 0),
       };
     }
     case 'hero_upgraded': {
@@ -159,6 +202,26 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         goldCost: parseGameNumber(value.goldCost),
         level: normalizeInteger(value.level, 1, 1),
         power: parseGameNumber(value.power),
+      };
+    }
+    case 'hero_ascended': {
+      if (
+        typeof value.heroId !== 'string' ||
+        !isFiniteNumber(value.ascension) ||
+        !isFiniteNumber(value.levelCap) ||
+        !isFiniteNumber(value.shardsRemaining) ||
+        !isFiniteNumber(value.shardsSpent)
+      ) {
+        return null;
+      }
+
+      return {
+        type: 'hero_ascended',
+        heroId: value.heroId,
+        ascension: normalizeInteger(value.ascension, 0, 0),
+        levelCap: normalizeInteger(value.levelCap, GAME_BALANCE.ascensionBaseLevelCap, 1),
+        shardsRemaining: normalizeInteger(value.shardsRemaining, 0, 0),
+        shardsSpent: normalizeInteger(value.shardsSpent, 0, 0),
       };
     }
     case 'offline_rewards_claimed': {

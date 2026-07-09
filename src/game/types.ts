@@ -3,14 +3,17 @@ import type { GameNumber } from './gameNumber';
 export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type ActiveView = 'rift' | 'summon' | 'roster';
 
-export const GAME_SNAPSHOT_SCHEMA_VERSION = 2;
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 3;
 
 export interface Hero {
+  ascension: number;
   id: string;
   name: string;
   rarity: HeroRarity;
   level: number;
   power: GameNumber;
+  shards: number;
+  templateId: string;
 }
 
 export interface SummonHeroTemplate {
@@ -65,6 +68,7 @@ export type GameAction =
   | { type: 'combat_batch'; tapCount: number; passiveTicks: number }
   | { type: 'summon'; randomValue?: number }
   | { type: 'upgrade_hero'; heroId: string }
+  | { type: 'ascend_hero'; heroId: string }
   | { type: 'claim_offline_rewards' };
 
 export type GameEvent =
@@ -78,8 +82,22 @@ export type GameEvent =
       stage: number;
     }
   | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: GameNumber; gemReward: number }
-  | { type: 'hero_summoned'; hero: Hero; costGems: number }
+  | {
+      type: 'hero_summoned';
+      hero: Hero;
+      costGems: number;
+      isDuplicate: boolean;
+      shardsGranted: number;
+    }
   | { type: 'hero_upgraded'; heroId: string; goldCost: GameNumber; level: number; power: GameNumber }
+  | {
+      type: 'hero_ascended';
+      heroId: string;
+      ascension: number;
+      levelCap: number;
+      shardsRemaining: number;
+      shardsSpent: number;
+    }
   | {
       type: 'offline_rewards_claimed';
       elapsedSeconds: number;

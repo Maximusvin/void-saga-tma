@@ -1,13 +1,17 @@
 import {
   GAME_BALANCE,
   MAX_COMBO_HITS,
+  getAscensionShardCost,
   getBaseClickPower,
   getComboMultiplier,
+  getDuplicateShardReward,
+  getHeroLevelCap,
   getMonsterMaxHealth,
   getNextHeroPower,
   getPassivePower,
   getStageBandForStage,
   getUpgradeCost,
+  isHeroAtLevelCap,
   isBossStage,
   rollSummonTemplate,
 } from './balance';
@@ -31,14 +35,6 @@ import {
 } from './types';
 
 const nowIso = () => new Date().toISOString();
-
-const createHeroId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-
-  return Math.random().toString(36).slice(2);
-};
 
 const touchSnapshot = (snapshot: GameSnapshot, now = nowIso()): GameSnapshot => {
   return { ...snapshot, lastSeenAt: now, updatedAt: now };
@@ -246,12 +242,40 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
   }
 
   const template = rollSummonTemplate(randomValue);
+  const existingHero = snapshot.heroes.find(hero => hero.templateId === template.id);
+  if (existingHero) {
+    const shardsGranted = getDuplicateShardReward(existingHero.rarity);
+    const hero = {
+      ...existingHero,
+      shards: existingHero.shards + shardsGranted,
+    };
+    const updatedSnapshot = touchSnapshot({
+      ...snapshot,
+      gems: snapshot.gems - GAME_BALANCE.summonCostGems,
+      heroes: snapshot.heroes.map(current => current.id === hero.id ? hero : current),
+    });
+
+    return {
+      snapshot: updatedSnapshot,
+      events: [{
+        type: 'hero_summoned',
+        hero,
+        costGems: GAME_BALANCE.summonCostGems,
+        isDuplicate: true,
+        shardsGranted,
+      }],
+    };
+  }
+
   const hero: Hero = {
-    id: createHeroId(),
+    ascension: 0,
+    id: template.id,
     name: template.name,
     rarity: template.rarity,
     level: 1,
     power: gameNumber(template.power),
+    shards: 0,
+    templateId: template.id,
   };
 
   const updatedSnapshot = touchSnapshot({
@@ -262,7 +286,13 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
 
   return {
     snapshot: updatedSnapshot,
-    events: [{ type: 'hero_summoned', hero, costGems: GAME_BALANCE.summonCostGems }],
+    events: [{
+      type: 'hero_summoned',
+      hero,
+      costGems: GAME_BALANCE.summonCostGems,
+      isDuplicate: false,
+      shardsGranted: 0,
+    }],
   };
 };
 
@@ -272,6 +302,13 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
     return {
       snapshot,
       events: [{ type: 'action_rejected', reason: 'hero_not_found' }],
+    };
+  }
+
+  if (isHeroAtLevelCap(heroToUpgrade)) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'level_cap_reached' }],
     };
   }
 
@@ -304,6 +341,53 @@ export const upgradeHeroAction = (snapshot: GameSnapshot, heroId: string): GameA
   return {
     snapshot: updatedSnapshot,
     events: [{ type: 'hero_upgraded', heroId, goldCost, level: nextLevel, power: nextPower }],
+  };
+};
+
+export const ascendHeroAction = (snapshot: GameSnapshot, heroId: string): GameActionResult => {
+  const heroToAscend = snapshot.heroes.find(hero => hero.id === heroId);
+  if (!heroToAscend) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'hero_not_found' }],
+    };
+  }
+
+  if (!isHeroAtLevelCap(heroToAscend)) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'level_cap_not_reached' }],
+    };
+  }
+
+  const shardsSpent = getAscensionShardCost(heroToAscend);
+  if (heroToAscend.shards < shardsSpent) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'not_enough_shards' }],
+    };
+  }
+
+  const ascendedHero = {
+    ...heroToAscend,
+    ascension: heroToAscend.ascension + 1,
+    shards: heroToAscend.shards - shardsSpent,
+  };
+  const updatedSnapshot = touchSnapshot({
+    ...snapshot,
+    heroes: snapshot.heroes.map(hero => hero.id === heroId ? ascendedHero : hero),
+  });
+
+  return {
+    snapshot: updatedSnapshot,
+    events: [{
+      type: 'hero_ascended',
+      heroId,
+      ascension: ascendedHero.ascension,
+      levelCap: getHeroLevelCap(ascendedHero),
+      shardsRemaining: ascendedHero.shards,
+      shardsSpent,
+    }],
   };
 };
 
@@ -342,6 +426,8 @@ export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): Gam
       return summonHeroAction(snapshot, action.randomValue);
     case 'upgrade_hero':
       return upgradeHeroAction(snapshot, action.heroId);
+    case 'ascend_hero':
+      return ascendHeroAction(snapshot, action.heroId);
     case 'claim_offline_rewards':
       return claimOfflineRewardsAction(snapshot);
   }

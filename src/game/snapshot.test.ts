@@ -5,7 +5,7 @@ import { normalizeGameSnapshot, normalizeStoredGameEvents } from './snapshot';
 const timestamp = '2026-07-09T12:00:00.000Z';
 
 describe('game snapshot normalization', () => {
-  it('migrates legacy numeric economy fields to schema v2 strings', () => {
+  it('migrates legacy numeric economy fields and progression to schema v3', () => {
     const snapshot = normalizeGameSnapshot({
       comboCount: 3,
       comboExpiresAt: null,
@@ -20,12 +20,47 @@ describe('game snapshot normalization', () => {
     });
 
     assert.ok(snapshot);
-    assert.equal(snapshot.schemaVersion, 2);
+    assert.equal(snapshot.schemaVersion, 3);
     assert.equal(snapshot.gold, '1002.6');
     assert.equal(snapshot.heroes[0]?.power, '10.5');
+    assert.equal(snapshot.heroes[0]?.ascension, 0);
+    assert.equal(snapshot.heroes[0]?.shards, 0);
+    assert.equal(snapshot.heroes[0]?.templateId, 'legacy:legacy');
     assert.equal(snapshot.monsterHealth, '75.25');
     assert.equal(snapshot.monsterMaxHealth, '100');
     assert.doesNotMatch(JSON.stringify(snapshot), /Infinity|NaN/);
+  });
+
+  it('merges known legacy duplicates without losing team power', () => {
+    const snapshot = normalizeGameSnapshot({
+      gems: 0,
+      gold: 1000,
+      heroes: [
+        { id: 'copy-a', level: 1, name: 'Void Grunt', power: 5, rarity: 'Common' },
+        { id: 'copy-b', level: 2, name: 'Void Grunt', power: 7.5, rarity: 'Common' },
+      ],
+      monsterHealth: 100,
+      monsterMaxHealth: 100,
+      stage: 1,
+    });
+
+    assert.ok(snapshot);
+    assert.equal(snapshot.heroes.length, 1);
+    assert.equal(snapshot.heroes[0]?.templateId, 'void-grunt');
+    assert.equal(snapshot.heroes[0]?.level, 2);
+    assert.equal(snapshot.heroes[0]?.power, '12.5');
+    assert.equal(snapshot.heroes[0]?.shards, 1);
+  });
+
+  it('preserves high-level legacy heroes by deriving the required ascension', () => {
+    const snapshot = normalizeGameSnapshot({
+      heroes: [{ id: 'veteran', level: 120, name: 'Void Mage', power: '1e20', rarity: 'Rare' }],
+      stage: 1,
+    });
+
+    assert.ok(snapshot);
+    assert.equal(snapshot.heroes[0]?.ascension, 2);
+    assert.equal(snapshot.heroes[0]?.templateId, 'void-mage');
   });
 
   it('falls back from invalid economy values without leaking non-finite JSON', () => {
@@ -57,10 +92,26 @@ describe('game snapshot normalization', () => {
         stage: 1,
       },
       { type: 'monster_defeated', stage: 1, nextStage: 2, goldReward: 50, gemReward: 0 },
+      {
+        type: 'hero_summoned',
+        hero: { id: 'old-copy', level: 1, name: 'Void Grunt', power: 5, rarity: 'Common' },
+        costGems: 10,
+      },
+      {
+        type: 'hero_ascended',
+        heroId: 'void-grunt',
+        ascension: 1,
+        levelCap: 100,
+        shardsRemaining: 0,
+        shardsSpent: 2,
+      },
     ]);
 
     assert.equal(events[0]?.type, 'monster_hit');
     assert.equal(events[0]?.type === 'monster_hit' ? events[0].damage : null, '1.2');
     assert.equal(events[1]?.type === 'monster_defeated' ? events[1].goldReward : null, '50');
+    assert.equal(events[2]?.type === 'hero_summoned' ? events[2].isDuplicate : null, false);
+    assert.equal(events[2]?.type === 'hero_summoned' ? events[2].hero.templateId : null, 'void-grunt');
+    assert.equal(events[3]?.type === 'hero_ascended' ? events[3].levelCap : null, 100);
   });
 });

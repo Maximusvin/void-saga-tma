@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import { GAME_BALANCE, getNextHeroPower, getUpgradeCost } from './balance';
+import {
+  GAME_BALANCE,
+  getAscensionShardCost,
+  getDuplicateShardReward,
+  getHeroLevelCap,
+  getNextHeroPower,
+  getUpgradeCost,
+} from './balance';
 import {
   BASELINE_BALANCE_SIMULATION,
   DEFAULT_BALANCE_SIMULATION_SCENARIOS,
@@ -22,6 +29,11 @@ describe('balance formulas', () => {
     assert.equal(getUpgradeCost({ level: 10, rarity: 'Common' }), '3844');
     assert.equal(getNextHeroPower({ power: gameNumber(5) }), '7.5');
     assert.equal(GAME_BALANCE.upgradeCostGrowth, GAME_BALANCE.upgradePowerMultiplier);
+    assert.equal(getHeroLevelCap({ ascension: 0 }), 50);
+    assert.equal(getHeroLevelCap({ ascension: 2 }), 150);
+    assert.equal(getAscensionShardCost({ ascension: 99 }), 2);
+    assert.equal(getDuplicateShardReward('Common'), 1);
+    assert.equal(getDuplicateShardReward('Legendary'), 5);
   });
 });
 
@@ -29,7 +41,9 @@ describe('balance simulation', () => {
   it('keeps the baseline within its TTK budget through stage 10,000', () => {
     assert.equal(baselineResult.rows.length, 10_000);
     assert.equal(baselineResult.summary.blockedStages, 0);
-    assert.equal(baselineResult.summary.totalUpgrades, 22_457);
+    assert.equal(baselineResult.summary.totalSummons, 400);
+    assert.equal(baselineResult.summary.totalAscensions, 345);
+    assert.equal(baselineResult.summary.totalUpgrades, 17_442);
 
     for (const row of baselineResult.rows) {
       const target = row.isBoss
@@ -38,19 +52,25 @@ describe('balance simulation', () => {
       assert.ok(compareGameNumbers(row.ttkSeconds, target) <= 0, `stage ${row.stage} exceeded TTK target`);
     }
 
-    const levels = baselineResult.summary.finalHeroes.map(hero => hero.level);
-    assert.ok(Math.max(...levels) - Math.min(...levels) <= 1);
+    for (const hero of baselineResult.summary.finalHeroes) {
+      assert.ok(hero.level <= hero.levelCap);
+    }
   });
 
-  it('is deterministic and exposes the current solo-roster progression gap', () => {
+  it('is deterministic, recovers an unlucky start, and makes a solo roster non-optimal', () => {
     const repeatedBaseline = runBalanceSimulation();
+    const unluckyResult = scenarioResults[1];
+    const soloResult = scenarioResults[2];
 
     assert.deepEqual(baselineResult.summary, repeatedBaseline.summary);
-    assert.equal(scenarioResults.every(result => result.summary.blockedStages === 0), true);
+    assert.equal(unluckyResult.summary.blockedStages, 0);
+    assert.equal(unluckyResult.summary.finalHeroes.length, 4);
+    assert.ok(soloResult.summary.progressionBlockedStages > 0);
+    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 2_110);
     assert.ok(compareGameNumbers(
-      scenarioResults[2].summary.totalSeconds,
+      soloResult.summary.totalSeconds,
       baselineResult.summary.totalSeconds,
-    ) < 0);
+    ) > 0);
   });
 
   it('keeps committed balance tables synchronized with the simulator', () => {

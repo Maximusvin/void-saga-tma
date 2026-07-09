@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
@@ -7,21 +7,48 @@ import {
   RARITY_COLORS,
   RARITY_GRADIENTS,
   RARITY_ORDER,
+  getAscensionShardCost,
   getHeroIcon,
+  getHeroLevelCap,
   getNextHeroPower,
   getUpgradeCost,
+  isHeroAtLevelCap,
 } from '../game/balance';
 import type { Hero } from '../game/types';
 import './HeroesRoster.css';
 
 interface HeroesRosterProps {
+  ascendHero: (id: string) => boolean;
   heroes: Hero[];
   upgradeHero: (id: string) => boolean;
   gold: GameNumber;
 }
 
-export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero, gold }) => {
-  const [justUpgradedId, setJustUpgradedId] = useState<string | null>(null);
+export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, upgradeHero, gold }) => {
+  const [progressFeedback, setProgressFeedback] = useState<{
+    heroId: string;
+    type: 'ascend' | 'upgrade';
+  } | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showProgressFeedback = (heroId: string, type: 'ascend' | 'upgrade', durationMs: number) => {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    setProgressFeedback({ heroId, type });
+    feedbackTimeoutRef.current = setTimeout(() => {
+      feedbackTimeoutRef.current = null;
+      setProgressFeedback(null);
+    }, durationMs);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleUpgrade = (id: string) => {
     const wasUpgraded = upgradeHero(id);
@@ -30,8 +57,17 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
     }
 
     triggerHaptic('heavy');
-    setJustUpgradedId(id);
-    setTimeout(() => setJustUpgradedId(null), 500);
+    showProgressFeedback(id, 'upgrade', 500);
+  };
+
+  const handleAscend = (id: string) => {
+    const wasAscended = ascendHero(id);
+    if (!wasAscended) {
+      return;
+    }
+
+    triggerHaptic('heavy');
+    showProgressFeedback(id, 'ascend', 700);
   };
 
   // Sort heroes: Legendary > Epic > Rare > Common, then by level desc
@@ -72,17 +108,22 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
           <AnimatePresence>
             {sortedHeroes.map((hero) => {
               const upgradeCost = getUpgradeCost(hero);
-              const canUpgrade = compareGameNumbers(gold, upgradeCost) >= 0;
+              const atLevelCap = isHeroAtLevelCap(hero);
+              const levelCap = getHeroLevelCap(hero);
+              const ascensionCost = getAscensionShardCost(hero);
+              const canAscend = atLevelCap && hero.shards >= ascensionCost;
+              const canUpgrade = !atLevelCap && compareGameNumbers(gold, upgradeCost) >= 0;
               const color = RARITY_COLORS[hero.rarity];
               const nextPower = getNextHeroPower(hero);
-              const isUpgrading = justUpgradedId === hero.id;
+              const isUpgrading = progressFeedback?.heroId === hero.id && progressFeedback.type === 'upgrade';
+              const isAscending = progressFeedback?.heroId === hero.id && progressFeedback.type === 'ascend';
 
               return (
                 <motion.div 
                   key={hero.id}
                   layout
                   initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1, filter: isUpgrading ? 'brightness(1.5)' : 'brightness(1)' }}
+                  animate={{ opacity: 1, scale: 1, filter: (isUpgrading || isAscending) ? 'brightness(1.5)' : 'brightness(1)' }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   whileHover={{ scale: 1.02 }}
                   className="glass-panel"
@@ -94,14 +135,14 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
                     gap: '6px',
                     border: `1px solid ${color}40`,
                     background: RARITY_GRADIENTS[hero.rarity],
-                    boxShadow: isUpgrading ? `0 0 20px ${color}` : `0 4px 12px ${color}15`,
+                    boxShadow: (isUpgrading || isAscending) ? `0 0 20px ${color}` : `0 4px 12px ${color}15`,
                     position: 'relative',
                     overflow: 'hidden'
                   }}
                 >
                   {/* Level Up Flash Overlay */}
                   <AnimatePresence>
-                    {isUpgrading && (
+                    {(isUpgrading || isAscending) && (
                       <motion.div
                         initial={{ opacity: 0.8 }}
                         animate={{ opacity: 0 }}
@@ -116,7 +157,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
 
                   {/* Level Up Text */}
                   <AnimatePresence>
-                    {isUpgrading && (
+                    {(isUpgrading || isAscending) && (
                       <motion.div
                         initial={{ opacity: 1, y: 0, scale: 0.5 }}
                         animate={{ opacity: 0, y: -40, scale: 1.5 }}
@@ -125,7 +166,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
                           color: '#fff', fontWeight: 'bold', textShadow: `0 0 5px ${color}`, zIndex: 21, pointerEvents: 'none'
                         }}
                       >
-                        LEVEL UP!
+                        {isAscending ? 'ASCENDED!' : 'LEVEL UP!'}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -161,36 +202,42 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
                   </div>
                   
                   <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '4px', padding: '0 4px' }}>
-                    <span style={{ color: 'var(--text-main)' }}>Lv.{hero.level}</span>
+                    <span style={{ color: 'var(--text-main)' }}>Lv.{hero.level}/{levelCap}</span>
                     <span style={{ color: color, fontWeight: 'bold' }}>⚡ {formatNumber(hero.power)}</span>
                   </div>
 
                   {/* Upgrade Power Preview */}
                   <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
-                    Next ⚡ {formatNumber(nextPower)}
+                    {atLevelCap
+                      ? `Ascension ${hero.ascension} · ${hero.shards}/${ascensionCost} shards`
+                      : `Next ⚡ ${formatNumber(nextPower)}`}
                   </div>
                   
                   {/* Upgrade Button */}
                   <button 
                     className="btn-primary"
-                    onClick={() => handleUpgrade(hero.id)}
-                    disabled={!canUpgrade}
+                    onClick={() => atLevelCap ? handleAscend(hero.id) : handleUpgrade(hero.id)}
+                    disabled={atLevelCap ? !canAscend : !canUpgrade}
                     style={{
                       padding: '8px',
                       fontSize: '0.75rem',
                       width: '100%',
-                      background: canUpgrade ? `linear-gradient(45deg, ${color}dd, ${color})` : 'rgba(255,255,255,0.1)',
-                      color: canUpgrade ? '#000' : 'rgba(255,255,255,0.5)',
-                      border: canUpgrade ? 'none' : '1px solid rgba(255,255,255,0.2)',
-                      boxShadow: canUpgrade ? `0 0 10px ${color}60` : 'none',
+                      background: (canUpgrade || canAscend) ? `linear-gradient(45deg, ${color}dd, ${color})` : 'rgba(255,255,255,0.1)',
+                      color: (canUpgrade || canAscend) ? '#000' : 'rgba(255,255,255,0.5)',
+                      border: (canUpgrade || canAscend) ? 'none' : '1px solid rgba(255,255,255,0.2)',
+                      boxShadow: (canUpgrade || canAscend) ? `0 0 10px ${color}60` : 'none',
                       borderRadius: '8px',
-                      cursor: canUpgrade ? 'pointer' : 'not-allowed',
+                      cursor: (canUpgrade || canAscend) ? 'pointer' : 'not-allowed',
                       marginTop: 'auto'
                     }}
                   >
-                    {canUpgrade ? 'UPGRADE' : 'NEED GOLD'}
+                    {atLevelCap
+                      ? (canAscend ? 'ASCEND' : 'NEED SHARDS')
+                      : (canUpgrade ? 'UPGRADE' : 'NEED GOLD')}
                     <div style={{ fontSize: '0.65rem', marginTop: '2px', fontWeight: 'normal' }}>
-                      {formatNumber(upgradeCost)} <span style={{ color: canUpgrade ? '#000' : 'var(--gold)' }}>g</span>
+                      {atLevelCap
+                        ? `${hero.shards}/${ascensionCost} shards`
+                        : <>{formatNumber(upgradeCost)} <span style={{ color: canUpgrade ? '#000' : 'var(--gold)' }}>g</span></>}
                     </div>
                   </button>
                 </motion.div>

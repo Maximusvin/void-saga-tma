@@ -16,6 +16,17 @@ describe('game action request validation', () => {
         action: { type: 'combat_batch', tapCount: 12, passiveTicks: 0 },
       },
     );
+    assert.deepEqual(
+      parseGameActionRequest({
+        commandId: 'cmd:test-ascend',
+        action: { type: 'ascend_hero', heroId: 'void-grunt' },
+      }),
+      {
+        commandId: 'cmd:test-ascend',
+        requestedPlayerId: null,
+        action: { type: 'ascend_hero', heroId: 'void-grunt' },
+      },
+    );
   });
 
   it('rejects client-controlled summon randomness and unavailable skills', () => {

@@ -51,6 +51,7 @@ function App() {
             <HeroesRoster 
               key="roster" 
               heroes={gameState.heroes} 
+              ascendHero={gameState.ascendHero}
               upgradeHero={gameState.upgradeHero}
               gold={gameState.gold}
             />
