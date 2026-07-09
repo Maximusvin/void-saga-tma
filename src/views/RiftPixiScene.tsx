@@ -3,6 +3,8 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
 
 interface RiftPixiSceneProps {
+  defeatSignal: number;
+  isBossDefeat: boolean;
   isBoss: boolean;
   isHit: boolean;
   isLastHitCrit: boolean;
@@ -25,6 +27,14 @@ interface ImpactParticle {
   rotationSpeed: number;
   velocityX: number;
   velocityY: number;
+}
+
+interface Shockwave {
+  graphic: Graphics;
+  life: number;
+  maxLife: number;
+  startRadius: number;
+  targetRadius: number;
 }
 
 const clampResolution = () => Math.min(window.devicePixelRatio || 1, 2);
@@ -91,11 +101,52 @@ const createImpactBurst = (palette: RiftEnemyPalette, isCrit: boolean): ImpactPa
   });
 };
 
-export const RiftPixiScene = ({ isBoss, isHit, isLastHitCrit, hitSignal, stage }: RiftPixiSceneProps) => {
+const createDeathBurst = (palette: RiftEnemyPalette, isBossDefeat: boolean): ImpactParticle[] => {
+  const count = isBossDefeat ? 54 : 32;
+
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * Math.PI * 2;
+    const speed = (isBossDefeat ? 5.8 : 4.1) + (index % 6) * 0.34;
+    const color = index % 4 === 0 ? 0xffffff : (index % 3 === 0 ? palette.core : palette.glow);
+    const graphic = buildShard(isBossDefeat ? 10 + (index % 4) * 2 : 7 + (index % 4), color, isBossDefeat ? 0.96 : 0.82);
+
+    return {
+      graphic,
+      life: 0,
+      maxLife: isBossDefeat ? 0.9 : 0.64,
+      rotationSpeed: (index % 2 === 0 ? 1 : -1) * (0.14 + (index % 5) * 0.025),
+      velocityX: Math.cos(angle) * speed,
+      velocityY: Math.sin(angle) * speed * 0.82,
+    };
+  });
+};
+
+const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index: number): Shockwave => {
+  const graphic = new Graphics()
+    .circle(0, 0, 24)
+    .stroke({ color: index === 0 ? palette.glow : palette.core, width: isBossDefeat ? 4 : 3, alpha: 0.8 });
+
+  return {
+    graphic,
+    life: 0,
+    maxLife: isBossDefeat ? 0.78 + index * 0.16 : 0.52 + index * 0.12,
+    startRadius: 28 + index * 14,
+    targetRadius: isBossDefeat ? 190 + index * 48 : 142 + index * 34,
+  };
+};
+
+export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLastHitCrit, hitSignal, stage }: RiftPixiSceneProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const defeatSignalRef = useRef(defeatSignal);
+  const bossDefeatRef = useRef(isBossDefeat);
   const hitRef = useRef(isHit);
   const critRef = useRef(isLastHitCrit);
   const hitSignalRef = useRef(hitSignal);
+
+  useEffect(() => {
+    defeatSignalRef.current = defeatSignal;
+    bossDefeatRef.current = isBossDefeat;
+  }, [defeatSignal, isBossDefeat]);
 
   useEffect(() => {
     hitRef.current = isHit;
@@ -214,9 +265,13 @@ export const RiftPixiScene = ({ isBoss, isHit, isLastHitCrit, hitSignal, stage }
       });
       const impacts = new Container();
       const impactParticles: ImpactParticle[] = [];
+      const shockwaves = new Container();
+      const activeShockwaves: Shockwave[] = [];
       let lastHandledHitSignal = hitSignalRef.current;
+      let lastHandledDefeatSignal = defeatSignalRef.current;
+      let deathEnergy = 0;
 
-      scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, impacts);
+      scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
       app.stage.addChild(scene);
 
       const resize = () => {
@@ -239,6 +294,7 @@ export const RiftPixiScene = ({ isBoss, isHit, isLastHitCrit, hitSignal, stage }
 
         const impact = hitRef.current ? 1 : 0;
         const hasNewHit = hitSignalRef.current !== lastHandledHitSignal;
+        const hasNewDefeat = defeatSignalRef.current !== lastHandledDefeatSignal;
 
         if (hasNewHit) {
           const burst = createImpactBurst(palette, critRef.current);
@@ -247,23 +303,38 @@ export const RiftPixiScene = ({ isBoss, isHit, isLastHitCrit, hitSignal, stage }
           impacts.addChild(...burst.map(particle => particle.graphic));
         }
 
+        if (hasNewDefeat) {
+          const isBossDeath = bossDefeatRef.current;
+          const burst = createDeathBurst(palette, isBossDeath);
+          const waves = Array.from({ length: isBossDeath ? 3 : 2 }, (_, index) => createShockwave(palette, isBossDeath, index));
+
+          lastHandledDefeatSignal = defeatSignalRef.current;
+          deathEnergy = isBossDeath ? 1.35 : 1;
+          impactParticles.push(...burst);
+          activeShockwaves.push(...waves);
+          impacts.addChild(...burst.map(particle => particle.graphic));
+          shockwaves.addChild(...waves.map(wave => wave.graphic));
+        }
+
         const bossPulse = isBoss ? 1.12 : 1;
         const breath = 1 + Math.sin(elapsed * 2.2) * 0.035;
         const hitSquash = impact ? 0.88 + Math.sin(elapsed * 36) * 0.035 : 1;
+        const deathPulse = Math.max(0, deathEnergy);
 
-        halo.scale.set((1 + Math.sin(elapsed * 1.4) * 0.08) * bossPulse);
-        halo.alpha = impact ? 0.32 : 0.18 + Math.sin(elapsed * 1.9) * 0.05;
+        halo.scale.set((1 + Math.sin(elapsed * 1.4) * 0.08 + deathPulse * 0.22) * bossPulse);
+        halo.alpha = Math.min(0.72, (impact ? 0.32 : 0.18 + Math.sin(elapsed * 1.9) * 0.05) + deathPulse * 0.28);
         ringBack.rotation += 0.004 * ticker.deltaTime;
         ringFront.rotation -= 0.006 * ticker.deltaTime;
-        ringBack.scale.set(1 + Math.sin(elapsed * 1.2) * 0.035);
-        ringFront.scale.set(1 + Math.cos(elapsed * 1.5) * 0.045);
+        ringBack.scale.set(1 + Math.sin(elapsed * 1.2) * 0.035 + deathPulse * 0.16);
+        ringFront.scale.set(1 + Math.cos(elapsed * 1.5) * 0.045 + deathPulse * 0.1);
 
         beast.y = Math.sin(elapsed * 2.4) * 7 - impact * 7;
-        beast.rotation = Math.sin(elapsed * 1.7) * 0.035 + (impact ? Math.sin(elapsed * 44) * 0.08 : 0);
-        beast.scale.set(breath * hitSquash);
+        beast.rotation = Math.sin(elapsed * 1.7) * 0.035 + (impact ? Math.sin(elapsed * 44) * 0.08 : 0) + deathPulse * Math.sin(elapsed * 28) * 0.09;
+        beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14));
+        beast.alpha = Math.max(0.38, 1 - deathPulse * 0.28);
 
-        core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34);
-        coreGlow.scale.set(1 + Math.sin(elapsed * 4.6) * 0.3 + impact * 0.55);
+        core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34 + deathPulse * 0.42);
+        coreGlow.scale.set(1 + Math.sin(elapsed * 4.6) * 0.3 + impact * 0.55 + deathPulse * 0.8);
         leftWing.rotation = -0.16 + Math.sin(elapsed * 2.6) * 0.055 - impact * 0.08;
         rightWing.rotation = 0.16 - Math.sin(elapsed * 2.6) * 0.055 + impact * 0.08;
 
@@ -295,6 +366,26 @@ export const RiftPixiScene = ({ isBoss, isHit, isLastHitCrit, hitSignal, stage }
             impactParticles.splice(index, 1);
           }
         }
+
+        for (let index = activeShockwaves.length - 1; index >= 0; index -= 1) {
+          const wave = activeShockwaves[index];
+
+          wave.life += ticker.deltaMS / 1000;
+          const progress = Math.min(1, wave.life / wave.maxLife);
+          const radius = wave.startRadius + (wave.targetRadius - wave.startRadius) * progress;
+
+          wave.graphic.clear()
+            .circle(0, 0, radius)
+            .stroke({ color: palette.glow, width: 3 * (1 - progress), alpha: 0.72 * (1 - progress) });
+
+          if (progress >= 1) {
+            shockwaves.removeChild(wave.graphic);
+            wave.graphic.destroy();
+            activeShockwaves.splice(index, 1);
+          }
+        }
+
+        deathEnergy = Math.max(0, deathEnergy - ticker.deltaMS / (bossDefeatRef.current ? 920 : 680));
       });
     };
 
