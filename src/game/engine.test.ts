@@ -97,11 +97,31 @@ describe('hero upgrades', () => {
     const event = result.events[0];
 
     assert.equal(event.type, 'hero_upgraded');
+    assert.equal(event.fromLevel, 1);
     assert.equal(event.goldCost, '100');
     assert.equal(event.level, 2);
+    assert.equal(event.levelsGained, 1);
     assert.equal(event.power, '7.5');
     assert.equal(result.snapshot.gold, '900');
     assert.equal(result.snapshot.heroes[0]?.power, '7.5');
+  });
+
+  it('buys as many of ten requested levels as current gold allows', () => {
+    const rareHero = hero(5);
+    const result = upgradeHeroAction(
+      createSnapshot('2026-07-09T11:59:00.000Z', [rareHero]),
+      rareHero.id,
+      10,
+    );
+    const event = result.events[0];
+
+    assert.equal(event.type, 'hero_upgraded');
+    assert.equal(event.fromLevel, 1);
+    assert.equal(event.levelsGained, 3);
+    assert.equal(event.level, 4);
+    assert.equal(event.goldCost, '950');
+    assert.equal(event.power, '16.875');
+    assert.equal(result.snapshot.gold, '50');
   });
 
   it('rejects upgrades at the ascension level cap', () => {

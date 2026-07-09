@@ -18,6 +18,20 @@ describe('game action request validation', () => {
     );
     assert.deepEqual(
       parseGameActionRequest({
+        commandId: 'cmd:test-upgrade-old',
+        action: { type: 'upgrade_hero', heroId: 'void-grunt' },
+      })?.action,
+      { type: 'upgrade_hero', heroId: 'void-grunt', amount: 1 },
+    );
+    assert.deepEqual(
+      parseGameActionRequest({
+        commandId: 'cmd:test-upgrade-max',
+        action: { type: 'upgrade_hero', heroId: 'void-grunt', amount: 'max' },
+      })?.action,
+      { type: 'upgrade_hero', heroId: 'void-grunt', amount: 'max' },
+    );
+    assert.deepEqual(
+      parseGameActionRequest({
         commandId: 'cmd:test-ascend',
         action: { type: 'ascend_hero', heroId: 'void-grunt' },
       }),
@@ -34,6 +48,13 @@ describe('game action request validation', () => {
       parseGameActionRequest({
         commandId: 'cmd:test-0002',
         action: { type: 'summon', randomValue: 0.999 },
+      }),
+      null,
+    );
+    assert.equal(
+      parseGameActionRequest({
+        commandId: 'cmd:test-invalid-bulk',
+        action: { type: 'upgrade_hero', heroId: 'void-grunt', amount: 50 },
       }),
       null,
     );

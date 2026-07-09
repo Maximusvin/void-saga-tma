@@ -113,6 +113,7 @@ npm run balance:simulate
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
 - Snapshot schema v3 зберігає одного героя на content template: duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- `upgrade_hero` підтримує `amount: 1 | 10 | "max"`: сервер сам рахує точну сумарну ціну, купує доступні рівні до cap і обмежує одну команду 50 рівнями. Відсутній `amount` backward-compatible означає `1`.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
@@ -146,3 +147,18 @@ Offline reward action:
   "action": { "type": "claim_offline_rewards" }
 }
 ```
+
+Bounded bulk upgrade action:
+
+```json
+{
+  "commandId": "cmd:example-0003",
+  "action": {
+    "type": "upgrade_hero",
+    "heroId": "void-grunt",
+    "amount": "max"
+  }
+}
+```
+
+Допустимі значення `amount`: `1`, `10`, `"max"`. Поле можна пропустити для backward-compatible `+1`.

@@ -93,7 +93,27 @@ export const parseGameActionRequest = (
     };
   }
 
-  if (request.action.type === 'upgrade_hero' || request.action.type === 'ascend_hero') {
+  if (request.action.type === 'upgrade_hero') {
+    if (typeof request.action.heroId !== 'string' || !request.action.heroId.trim()) {
+      return null;
+    }
+    const amount = request.action.amount ?? 1;
+    if (amount !== 1 && amount !== 10 && amount !== 'max') {
+      return null;
+    }
+
+    return {
+      commandId,
+      requestedPlayerId,
+      action: {
+        type: 'upgrade_hero',
+        heroId: request.action.heroId,
+        amount,
+      },
+    };
+  }
+
+  if (request.action.type === 'ascend_hero') {
     if (typeof request.action.heroId !== 'string' || !request.action.heroId.trim()) {
       return null;
     }
@@ -102,7 +122,7 @@ export const parseGameActionRequest = (
       commandId,
       requestedPlayerId,
       action: {
-        type: request.action.type,
+        type: 'ascend_hero',
         heroId: request.action.heroId,
       },
     };
