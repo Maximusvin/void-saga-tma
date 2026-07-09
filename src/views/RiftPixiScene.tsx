@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics, type Ticker } from 'pixi.js';
 import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
+import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 
 interface RiftPixiSceneProps {
   defeatSignal: number;
@@ -415,11 +416,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     app.ticker.add(animateScene);
 
     return () => {
-      app.ticker.remove(animateScene);
-      if (appRef.current === app) {
-        app.stage.removeChild(scene);
-        scene.destroy({ children: true });
-      }
+      cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
     };
   }, [isBoss, rendererReady, stage]);
 
