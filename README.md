@@ -1,32 +1,46 @@
-# React + TypeScript + Vite
+# Void Saga TMA
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Telegram Mini App прототип клікер/RPG-гри: гравець б'є монстрів у Rift, отримує gold/gems, призиває героїв і прокачує roster для passive DPS.
 
-Currently, two official plugins are available:
+## Стек
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Vite
+- React 19
+- TypeScript
+- Framer Motion
+- Lucide React
+- Canvas Confetti
+- Oxlint
 
-## React Compiler
+## Локальний запуск
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Production build:
+
+```bash
+npm run build
+```
+
+Lint:
+
+```bash
+npm run lint
+```
+
+## Поточна структура
+
+- `src/store/useGameState.ts` - локальний game state, persistence у `localStorage`, combat/reward/upgrade логіка.
+- `src/views/TheRift.tsx` - основний бойовий екран.
+- `src/views/SummonCircle.tsx` - gacha summon flow.
+- `src/views/HeroesRoster.tsx` - список героїв і upgrade.
+- `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
+
+## Примітки для розвитку
+
+- Save поки локальний, без backend і без Telegram user binding.
+- Economy поки прототипна: reward/drop/upgrade формули не винесені в баланс-конфіг.
+- UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.

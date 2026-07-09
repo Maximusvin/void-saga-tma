@@ -1,24 +1,18 @@
-// Helper to safely call Telegram WebApp haptic feedback
-export const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => {
+import { getTelegramWebApp } from './telegram';
+import type { HapticImpactStyle, HapticNotificationType } from './telegram';
+
+export const triggerHaptic = (style: HapticImpactStyle) => {
   try {
-    // @ts-ignore
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      // @ts-ignore
-      window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
-    }
-  } catch (e) {
-    // ignore
+    getTelegramWebApp()?.HapticFeedback?.impactOccurred?.(style);
+  } catch {
+    // Haptics are optional outside Telegram.
   }
 };
 
-export const triggerHapticNotification = (type: 'error' | 'success' | 'warning') => {
+export const triggerHapticNotification = (type: HapticNotificationType) => {
   try {
-    // @ts-ignore
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      // @ts-ignore
-      window.Telegram.WebApp.HapticFeedback.notificationOccurred(type);
-    }
-  } catch (e) {
-    // ignore
+    getTelegramWebApp()?.HapticFeedback?.notificationOccurred?.(type);
+  } catch {
+    // Haptics are optional outside Telegram.
   }
 };

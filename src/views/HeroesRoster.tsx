@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Hero } from '../store/useGameState';
 import { triggerHaptic } from '../utils/haptics';
+import { formatNumber } from '../utils/formatNumber';
 
 interface HeroesRosterProps {
   heroes: Hero[];
-  upgradeHero: (id: string) => void;
+  upgradeHero: (id: string) => boolean;
   gold: number;
 }
 
@@ -23,17 +24,15 @@ const rarityGradients = {
   Legendary: 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.05))'
 };
 
-const formatNumber = (num: number) => {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return Math.floor(num).toString();
-};
-
 export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero, gold }) => {
   const [justUpgradedId, setJustUpgradedId] = useState<string | null>(null);
 
   const handleUpgrade = (id: string) => {
-    upgradeHero(id);
+    const wasUpgraded = upgradeHero(id);
+    if (!wasUpgraded) {
+      return;
+    }
+
     triggerHaptic('heavy');
     setJustUpgradedId(id);
     setTimeout(() => setJustUpgradedId(null), 500);

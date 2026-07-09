@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { triggerHaptic } from '../utils/haptics';
+import { formatNumber } from '../utils/formatNumber';
 
 interface TheRiftProps {
   monsterHealth: number;
@@ -14,14 +15,6 @@ interface TheRiftProps {
   registerHit: () => void;
   passivePower: number;
 }
-
-const formatNumber = (num: number) => {
-  if (num >= 1e12) return (num / 1e12).toFixed(1) + 'T';
-  if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return Math.floor(num).toString();
-};
 
 export const TheRift: React.FC<TheRiftProps> = ({ 
   monsterHealth, monsterMaxHealth, dealDamage, clickPower, stage, isBoss,
@@ -68,11 +61,6 @@ export const TheRift: React.FC<TheRiftProps> = ({
       clientX = (e as React.MouseEvent).clientX;
       clientY = (e as React.MouseEvent).clientY;
     }
-
-    // Adjust for container position to center floating text on click
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
 
     const isCrit = Math.random() < 0.1;
     const finalDamage = isCrit ? clickPower * 2 : clickPower;

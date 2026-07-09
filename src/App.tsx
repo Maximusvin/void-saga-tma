@@ -6,8 +6,14 @@ import { BottomNav } from './components/BottomNav';
 import { TheRift } from './views/TheRift';
 import { SummonCircle } from './views/SummonCircle';
 import { HeroesRoster } from './views/HeroesRoster';
+import { initializeTelegramApp } from './utils/telegram';
+import { useEffect } from 'react';
 
 function App() {
+  useEffect(() => {
+    initializeTelegramApp();
+  }, []);
+
   const gameState = useGameState();
 
   return (
