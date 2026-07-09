@@ -2,6 +2,7 @@ name: void_saga_prod
 
 services:
   api:
+    image: void-saga-api:${VOID_SAGA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -47,7 +48,23 @@ services:
       retries: 10
       start_period: 10s
 
+  backup:
+    profiles: ["backup"]
+    image: void-saga-api:${VOID_SAGA_IMAGE_TAG:-latest}
+    command: ["node", "backup-sqlite.mjs"]
+    environment:
+      VOID_SAGA_DB_PATH: /data/void-saga.sqlite
+      VOID_SAGA_BACKUP_PATH: /backup
+      VOID_SAGA_BACKUP_RETENTION: ${VOID_SAGA_BACKUP_RETENTION:-14}
+    volumes:
+      - game_data:/data:ro
+      - ${VOID_SAGA_BACKUP_DIR:-/srv/void-saga/backups}:/backup
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+
   web:
+    image: void-saga-web:${VOID_SAGA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.web
