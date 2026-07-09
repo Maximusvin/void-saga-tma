@@ -93,7 +93,7 @@ export const parseGameActionRequest = (
     };
   }
 
-  if (request.action.type === 'upgrade_hero') {
+  if (request.action.type === 'upgrade_hero' || request.action.type === 'ascend_hero') {
     if (typeof request.action.heroId !== 'string' || !request.action.heroId.trim()) {
       return null;
     }
@@ -102,7 +102,7 @@ export const parseGameActionRequest = (
       commandId,
       requestedPlayerId,
       action: {
-        type: 'upgrade_hero',
+        type: request.action.type,
         heroId: request.action.heroId,
       },
     };

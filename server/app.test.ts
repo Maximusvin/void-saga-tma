@@ -5,8 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import type { GameEvent, GameSnapshot } from '../src/game/types';
-import { subtractGameNumbers } from '../src/game/gameNumber';
+import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameEvent, type GameSnapshot } from '../src/game/types';
+import { gameNumber, subtractGameNumbers } from '../src/game/gameNumber';
 import { createGameRequestHandler } from './app';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
@@ -75,7 +75,7 @@ describe('game API persistence', () => {
 
       assert.equal(initialState.response.status, 200);
       assert.equal(initialState.body.playerId, playerId);
-      assert.equal(initialState.body.snapshot.schemaVersion, 2);
+      assert.equal(initialState.body.snapshot.schemaVersion, GAME_SNAPSHOT_SCHEMA_VERSION);
       assert.equal(typeof initialState.body.snapshot.gold, 'string');
       assert.equal(typeof initialState.body.snapshot.monsterHealth, 'string');
 
@@ -157,6 +157,64 @@ describe('game API persistence', () => {
       });
       assert.equal(oversizedPayload.response.status, 413);
       assert.equal(oversizedPayload.body.error, 'payload_too_large');
+    } finally {
+      if (serverStarted) {
+        await closeServer(server);
+      }
+      database.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('persists a server-authoritative hero ascension action', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-ascension-'));
+    const database = openDatabase(join(tempDir, 'game.sqlite'));
+    const repository = new GameRepository(database);
+    const server = createServer(createGameRequestHandler(repository));
+    const playerId = 'dev:http-ascension-player';
+    let serverStarted = false;
+
+    try {
+      const player = repository.getOrCreatePlayer(playerId);
+      repository.savePlayer(playerId, {
+        ...player.snapshot,
+        heroes: [{
+          ascension: 0,
+          id: 'void-grunt',
+          level: 50,
+          name: 'Void Grunt',
+          power: gameNumber('2.12540502289226873016357e+9'),
+          rarity: 'Common',
+          shards: 2,
+          templateId: 'void-grunt',
+        }],
+      });
+
+      await listen(server);
+      serverStarted = true;
+      const { port } = server.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const result = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          commandId: 'cmd:http-ascend-0001',
+          action: { type: 'ascend_hero', heroId: 'void-grunt' },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.body.replayed, false);
+      assert.equal(result.body.events[0]?.type, 'hero_ascended');
+      assert.equal(result.body.snapshot.heroes[0]?.ascension, 1);
+      assert.equal(result.body.snapshot.heroes[0]?.shards, 0);
+
+      const restored = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
+      );
+      assert.equal(restored.body.snapshot.heroes[0]?.ascension, 1);
+      assert.equal(restored.body.snapshot.heroes[0]?.shards, 0);
     } finally {
       if (serverStarted) {
         await closeServer(server);

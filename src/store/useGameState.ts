@@ -8,10 +8,13 @@ import {
 import { createGameCommandId, fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
 import {
   GAME_BALANCE,
+  getAscensionShardCost,
   getBaseClickPower,
   getComboMultiplier,
+  getHeroLevelCap,
   getPassivePower,
   getUpgradeCost,
+  isHeroAtLevelCap,
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
@@ -102,8 +105,10 @@ const requireSnapshot = (value: unknown) => {
   return snapshot;
 };
 
-const getSummonedHero = (events: GameEvent[]) => {
-  return events.find((event): event is Extract<GameEvent, { type: 'hero_summoned' }> => event.type === 'hero_summoned')?.hero ?? null;
+const getSummonEvent = (events: GameEvent[]) => {
+  return events.find((event): event is Extract<GameEvent, { type: 'hero_summoned' }> => (
+    event.type === 'hero_summoned'
+  )) ?? null;
 };
 
 const getActiveComboCount = (snapshot: GameSnapshot) => {
@@ -420,12 +425,17 @@ export const useGameState = () => {
     }
 
     const events = await runGameAction({ type: 'summon' });
-    return getSummonedHero(events);
+    return getSummonEvent(events);
   }, [runGameAction]);
 
   const upgradeHero = (heroId: string) => {
-    const heroToUpgrade = snapshot.heroes.find(hero => hero.id === heroId);
-    if (!heroToUpgrade || compareGameNumbers(snapshot.gold, getUpgradeCost(heroToUpgrade)) < 0) {
+    const currentSnapshot = snapshotRef.current;
+    const heroToUpgrade = currentSnapshot.heroes.find(hero => hero.id === heroId);
+    if (
+      !heroToUpgrade ||
+      isHeroAtLevelCap(heroToUpgrade) ||
+      compareGameNumbers(currentSnapshot.gold, getUpgradeCost(heroToUpgrade)) < 0
+    ) {
       return false;
     }
 
@@ -433,10 +443,25 @@ export const useGameState = () => {
     return true;
   };
 
+  const ascendHero = (heroId: string) => {
+    const heroToAscend = snapshotRef.current.heroes.find(hero => hero.id === heroId);
+    if (
+      !heroToAscend ||
+      heroToAscend.level < getHeroLevelCap(heroToAscend) ||
+      heroToAscend.shards < getAscensionShardCost(heroToAscend)
+    ) {
+      return false;
+    }
+
+    void runGameAction({ type: 'ascend_hero', heroId });
+    return true;
+  };
+
   return {
     gold: snapshot.gold,
     gems: snapshot.gems,
     heroes: snapshot.heroes,
+    ascendHero,
     upgradeHero,
     summonHero,
     activeView,
