@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Void Saga SQLite backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 UTC
+RandomizedDelaySec=20m
+Persistent=true
+Unit=void-saga-backup.service
+
+[Install]
+WantedBy=timers.target
