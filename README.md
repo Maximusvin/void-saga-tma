@@ -25,6 +25,12 @@ Backend API:
 npm run server:dev
 ```
 
+Frontend зі станом через backend:
+
+```bash
+VITE_GAME_API_URL=http://127.0.0.1:8787 VITE_PLAYER_ID=dev-player npm run dev
+```
+
 Production build:
 
 ```bash
@@ -43,7 +49,7 @@ npm run lint
 - `src/game/balance.ts` - єдине місце для economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost, summon pool, rarity colors/icons.
 - `src/game/engine.ts` - чисті action-розрахунки для бою, summon і upgrade.
 - `src/game/types.ts` - спільні типи гри.
-- `src/store/useGameState.ts` - локальний game state, persistence у `localStorage`, combat/reward/upgrade логіка.
+- `src/store/useGameState.ts` - React state adapter: backend API source of truth через `VITE_GAME_API_URL` або `localStorage` fallback без API.
 - `src/views/TheRift.tsx` - основний бойовий екран.
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - список героїв і upgrade.
@@ -57,8 +63,9 @@ npm run lint
 
 ## Примітки для розвитку
 
-- Backend persistence уже має локальний SQLite scaffold, але frontend ще працює через localStorage adapter.
-- Telegram user binding ще не підключений.
+- Backend persistence має локальний SQLite scaffold, а frontend вже може працювати через backend adapter, якщо задано `VITE_GAME_API_URL`.
+- Без `VITE_GAME_API_URL` frontend лишається в автономному `localStorage` fallback для швидкого прототипування.
+- Telegram user binding читає `Telegram.WebApp.initDataUnsafe.user.id`, але server-side initData validation ще не підключена.
 - Economy винесена в typed balance-конфіг, але самі формули ще прототипні й потребують плейтесту.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
 

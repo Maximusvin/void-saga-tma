@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { triggerHaptic } from '../utils/haptics';
+import { triggerHaptic, triggerHapticNotification } from '../utils/haptics';
 import {
   GAME_BALANCE,
   RARITY_COLORS,
@@ -9,48 +9,38 @@ import {
   SUMMON_POOL,
   getHeroIcon,
   getSummonDropPercent,
-  rollSummonTemplate,
 } from '../game/balance';
 import type { Hero } from '../game/types';
 
 interface SummonCircleProps {
   gems: number;
-  spendGems: (amount: number) => boolean;
-  addHero: (hero: Hero) => void;
+  summonHero: () => Promise<Hero | null>;
 }
 
-const createHeroId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-
-  return Math.random().toString(36).slice(2);
-};
-
-export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, addHero }) => {
+export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) => {
   const [isSummoning, setIsSummoning] = useState(false);
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
   const [showSilhouette, setShowSilhouette] = useState(false);
 
   const handleSummon = () => {
-    if (spendGems(GAME_BALANCE.summonCostGems)) {
-      setIsSummoning(true);
-      setSummonedHero(null);
-      setShowSilhouette(false);
-      
-      triggerHaptic('medium');
+    if (gems < GAME_BALANCE.summonCostGems) {
+      triggerHapticNotification('error');
+      return;
+    }
 
-      // 1. Initial gacha spin delay
-      setTimeout(() => {
-        const template = rollSummonTemplate();
+    setIsSummoning(true);
+    setSummonedHero(null);
+    setShowSilhouette(false);
+    
+    triggerHaptic('medium');
 
-        const newHero: Hero = {
-          id: createHeroId(),
-          name: template.name,
-          rarity: template.rarity,
-          level: 1,
-          power: template.power,
-        };
+    setTimeout(() => {
+      void summonHero().then(newHero => {
+        if (!newHero) {
+          triggerHapticNotification('error');
+          setIsSummoning(false);
+          return;
+        }
 
         setSummonedHero(newHero);
         setIsSummoning(false);
@@ -59,21 +49,19 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, spendGems, add
 
         setTimeout(() => {
           setShowSilhouette(false);
-          addHero(newHero);
           triggerHaptic('heavy');
           
-          if (template.rarity === 'Epic' || template.rarity === 'Legendary') {
+          if (newHero.rarity === 'Epic' || newHero.rarity === 'Legendary') {
             confetti({
               particleCount: 150,
               spread: 100,
               origin: { y: 0.6 },
-              colors: template.rarity === 'Legendary' ? ['#ffd700', '#ffaa00', '#ffffff'] : ['#ff00ff', '#aa00ff', '#00ffff']
+              colors: newHero.rarity === 'Legendary' ? ['#ffd700', '#ffaa00', '#ffffff'] : ['#ff00ff', '#aa00ff', '#00ffff']
             });
           }
         }, GAME_BALANCE.summonRevealMs);
-
-      }, GAME_BALANCE.summonChargeMs);
-    }
+      });
+    }, GAME_BALANCE.summonChargeMs);
   };
 
   const sortedSummonPool = [...SUMMON_POOL].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]);

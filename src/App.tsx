@@ -41,8 +41,7 @@ function App() {
             <SummonCircle 
               key="summon" 
               gems={gameState.gems} 
-              spendGems={gameState.spendGems} 
-              addHero={gameState.addHero} 
+              summonHero={gameState.summonHero} 
             />
           )}
           {gameState.activeView === 'roster' && (
