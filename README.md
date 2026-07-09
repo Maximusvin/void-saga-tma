@@ -19,6 +19,12 @@ npm ci
 npm run dev
 ```
 
+Backend API:
+
+```bash
+npm run server:dev
+```
+
 Production build:
 
 ```bash
@@ -33,7 +39,9 @@ npm run lint
 
 ## Поточна структура
 
+- `server/` - Node API з локальною SQLite persistence для player snapshots.
 - `src/game/balance.ts` - єдине місце для economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost, summon pool, rarity colors/icons.
+- `src/game/engine.ts` - чисті action-розрахунки для бою, summon і upgrade.
 - `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - локальний game state, persistence у `localStorage`, combat/reward/upgrade логіка.
 - `src/views/TheRift.tsx` - основний бойовий екран.
@@ -49,6 +57,23 @@ npm run lint
 
 ## Примітки для розвитку
 
-- Save поки локальний, без backend і без Telegram user binding.
+- Backend persistence уже має локальний SQLite scaffold, але frontend ще працює через localStorage adapter.
+- Telegram user binding ще не підключений.
 - Economy винесена в typed balance-конфіг, але самі формули ще прототипні й потребують плейтесту.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
+
+## Backend API
+
+- `GET /api/health`
+- `GET /api/game/content`
+- `GET /api/game/state?playerId=<id>`
+- `POST /api/game/action`
+
+Action payload:
+
+```json
+{
+  "playerId": "telegram-or-dev-id",
+  "action": { "type": "deal_damage", "amount": 25, "source": "tap" }
+}
+```
