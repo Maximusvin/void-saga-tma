@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_BALANCE } from './balance';
 import { applyCombatBatchAction, applyGameAction, claimOfflineRewardsAction } from './engine';
-import type { GameSnapshot, Hero } from './types';
+import { compareGameNumbers, gameNumber } from './gameNumber';
+import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameSnapshot, type Hero } from './types';
 
 const NOW_MS = Date.parse('2026-07-09T12:00:00.000Z');
 
@@ -11,18 +12,19 @@ const hero = (power: number): Hero => ({
   name: `Hero ${power}`,
   rarity: 'Rare',
   level: 1,
-  power,
+  power: gameNumber(power),
 });
 
 const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot => ({
+  schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
   comboCount: 0,
   comboExpiresAt: null,
-  gold: 1000,
+  gold: gameNumber(1000),
   gems: 50,
   heroes,
   stage: 1,
-  monsterMaxHealth: 100,
-  monsterHealth: 100,
+  monsterMaxHealth: gameNumber(100),
+  monsterHealth: gameNumber(100),
   lastSeenAt,
   updatedAt: lastSeenAt,
 });
@@ -36,9 +38,9 @@ describe('offline rewards', () => {
     assert.equal(event.type, 'offline_rewards_claimed');
     assert.equal(event.elapsedSeconds, 7200);
     assert.equal(event.cappedSeconds, 7200);
-    assert.equal(event.passivePower, 10);
-    assert.equal(event.goldReward, 3600);
-    assert.equal(result.snapshot.gold, 4600);
+    assert.equal(event.passivePower, '10');
+    assert.equal(event.goldReward, '3600');
+    assert.equal(result.snapshot.gold, '4600');
     assert.equal(result.snapshot.lastSeenAt, '2026-07-09T12:00:00.000Z');
   });
 
@@ -50,7 +52,7 @@ describe('offline rewards', () => {
     assert.equal(event.type, 'offline_rewards_claimed');
     assert.equal(event.elapsedSeconds, 43200);
     assert.equal(event.cappedSeconds, GAME_BALANCE.offlineRewardMaxSeconds);
-    assert.equal(event.goldReward, 28800);
+    assert.equal(event.goldReward, '28800');
   });
 
   it('does not reward short sessions or empty rosters', () => {
@@ -58,13 +60,13 @@ describe('offline rewards', () => {
     const emptyRoster = claimOfflineRewardsAction(createSnapshot('2026-07-09T10:00:00.000Z'), NOW_MS);
 
     assert.equal(shortSession.events[0].type, 'offline_rewards_claimed');
-    assert.equal(shortSession.events[0].goldReward, 0);
-    assert.equal(shortSession.snapshot.gold, 1000);
+    assert.equal(shortSession.events[0].goldReward, '0');
+    assert.equal(shortSession.snapshot.gold, '1000');
 
     assert.equal(emptyRoster.events[0].type, 'offline_rewards_claimed');
-    assert.equal(emptyRoster.events[0].passivePower, 0);
-    assert.equal(emptyRoster.events[0].goldReward, 0);
-    assert.equal(emptyRoster.snapshot.gold, 1000);
+    assert.equal(emptyRoster.events[0].passivePower, '0');
+    assert.equal(emptyRoster.events[0].goldReward, '0');
+    assert.equal(emptyRoster.snapshot.gold, '1000');
   });
 
   it('routes claim action through the game action dispatcher', () => {
@@ -79,7 +81,7 @@ describe('server-authoritative combat batches', () => {
   it('keeps hit and defeat events ordered while a batch crosses a stage', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
-      monsterHealth: 2,
+      monsterHealth: gameNumber(2),
     };
     const result = applyCombatBatchAction(snapshot, 3, 0, {
       nowMs: NOW_MS,
@@ -95,7 +97,7 @@ describe('server-authoritative combat batches', () => {
     assert.equal(result.snapshot.stage, 2);
     assert.equal(result.snapshot.comboCount, 3);
     assert.equal(result.snapshot.comboExpiresAt, '2026-07-09T12:00:01.500Z');
-    assert.ok(result.snapshot.monsterHealth < result.snapshot.monsterMaxHealth);
+    assert.ok(compareGameNumbers(result.snapshot.monsterHealth, result.snapshot.monsterMaxHealth) < 0);
   });
 
   it('rolls critical damage inside the engine instead of accepting client damage', () => {
@@ -109,7 +111,7 @@ describe('server-authoritative combat batches', () => {
 
     assert.equal(hit.type, 'monster_hit');
     assert.equal(hit.isCrit, true);
-    assert.equal(hit.damage, 4);
+    assert.equal(hit.damage, '4');
     assert.equal(hit.comboCount, 1);
   });
 
@@ -126,7 +128,7 @@ describe('server-authoritative combat batches', () => {
     const hit = result.events[0];
 
     assert.equal(hit.type, 'monster_hit');
-    assert.equal(hit.damage, 1);
+    assert.equal(hit.damage, '1');
     assert.equal(result.snapshot.comboCount, 1);
   });
 });

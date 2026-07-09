@@ -4,6 +4,13 @@ import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
 import { GAME_BALANCE, isBossStage } from '../game/balance';
+import {
+  ceilGameNumber,
+  compareGameNumbers,
+  gameNumberToClampedNumber,
+  gameNumberToPercent,
+  type GameNumber,
+} from '../game/gameNumber';
 import type { GameEvent } from '../game/types';
 import './TheRift.css';
 
@@ -13,23 +20,23 @@ const RiftPixiScene = lazy(async () => {
 });
 
 interface TheRiftProps {
-  monsterHealth: number;
-  monsterMaxHealth: number;
+  monsterHealth: GameNumber;
+  monsterMaxHealth: GameNumber;
   dealDamage: () => Promise<GameEvent[]>;
-  clickPower: number;
+  clickPower: GameNumber;
   stage: number;
   isBoss: boolean;
   comboCount: number;
   comboMultiplier: number;
   registerHit: () => void;
-  passivePower: number;
+  passivePower: GameNumber;
 }
 
 interface DamagePop {
   id: number;
   x: number;
   y: number;
-  damage: number;
+  damage: GameNumber;
   isCrit: boolean;
   driftX: number;
 }
@@ -46,7 +53,7 @@ interface DefeatTransition {
   defeatedStage: number;
   nextStage: number;
   wasBoss: boolean;
-  goldReward: number | null;
+  goldReward: GameNumber | null;
   gemReward: number | null;
 }
 
@@ -127,9 +134,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, []);
 
   useEffect(() => {
-    if (passivePower <= GAME_BALANCE.passiveProjectileThreshold) {
+    if (compareGameNumbers(passivePower, GAME_BALANCE.passiveProjectileThreshold) <= 0) {
       return;
     }
+
+    const maximumProjectileSpeedPower = (
+      GAME_BALANCE.autoProjectileBaseIntervalMs - GAME_BALANCE.autoProjectileMinIntervalMs
+    ) / GAME_BALANCE.autoProjectilePowerSpeedupMs;
+    const projectileSpeedPower = gameNumberToClampedNumber(passivePower, maximumProjectileSpeedPower);
 
     const interval = setInterval(() => {
       const angle = Math.random() * Math.PI * 2;
@@ -152,7 +164,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
       }, GAME_BALANCE.autoProjectileTravelMs);
     }, Math.max(
       GAME_BALANCE.autoProjectileMinIntervalMs,
-      GAME_BALANCE.autoProjectileBaseIntervalMs - passivePower * GAME_BALANCE.autoProjectilePowerSpeedupMs,
+      GAME_BALANCE.autoProjectileBaseIntervalMs - projectileSpeedPower * GAME_BALANCE.autoProjectilePowerSpeedupMs,
     ));
 
     return () => clearInterval(interval);
@@ -280,7 +292,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     attackAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
   };
 
-  const healthPercent = Math.max(0, Math.min(100, (monsterHealth / monsterMaxHealth) * 100));
+  const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
 
   return (
@@ -340,7 +352,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
       <div className="health-panel">
         <div className="health-meta">
           <span>Enemy integrity</span>
-          <strong>{formatNumber(Math.ceil(monsterHealth))} / {formatNumber(monsterMaxHealth)}</strong>
+          <strong>{formatNumber(ceilGameNumber(monsterHealth))} / {formatNumber(monsterMaxHealth)}</strong>
         </div>
         <div className="health-track">
           <motion.div

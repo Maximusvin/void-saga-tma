@@ -90,6 +90,7 @@ npm run test:server
 - Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback лише поза `NODE_ENV=production`; production працює fail-closed.
 - Frontend підключає офіційний `telegram-web-app.js` у `<head>`, використовує stable Telegram viewport і передає лише raw `initData`, який перевіряє backend.
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
+- Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.

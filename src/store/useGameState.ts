@@ -8,16 +8,16 @@ import {
 import { createGameCommandId, fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
 import {
   GAME_BALANCE,
-  HERO_RARITIES,
   getBaseClickPower,
   getComboMultiplier,
-  getMonsterMaxHealth,
   getPassivePower,
   getUpgradeCost,
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
-import type { ActiveView, GameAction, GameEvent, GameSnapshot, Hero, HeroRarity } from '../game/types';
+import { compareGameNumbers, multiplyGameNumbers } from '../game/gameNumber';
+import { normalizeGameSnapshot } from '../game/snapshot';
+import type { ActiveView, GameAction, GameEvent, GameSnapshot } from '../game/types';
 import { getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
@@ -33,63 +33,6 @@ interface PendingTap {
   resolve: (events: GameEvent[]) => void;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null;
-};
-
-const isFiniteNumber = (value: unknown): value is number => {
-  return typeof value === 'number' && Number.isFinite(value);
-};
-
-const isHeroRarity = (value: unknown): value is HeroRarity => {
-  return typeof value === 'string' && HERO_RARITIES.includes(value as HeroRarity);
-};
-
-const isHero = (value: unknown): value is Hero => {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.name === 'string' &&
-    isHeroRarity(value.rarity) &&
-    isFiniteNumber(value.level) &&
-    isFiniteNumber(value.power) &&
-    value.level >= 1 &&
-    value.power >= 0
-  );
-};
-
-const numberOrDefault = (value: unknown, fallback: number) => {
-  return isFiniteNumber(value) ? value : fallback;
-};
-
-const sanitizeSnapshot = (value: unknown): GameSnapshot | null => {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const stage = Math.max(GAME_BALANCE.initialStage, Math.floor(numberOrDefault(value.stage, GAME_BALANCE.initialStage)));
-  const monsterMaxHealth = Math.max(1, numberOrDefault(value.monsterMaxHealth, getMonsterMaxHealth(stage)));
-  const monsterHealth = Math.min(
-    monsterMaxHealth,
-    Math.max(0, numberOrDefault(value.monsterHealth, monsterMaxHealth)),
-  );
-
-  return {
-    comboCount: Math.max(0, Math.floor(numberOrDefault(value.comboCount, 0))),
-    comboExpiresAt: typeof value.comboExpiresAt === 'string' ? value.comboExpiresAt : null,
-    gold: Math.max(0, numberOrDefault(value.gold, GAME_BALANCE.initialGold)),
-    gems: Math.max(0, numberOrDefault(value.gems, GAME_BALANCE.initialGems)),
-    heroes: Array.isArray(value.heroes) ? value.heroes.filter(isHero) : [],
-    stage,
-    monsterMaxHealth,
-    monsterHealth,
-    lastSeenAt: typeof value.lastSeenAt === 'string'
-      ? value.lastSeenAt
-      : (typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString()),
-    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
-  };
-};
-
 const loadLocalSnapshot = (): GameSnapshot => {
   if (typeof window === 'undefined') {
     return createInitialGameSnapshot();
@@ -98,7 +41,7 @@ const loadLocalSnapshot = (): GameSnapshot => {
   try {
     const saved = localStorage.getItem(GAME_BALANCE.storageKey);
     if (saved) {
-      return sanitizeSnapshot(JSON.parse(saved)) ?? createInitialGameSnapshot();
+      return normalizeGameSnapshot(JSON.parse(saved)) ?? createInitialGameSnapshot();
     }
   } catch {
     console.error('Failed to load save');
@@ -151,7 +94,7 @@ const getOrCreateDevPlayerId = () => {
 };
 
 const requireSnapshot = (value: unknown) => {
-  const snapshot = sanitizeSnapshot(value);
+  const snapshot = normalizeGameSnapshot(value);
   if (!snapshot) {
     throw new Error('Game API returned an invalid snapshot');
   }
@@ -390,7 +333,7 @@ export const useGameState = () => {
   const baseClickPower = useMemo(() => getBaseClickPower(snapshot.heroes), [snapshot.heroes]);
   const passivePower = useMemo(() => getPassivePower(snapshot.heroes), [snapshot.heroes]);
   const comboMultiplier = getComboMultiplier(comboCount);
-  const clickPower = baseClickPower * comboMultiplier;
+  const clickPower = multiplyGameNumbers(baseClickPower, comboMultiplier);
 
   const registerHit = useCallback(() => {
     setComboCount(c => c + 1);
@@ -482,7 +425,7 @@ export const useGameState = () => {
 
   const upgradeHero = (heroId: string) => {
     const heroToUpgrade = snapshot.heroes.find(hero => hero.id === heroId);
-    if (!heroToUpgrade || snapshot.gold < getUpgradeCost(heroToUpgrade)) {
+    if (!heroToUpgrade || compareGameNumbers(snapshot.gold, getUpgradeCost(heroToUpgrade)) < 0) {
       return false;
     }
 
