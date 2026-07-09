@@ -33,14 +33,22 @@ npm run lint
 
 ## Поточна структура
 
+- `src/game/balance.ts` - єдине місце для economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost, summon pool, rarity colors/icons.
+- `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - локальний game state, persistence у `localStorage`, combat/reward/upgrade логіка.
 - `src/views/TheRift.tsx` - основний бойовий екран.
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - список героїв і upgrade.
 - `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
 
+## Анімаційний підхід
+
+Проєкт використовує `framer-motion`. Це не ігровий renderer, а якісна React-бібліотека для DOM/UI-анімацій: transitions, gestures, spring-анімації, появи/зникнення елементів, micro-interactions.
+
+`PixiJS` - інший клас інструмента: canvas/WebGL renderer для sprite-based 2D-ігор, сцен, камер, particle systems і великої кількості об'єктів. Для поточного Telegram idle/clicker UI `framer-motion` доречний. Якщо Rift має стати повноцінною 2D-битвою зі спрайтами, картою, projectile physics і десятками ефектів на екрані, тоді варто винести бойову сцену в `PixiJS`, а React лишити для HUD/меню.
+
 ## Примітки для розвитку
 
 - Save поки локальний, без backend і без Telegram user binding.
-- Economy поки прототипна: reward/drop/upgrade формули не винесені в баланс-конфіг.
+- Economy винесена в typed balance-конфіг, але самі формули ще прототипні й потребують плейтесту.
 - UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
