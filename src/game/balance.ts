@@ -37,7 +37,7 @@ export const GAME_BALANCE = {
   bossEveryStages: STAGE_BANDS[0].boss.everyStages,
   bossHealthMultiplier: STAGE_BANDS[0].boss.healthMultiplier,
   clickHeroPowerMultiplier: 0.1,
-  passiveFallbackPower: 1,
+  passiveProjectileThreshold: 1,
   comboBonusPerHit: 0.02,
   comboMaxBonus: 2,
   comboDecayMs: 1500,
@@ -84,7 +84,7 @@ export const getBaseClickPower = (heroes: Hero[]) => {
 };
 
 export const getPassivePower = (heroes: Hero[]) => {
-  return heroes.reduce((acc, hero) => acc + hero.power, 0) || GAME_BALANCE.passiveFallbackPower;
+  return heroes.reduce((acc, hero) => acc + hero.power, 0);
 };
 
 export const getComboMultiplier = (comboCount: number) => {

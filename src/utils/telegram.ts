@@ -17,7 +17,10 @@ interface TelegramWebApp {
   ready?: () => void;
   expand?: () => void;
   disableVerticalSwipes?: () => void;
+  isVersionAtLeast?: (version: string) => boolean;
 }
+
+let telegramInitialized = false;
 
 declare global {
   interface Window {
@@ -36,12 +39,19 @@ export const getTelegramWebApp = () => {
 };
 
 export const initializeTelegramApp = () => {
+  if (telegramInitialized) {
+    return;
+  }
+
   const webApp = getTelegramWebApp();
 
   try {
     webApp?.ready?.();
     webApp?.expand?.();
-    webApp?.disableVerticalSwipes?.();
+    if (webApp?.isVersionAtLeast?.('7.7')) {
+      webApp.disableVerticalSwipes?.();
+    }
+    telegramInitialized = true;
   } catch {
     // Telegram bridge methods can throw in non-Telegram browser previews.
   }

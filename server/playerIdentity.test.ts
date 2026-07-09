@@ -85,4 +85,14 @@ describe('Telegram player identity', () => {
 
     assert.deepEqual(result, { ok: true, playerId: 'dev:local', source: 'dev' });
   });
+
+  it('fails closed when dev identity is disabled for production', () => {
+    const result = resolvePlayerIdentityFromCredentials({
+      allowDevIdentity: false,
+      botToken: '',
+      requestedPlayerId: 'dev:spoofed',
+    });
+
+    assert.deepEqual(result, { ok: false, statusCode: 401, error: 'telegram_auth_required' });
+  });
 });

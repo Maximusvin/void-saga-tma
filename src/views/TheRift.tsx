@@ -1,12 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
 import { GAME_BALANCE, isBossStage } from '../game/balance';
 import type { GameEvent } from '../game/types';
-import { RiftPixiScene } from './RiftPixiScene';
 import './TheRift.css';
+
+const RiftPixiScene = lazy(async () => {
+  const module = await import('./RiftPixiScene');
+  return { default: module.RiftPixiScene };
+});
 
 interface TheRiftProps {
   monsterHealth: number;
@@ -66,13 +70,44 @@ export const TheRift: React.FC<TheRiftProps> = ({
 }) => {
   const [damagePops, setDamagePops] = useState<DamagePop[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
-  const [clickCounter, setClickCounter] = useState(0);
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
   const lastDefeatStageRef = useRef<number | null>(null);
+  const clickCounterRef = useRef(0);
+  const hitResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  const scheduleTimeout = useCallback((callback: () => void, delay: number) => {
+    const timeout = setTimeout(() => {
+      timeoutsRef.current.delete(timeout);
+      callback();
+    }, delay);
+    timeoutsRef.current.add(timeout);
+    return timeout;
+  }, []);
+
+  const flashHit = useCallback(() => {
+    setIsHit(true);
+    if (hitResetTimeoutRef.current) {
+      clearTimeout(hitResetTimeoutRef.current);
+      timeoutsRef.current.delete(hitResetTimeoutRef.current);
+    }
+    hitResetTimeoutRef.current = scheduleTimeout(() => {
+      hitResetTimeoutRef.current = null;
+      setIsHit(false);
+    }, GAME_BALANCE.hitFlashMs);
+  }, [scheduleTimeout]);
+
+  useEffect(() => {
+    const activeTimeouts = timeoutsRef.current;
+    return () => {
+      activeTimeouts.forEach(clearTimeout);
+      activeTimeouts.clear();
+    };
+  }, []);
 
   const sparks = useMemo(() => {
     return Array.from({ length: 18 }, (_, id) => ({
@@ -85,7 +120,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, []);
 
   useEffect(() => {
-    if (passivePower <= GAME_BALANCE.passiveFallbackPower) {
+    if (passivePower <= GAME_BALANCE.passiveProjectileThreshold) {
       return;
     }
 
@@ -103,11 +138,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
       setProjectiles(current => [...current, projectile]);
 
-      setTimeout(() => {
+      scheduleTimeout(() => {
         setProjectiles(current => current.filter(item => item.id !== projectile.id));
-        setIsHit(true);
+        flashHit();
         setImpactState(current => ({ id: current.id + 1, isCrit: false }));
-        setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
       }, GAME_BALANCE.autoProjectileTravelMs);
     }, Math.max(
       GAME_BALANCE.autoProjectileMinIntervalMs,
@@ -115,7 +149,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     ));
 
     return () => clearInterval(interval);
-  }, [passivePower]);
+  }, [flashHit, passivePower, scheduleTimeout]);
 
   const triggerDefeatTransition = (
     defeatedStage: number,
@@ -175,31 +209,29 @@ export const TheRift: React.FC<TheRiftProps> = ({
       return;
     }
 
-    const timeout = setTimeout(() => setDefeatTransition(null), defeatTransition.wasBoss ? 2100 : 1650);
-    return () => clearTimeout(timeout);
-  }, [defeatTransition]);
+    const activeTimeouts = timeoutsRef.current;
+    const timeout = scheduleTimeout(
+      () => setDefeatTransition(null),
+      defeatTransition.wasBoss ? 2100 : 1650,
+    );
+    return () => {
+      clearTimeout(timeout);
+      activeTimeouts.delete(timeout);
+    };
+  }, [defeatTransition, scheduleTimeout]);
 
-  const handleAttack = (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
-    if ('cancelable' in event && event.cancelable) {
-      event.preventDefault();
-    }
-
-    const point = 'touches' in event ? event.touches[0] : event;
+  const attackAt = (clientX: number, clientY: number) => {
     const isCrit = Math.random() < GAME_BALANCE.critChance;
     const finalDamage = isCrit ? clickPower * GAME_BALANCE.critMultiplier : clickPower;
-    const isLethalHit = monsterHealth - finalDamage <= 0;
     const nextClick = {
-      id: clickCounter,
-      x: point.clientX,
-      y: point.clientY,
+      id: clickCounterRef.current,
+      x: clientX,
+      y: clientY,
       damage: finalDamage,
       isCrit,
       driftX: (Math.random() - 0.5) * 92,
     };
-
-    if (isLethalHit) {
-      triggerDefeatTransition(stage, stage + 1, isBoss);
-    }
+    clickCounterRef.current += 1;
 
     void dealDamage(finalDamage).then(events => {
       const defeatedEvent = getMonsterDefeatedEvent(events);
@@ -209,14 +241,29 @@ export const TheRift: React.FC<TheRiftProps> = ({
     });
     registerHit();
     triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
-    setIsHit(true);
+    flashHit();
     setImpactState(current => ({ id: current.id + 1, isCrit }));
-    setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
-    setDamagePops(current => [...current, nextClick]);
-    setClickCounter(value => value + 1);
-    setTimeout(() => {
+    setDamagePops(current => [...current.slice(-23), nextClick]);
+    scheduleTimeout(() => {
       setDamagePops(current => current.filter(item => item.id !== nextClick.id));
     }, GAME_BALANCE.damageTextLifetimeMs);
+  };
+
+  const handleAttack = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    attackAt(event.clientX, event.clientY);
+  };
+
+  const handleAttackKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    attackAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
   };
 
   const healthPercent = Math.max(0, Math.min(100, (monsterHealth / monsterMaxHealth) * 100));
@@ -308,8 +355,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
           type="button"
           aria-label="Attack rift monster"
           className={`monster-button ${isHit ? 'hit' : ''}`}
-          onMouseDown={handleAttack}
-          onTouchStart={handleAttack}
+          onPointerDown={handleAttack}
+          onKeyDown={handleAttackKeyDown}
           animate={{ y: [0, -16, 0] }}
           transition={{ duration: isBoss ? 3.1 : 2.35, repeat: Infinity, ease: 'easeInOut' }}
         >
@@ -320,15 +367,17 @@ export const TheRift: React.FC<TheRiftProps> = ({
             animate={isHit ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] } : { scale: [1, 1.035, 1] }}
             transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
           >
-            <RiftPixiScene
-              defeatSignal={defeatTransition?.id ?? 0}
-              hitSignal={impactState.id}
-              isBoss={isBoss}
-              isBossDefeat={defeatTransition?.wasBoss ?? false}
-              isHit={isHit}
-              isLastHitCrit={impactState.isCrit}
-              stage={stage}
-            />
+            <Suspense fallback={<span className="rift-pixi-loading" />}>
+              <RiftPixiScene
+                defeatSignal={defeatTransition?.id ?? 0}
+                hitSignal={impactState.id}
+                isBoss={isBoss}
+                isBossDefeat={defeatTransition?.wasBoss ?? false}
+                isHit={isHit}
+                isLastHitCrit={impactState.isCrit}
+                stage={stage}
+              />
+            </Suspense>
           </motion.span>
         </motion.button>
 

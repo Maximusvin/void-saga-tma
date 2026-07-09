@@ -8,6 +8,7 @@ Telegram Mini App прототип клікер/RPG-гри: гравець б'є
 - React 19
 - TypeScript
 - Framer Motion
+- PixiJS 8
 - Lucide React
 - Canvas Confetti
 - Oxlint
@@ -76,19 +77,21 @@ npm run test:server
 
 ## Анімаційний підхід
 
-Проєкт використовує `framer-motion`. Це не ігровий renderer, а якісна React-бібліотека для DOM/UI-анімацій: transitions, gestures, spring-анімації, появи/зникнення елементів, micro-interactions.
+Проєкт використовує `framer-motion` для DOM/UI-анімацій: transitions, gestures, появи/зникнення елементів і micro-interactions.
 
-`PixiJS` - інший клас інструмента: canvas/WebGL renderer для sprite-based 2D-ігор, сцен, камер, particle systems і великої кількості об'єктів. Для поточного Telegram idle/clicker UI `framer-motion` доречний. Якщо Rift має стати повноцінною 2D-битвою зі спрайтами, картою, projectile physics і десятками ефектів на екрані, тоді варто винести бойову сцену в `PixiJS`, а React лишити для HUD/меню.
+`PixiJS` рендерить істоту Rift, hit/death particles і shockwaves через Canvas/WebGL. Він завантажується окремим lazy chunk, а один `Application` живе протягом усього бойового екрану; зміна stage перебудовує лише display tree, не WebGL-контекст. React лишається власником HUD і меню.
 
 ## Примітки для розвитку
 
 - Backend persistence має локальний SQLite scaffold, а frontend вже може працювати через backend adapter, якщо задано `VITE_GAME_API_URL`.
 - Без `VITE_GAME_API_URL` frontend лишається в автономному `localStorage` fallback для швидкого прототипування.
 - Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
-- Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback для локального прототипування.
+- Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback лише поза `NODE_ENV=production`; production працює fail-closed.
+- Frontend підключає офіційний `telegram-web-app.js` у `<head>`, використовує stable Telegram viewport і передає лише raw `initData`, який перевіряє backend.
+- Backend обмежує розмір JSON body, частоту combat actions і шкоду відповідно до фактичної сили roster; клієнт не може передати власний summon RNG.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
-- UI оптимізований під мобільний екран, але ще потребує окремої Telegram theme/viewport політики перед публічним запуском.
+- UI оптимізований під мобільний і stable Telegram viewport, але ще потребує окремої Telegram theme-політики перед публічним запуском.
 
 ## Backend API
 

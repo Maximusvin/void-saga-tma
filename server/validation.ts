@@ -42,8 +42,7 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
       !isFiniteNumber(request.action.amount) ||
       (
         request.action.source !== 'tap' &&
-        request.action.source !== 'passive' &&
-        request.action.source !== 'skill'
+        request.action.source !== 'passive'
       )
     ) {
       return null;
@@ -60,7 +59,7 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
   }
 
   if (request.action.type === 'summon') {
-    if (request.action.randomValue !== undefined && !isFiniteNumber(request.action.randomValue)) {
+    if (request.action.randomValue !== undefined) {
       return null;
     }
 
@@ -68,7 +67,6 @@ export const parseGameActionRequest = (value: unknown): { requestedPlayerId: str
       requestedPlayerId,
       action: {
         type: 'summon',
-        randomValue: request.action.randomValue,
       },
     };
   }

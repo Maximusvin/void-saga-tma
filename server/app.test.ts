@@ -79,7 +79,7 @@ describe('game API persistence', () => {
           playerId,
           action: {
             type: 'deal_damage',
-            amount: initialState.body.snapshot.monsterMaxHealth,
+            amount: 1,
             source: 'tap',
           },
         }),
@@ -88,8 +88,8 @@ describe('game API persistence', () => {
       });
 
       assert.equal(actionResult.response.status, 200);
-      assert.equal(actionResult.body.snapshot.stage, initialState.body.snapshot.stage + 1);
-      assert.equal(actionResult.body.events[0]?.type, 'monster_defeated');
+      assert.equal(actionResult.body.snapshot.monsterHealth, initialState.body.snapshot.monsterHealth - 1);
+      assert.equal(actionResult.body.events[0]?.type, 'monster_hit');
 
       const restoredState = await requestJson<PlayerStateResponse>(
         `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
@@ -97,6 +97,35 @@ describe('game API persistence', () => {
 
       assert.equal(restoredState.response.status, 200);
       assert.deepEqual(restoredState.body.snapshot, actionResult.body.snapshot);
+
+      const rejectedDamage = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          action: { type: 'deal_damage', amount: 1_000_000, source: 'tap' },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+
+      assert.equal(rejectedDamage.response.status, 200);
+      assert.equal(rejectedDamage.body.events[0]?.type, 'action_rejected');
+      assert.deepEqual(rejectedDamage.body.snapshot, restoredState.body.snapshot);
+
+      const invalidJson = await requestJson<{ error: string }>(`${baseUrl}/api/game/action`, {
+        body: '{broken',
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(invalidJson.response.status, 400);
+      assert.equal(invalidJson.body.error, 'invalid_json');
+
+      const oversizedPayload = await requestJson<{ error: string }>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({ padding: 'x'.repeat(17_000) }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(oversizedPayload.response.status, 413);
+      assert.equal(oversizedPayload.body.error, 'payload_too_large');
     } finally {
       if (serverStarted) {
         await closeServer(server);

@@ -1,13 +1,17 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
 import { GAME_BALANCE, GAME_CONTENT, SUMMON_POOL } from '../src/game/balance';
+import { getServerActionRejection } from '../src/game/actionPolicy';
 import { applyGameAction } from '../src/game/engine';
 import type { GameRepository } from './gameRepository';
-import { getRequestUrl, readJsonBody, sendJson, sendNoContent } from './http';
+import { ActionRateLimiter } from './actionRateLimiter';
+import { HttpRequestError, getRequestUrl, readJsonBody, sendJson, sendNoContent } from './http';
 import { resolvePlayerIdentity } from './playerIdentity';
 import { runPlayerMutation } from './playerLocks';
 import { parseGameActionRequest } from './validation';
 
 export const createGameRequestHandler = (gameRepository: GameRepository): RequestListener => {
+  const actionRateLimiter = new ActionRateLimiter();
+
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       if (request.method === 'OPTIONS') {
@@ -58,6 +62,17 @@ export const createGameRequestHandler = (gameRepository: GameRepository): Reques
 
         const actionResult = await runPlayerMutation(identity.playerId, () => {
           const playerState = gameRepository.getOrCreatePlayer(identity.playerId);
+          const rejectionReason = getServerActionRejection(playerState.snapshot, parsedRequest.action);
+          const rateLimitReason = rejectionReason
+            ? null
+            : actionRateLimiter.getRejection(identity.playerId, parsedRequest.action);
+          if (rejectionReason || rateLimitReason) {
+            return {
+              ...playerState,
+              events: [{ type: 'action_rejected' as const, reason: rejectionReason ?? rateLimitReason ?? 'action_rejected' }],
+            };
+          }
+
           const result = applyGameAction(playerState.snapshot, parsedRequest.action);
           const savedState = gameRepository.savePlayer(identity.playerId, result.snapshot);
 
@@ -73,6 +88,11 @@ export const createGameRequestHandler = (gameRepository: GameRepository): Reques
 
       sendJson(response, 404, { error: 'not_found' });
     } catch (error) {
+      if (error instanceof HttpRequestError) {
+        sendJson(response, error.statusCode, { error: error.code });
+        return;
+      }
+
       console.error(error);
       sendJson(response, 500, { error: 'internal_server_error' });
     }
