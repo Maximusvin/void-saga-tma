@@ -1,5 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+const MAX_JSON_BODY_BYTES = 16 * 1024;
+
+export class HttpRequestError extends Error {
+  constructor(
+    readonly statusCode: 400 | 413,
+    readonly code: 'invalid_json' | 'payload_too_large',
+  ) {
+    super(code);
+  }
+}
+
 export interface JsonRequest<TBody = unknown> {
   body: TBody;
   query: URLSearchParams;
@@ -8,9 +19,15 @@ export interface JsonRequest<TBody = unknown> {
 
 export const readJsonBody = async <TBody>(request: IncomingMessage): Promise<TBody> => {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_JSON_BODY_BYTES) {
+      throw new HttpRequestError(413, 'payload_too_large');
+    }
+    chunks.push(buffer);
   }
 
   const rawBody = Buffer.concat(chunks).toString('utf8');
@@ -18,7 +35,11 @@ export const readJsonBody = async <TBody>(request: IncomingMessage): Promise<TBo
     return undefined as TBody;
   }
 
-  return JSON.parse(rawBody) as TBody;
+  try {
+    return JSON.parse(rawBody) as TBody;
+  } catch {
+    throw new HttpRequestError(400, 'invalid_json');
+  }
 };
 
 export const sendJson = (response: ServerResponse, statusCode: number, payload: unknown) => {

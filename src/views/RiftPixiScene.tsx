@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Application, Container, Graphics } from 'pixi.js';
+import { useEffect, useRef, useState } from 'react';
+import { Application, Container, Graphics, type Ticker } from 'pixi.js';
 import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
 
 interface RiftPixiSceneProps {
@@ -137,11 +137,15 @@ const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index
 
 export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLastHitCrit, hitSignal, stage }: RiftPixiSceneProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const appRef = useRef<Application | null>(null);
   const defeatSignalRef = useRef(defeatSignal);
   const bossDefeatRef = useRef(isBossDefeat);
   const hitRef = useRef(isHit);
   const critRef = useRef(isLastHitCrit);
   const hitSignalRef = useRef(hitSignal);
+  const lastHandledDefeatSignalRef = useRef(defeatSignal);
+  const lastHandledHitSignalRef = useRef(hitSignal);
+  const [rendererReady, setRendererReady] = useState(false);
 
   useEffect(() => {
     defeatSignalRef.current = defeatSignal;
@@ -168,8 +172,6 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     let initialized = false;
     let resizeObserver: ResizeObserver | undefined;
     const app = new Application();
-    const visual = getRiftEnemyVisual(stage, isBoss);
-    const palette = visual.palette;
 
     const initialize = async () => {
       await app.init({
@@ -188,8 +190,46 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
 
       app.canvas.className = 'rift-pixi-canvas';
       host.append(app.canvas);
+      appRef.current = app;
 
-      const scene = new Container();
+      const resize = () => {
+        const bounds = host.getBoundingClientRect();
+        const width = Math.max(1, Math.floor(bounds.width));
+        const height = Math.max(1, Math.floor(bounds.height));
+
+        app.renderer.resize(width, height);
+        app.stage.position.set(width / 2, height / 2);
+      };
+
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(host);
+      resize();
+      setRendererReady(true);
+    };
+
+    void initialize();
+
+    return () => {
+      disposed = true;
+      resizeObserver?.disconnect();
+      appRef.current = null;
+
+      if (initialized) {
+        app.destroy(true, { children: true });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const app = appRef.current;
+    if (!rendererReady || !app) {
+      return;
+    }
+
+    const visual = getRiftEnemyVisual(stage, isBoss);
+    const palette = visual.palette;
+    const scene = new Container();
+
       const ringBack = new Graphics()
         .circle(0, 0, 122)
         .stroke({ color: palette.glow, width: 2, alpha: 0.18 });
@@ -263,42 +303,26 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
           speed: 0.24 + (index % 7) * 0.035,
         };
       });
-      const impacts = new Container();
-      const impactParticles: ImpactParticle[] = [];
-      const shockwaves = new Container();
-      const activeShockwaves: Shockwave[] = [];
-      let lastHandledHitSignal = hitSignalRef.current;
-      let lastHandledDefeatSignal = defeatSignalRef.current;
-      let deathEnergy = 0;
+    const impacts = new Container();
+    const impactParticles: ImpactParticle[] = [];
+    const shockwaves = new Container();
+    const activeShockwaves: Shockwave[] = [];
+    let deathEnergy = 0;
 
-      scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
-      app.stage.addChild(scene);
+    scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
+    app.stage.addChild(scene);
 
-      const resize = () => {
-        const bounds = host.getBoundingClientRect();
-        const width = Math.max(1, Math.floor(bounds.width));
-        const height = Math.max(1, Math.floor(bounds.height));
-
-        app.renderer.resize(width, height);
-        scene.x = width / 2;
-        scene.y = height / 2;
-      };
-
-      resizeObserver = new ResizeObserver(resize);
-      resizeObserver.observe(host);
-      resize();
-
-      let elapsed = stage * 0.37;
-      app.ticker.add((ticker) => {
+    let elapsed = stage * 0.37;
+    const animateScene = (ticker: Ticker) => {
         elapsed += ticker.deltaMS / 1000;
 
         const impact = hitRef.current ? 1 : 0;
-        const hasNewHit = hitSignalRef.current !== lastHandledHitSignal;
-        const hasNewDefeat = defeatSignalRef.current !== lastHandledDefeatSignal;
+        const hasNewHit = hitSignalRef.current !== lastHandledHitSignalRef.current;
+        const hasNewDefeat = defeatSignalRef.current !== lastHandledDefeatSignalRef.current;
 
         if (hasNewHit) {
           const burst = createImpactBurst(palette, critRef.current);
-          lastHandledHitSignal = hitSignalRef.current;
+          lastHandledHitSignalRef.current = hitSignalRef.current;
           impactParticles.push(...burst);
           impacts.addChild(...burst.map(particle => particle.graphic));
         }
@@ -308,7 +332,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
           const burst = createDeathBurst(palette, isBossDeath);
           const waves = Array.from({ length: isBossDeath ? 3 : 2 }, (_, index) => createShockwave(palette, isBossDeath, index));
 
-          lastHandledDefeatSignal = defeatSignalRef.current;
+          lastHandledDefeatSignalRef.current = defeatSignalRef.current;
           deathEnergy = isBossDeath ? 1.35 : 1;
           impactParticles.push(...burst);
           activeShockwaves.push(...waves);
@@ -386,20 +410,18 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         }
 
         deathEnergy = Math.max(0, deathEnergy - ticker.deltaMS / (bossDefeatRef.current ? 920 : 680));
-      });
     };
 
-    void initialize();
+    app.ticker.add(animateScene);
 
     return () => {
-      disposed = true;
-      resizeObserver?.disconnect();
-
-      if (initialized) {
-        app.destroy(true, { children: true });
+      app.ticker.remove(animateScene);
+      if (appRef.current === app) {
+        app.stage.removeChild(scene);
+        scene.destroy({ children: true });
       }
     };
-  }, [isBoss, stage]);
+  }, [isBoss, rendererReady, stage]);
 
   return <div ref={hostRef} className="rift-pixi-scene" aria-hidden="true" />;
 };

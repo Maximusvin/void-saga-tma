@@ -17,6 +17,7 @@ interface TelegramVerificationOptions {
 }
 
 interface PlayerIdentityOptions extends TelegramVerificationOptions {
+  allowDevIdentity?: boolean;
   botToken?: string;
   requestedPlayerId?: unknown;
   telegramInitData?: string | null;
@@ -137,6 +138,11 @@ export const resolvePlayerIdentityFromCredentials = (options: PlayerIdentityOpti
     }
 
     return { ok: true, playerId: verified.playerId, source: 'telegram' };
+  }
+
+  const allowDevIdentity = options.allowDevIdentity ?? process.env.NODE_ENV !== 'production';
+  if (!allowDevIdentity) {
+    return { ok: false, statusCode: 401, error: 'telegram_auth_required' };
   }
 
   const playerId = normalizePlayerId(options.requestedPlayerId);

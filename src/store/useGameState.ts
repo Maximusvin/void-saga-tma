@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
 import {
   GAME_BALANCE,
@@ -16,9 +16,10 @@ import { getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
 
-type BackendStatus = 'local' | 'loading' | 'synced' | 'error';
+export type BackendStatus = 'local' | 'loading' | 'synced' | 'error';
 
 const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
+const LOCAL_SAVE_DEBOUNCE_MS = 250;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -115,17 +116,24 @@ const getOrCreateDevPlayerId = () => {
     return telegramPlayerId;
   }
 
-  const existingPlayerId = localStorage.getItem(DEV_PLAYER_STORAGE_KEY);
-  if (existingPlayerId) {
-    return existingPlayerId;
-  }
+  try {
+    const existingPlayerId = localStorage.getItem(DEV_PLAYER_STORAGE_KEY);
+    if (existingPlayerId) {
+      return existingPlayerId;
+    }
 
-  const randomPart = typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
-  const playerId = `dev:${randomPart}`;
-  localStorage.setItem(DEV_PLAYER_STORAGE_KEY, playerId);
-  return playerId;
+    const randomPart = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+    const playerId = `dev:${randomPart}`;
+    localStorage.setItem(DEV_PLAYER_STORAGE_KEY, playerId);
+    return playerId;
+  } catch {
+    const randomPart = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+    return `dev:ephemeral:${randomPart}`;
+  }
 };
 
 const requireSnapshot = (value: unknown) => {
@@ -142,32 +150,77 @@ const getSummonedHero = (events: GameEvent[]) => {
 };
 
 export const useGameState = () => {
-  const initialSnapshot = loadLocalSnapshot();
-  const [snapshot, setSnapshot] = useState<GameSnapshot>(initialSnapshot);
+  const apiEnabled = isGameApiEnabled();
+  const [snapshot, setSnapshot] = useState<GameSnapshot>(loadLocalSnapshot);
   const [activeView, setActiveView] = useState<ActiveView>('rift');
   const [comboCount, setComboCount] = useState(0);
-  const [lastHitTime, setLastHitTime] = useState(0);
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>(isGameApiEnabled() ? 'loading' : 'local');
-  const playerIdRef = useRef(getOrCreateDevPlayerId());
-  const snapshotRef = useRef(initialSnapshot);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
+  const playerIdRef = useRef<string | null>(null);
+  const snapshotRef = useRef(snapshot);
   const actionQueueRef = useRef(Promise.resolve());
   const offlineClaimRequestedRef = useRef(false);
+  const pendingLocalSnapshotRef = useRef<GameSnapshot | null>(null);
+  const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const comboResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playerId = playerIdRef.current ?? getOrCreateDevPlayerId();
+  playerIdRef.current = playerId;
+
+  const flushLocalSnapshot = useCallback(() => {
+    if (localSaveTimeoutRef.current) {
+      clearTimeout(localSaveTimeoutRef.current);
+      localSaveTimeoutRef.current = null;
+    }
+
+    const pendingSnapshot = pendingLocalSnapshotRef.current;
+    if (!pendingSnapshot) {
+      return;
+    }
+
+    pendingLocalSnapshotRef.current = null;
+    persistLocalSnapshot(pendingSnapshot);
+  }, []);
+
+  const scheduleLocalSnapshot = useCallback((nextSnapshot: GameSnapshot) => {
+    pendingLocalSnapshotRef.current = nextSnapshot;
+    if (localSaveTimeoutRef.current) {
+      return;
+    }
+
+    localSaveTimeoutRef.current = setTimeout(flushLocalSnapshot, LOCAL_SAVE_DEBOUNCE_MS);
+  }, [flushLocalSnapshot]);
 
   const applySnapshot = useCallback((nextSnapshot: GameSnapshot) => {
     snapshotRef.current = nextSnapshot;
     setSnapshot(nextSnapshot);
-    persistLocalSnapshot(nextSnapshot);
-  }, []);
+    scheduleLocalSnapshot(nextSnapshot);
+  }, [scheduleLocalSnapshot]);
 
   useEffect(() => {
-    if (!isGameApiEnabled()) {
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        flushLocalSnapshot();
+      }
+    };
+
+    window.addEventListener('pagehide', flushLocalSnapshot);
+    document.addEventListener('visibilitychange', flushWhenHidden);
+
+    return () => {
+      window.removeEventListener('pagehide', flushLocalSnapshot);
+      document.removeEventListener('visibilitychange', flushWhenHidden);
+      flushLocalSnapshot();
+    };
+  }, [flushLocalSnapshot]);
+
+  useEffect(() => {
+    if (!apiEnabled) {
       return;
     }
 
     let isCancelled = false;
     setBackendStatus('loading');
 
-    fetchGameState(playerIdRef.current)
+    fetchGameState(playerId)
       .then(response => {
         if (isCancelled) {
           return;
@@ -186,10 +239,10 @@ export const useGameState = () => {
     return () => {
       isCancelled = true;
     };
-  }, [applySnapshot]);
+  }, [apiEnabled, applySnapshot, playerId]);
 
   const runGameAction = useCallback((action: GameAction) => {
-    if (!isGameApiEnabled()) {
+    if (!apiEnabled) {
       const result = applyGameAction(snapshotRef.current, action);
       applySnapshot(result.snapshot);
       return Promise.resolve(result.events);
@@ -198,7 +251,7 @@ export const useGameState = () => {
     const nextAction = actionQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const response = await postGameAction(playerIdRef.current, action);
+        const response = await postGameAction(playerId, action);
         applySnapshot(requireSnapshot(response.snapshot));
         setBackendStatus('synced');
         return response.events;
@@ -211,36 +264,52 @@ export const useGameState = () => {
 
     actionQueueRef.current = nextAction.then(() => undefined);
     return nextAction;
-  }, [applySnapshot]);
+  }, [apiEnabled, applySnapshot, playerId]);
 
   useEffect(() => {
-    if (!isGameApiEnabled() || backendStatus !== 'synced' || offlineClaimRequestedRef.current) {
+    if ((apiEnabled && backendStatus !== 'synced') || offlineClaimRequestedRef.current) {
       return;
     }
 
     offlineClaimRequestedRef.current = true;
     void runGameAction({ type: 'claim_offline_rewards' });
-  }, [backendStatus, runGameAction]);
+  }, [apiEnabled, backendStatus, runGameAction]);
+
+  useEffect(() => {
+    const claimAfterResume = () => {
+      if (document.visibilityState === 'visible' && offlineClaimRequestedRef.current) {
+        void runGameAction({ type: 'claim_offline_rewards' });
+      }
+    };
+
+    document.addEventListener('visibilitychange', claimAfterResume);
+    return () => document.removeEventListener('visibilitychange', claimAfterResume);
+  }, [runGameAction]);
 
   const isBoss = isBossStage(snapshot.stage);
-  const baseClickPower = getBaseClickPower(snapshot.heroes);
-  const passivePower = getPassivePower(snapshot.heroes);
+  const baseClickPower = useMemo(() => getBaseClickPower(snapshot.heroes), [snapshot.heroes]);
+  const passivePower = useMemo(() => getPassivePower(snapshot.heroes), [snapshot.heroes]);
   const comboMultiplier = getComboMultiplier(comboCount);
   const clickPower = baseClickPower * comboMultiplier;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (comboCount > 0 && Date.now() - lastHitTime > GAME_BALANCE.comboDecayMs) {
-        setComboCount(0);
-      }
-    }, GAME_BALANCE.comboDecayTickMs);
-    return () => clearInterval(interval);
-  }, [comboCount, lastHitTime]);
-
-  const registerHit = () => {
+  const registerHit = useCallback(() => {
     setComboCount(c => c + 1);
-    setLastHitTime(Date.now());
-  };
+    if (comboResetTimeoutRef.current) {
+      clearTimeout(comboResetTimeoutRef.current);
+    }
+    comboResetTimeoutRef.current = setTimeout(() => {
+      comboResetTimeoutRef.current = null;
+      setComboCount(0);
+    }, GAME_BALANCE.comboDecayMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (comboResetTimeoutRef.current) {
+        clearTimeout(comboResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const dealDamage = useCallback((amount: number, isPassive = false) => {
     return runGameAction({
@@ -252,8 +321,8 @@ export const useGameState = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (activeView === 'rift' && snapshot.heroes.length > 0) {
-        dealDamage(passivePower, true);
+      if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.heroes.length > 0) {
+        void dealDamage(passivePower, true);
       }
     }, GAME_BALANCE.passiveTickMs);
     
@@ -298,6 +367,6 @@ export const useGameState = () => {
     registerHit,
     passivePower,
     backendStatus,
-    playerId: playerIdRef.current,
+    playerId,
   };
 };

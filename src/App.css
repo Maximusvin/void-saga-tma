@@ -1,7 +1,8 @@
 .app-shell {
   position: relative;
   width: 100%;
-  min-height: 100dvh;
+  height: var(--tg-viewport-stable-height, 100dvh);
+  min-height: var(--tg-viewport-stable-height, 100dvh);
   display: flex;
   justify-content: center;
   overflow: hidden;
@@ -41,7 +42,7 @@
 .game-frame {
   position: relative;
   width: min(100%, 560px);
-  min-height: 100dvh;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));

@@ -261,6 +261,15 @@
   pointer-events: none;
 }
 
+.rift-pixi-loading {
+  width: 44%;
+  aspect-ratio: 1;
+  border: 2px solid rgba(102, 252, 241, 0.26);
+  border-top-color: rgba(255, 211, 106, 0.9);
+  border-radius: 50%;
+  animation: arena-spin 0.8s linear infinite;
+}
+
 .rift-pixi-canvas {
   display: block;
 }

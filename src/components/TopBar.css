@@ -41,6 +41,22 @@
   box-shadow: 0 0 14px var(--accent-cyan);
 }
 
+.topbar-status.loading .status-dot {
+  background: var(--gold);
+  box-shadow: 0 0 14px var(--gold);
+  animation: status-pulse 0.9s ease-in-out infinite;
+}
+
+.topbar-status.error .status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 14px var(--danger);
+}
+
+.topbar-status.local .status-dot {
+  background: rgba(197, 210, 214, 0.72);
+  box-shadow: 0 0 10px rgba(197, 210, 214, 0.45);
+}
+
 .resource-pill {
   justify-content: center;
   min-width: 88px;
@@ -68,6 +84,11 @@
   max-width: 76px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 @media (max-width: 360px) {
