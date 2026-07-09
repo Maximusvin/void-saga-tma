@@ -1,7 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_BALANCE } from './balance';
-import { applyCombatBatchAction, applyGameAction, claimOfflineRewardsAction } from './engine';
+import {
+  applyCombatBatchAction,
+  applyGameAction,
+  claimOfflineRewardsAction,
+  upgradeHeroAction,
+} from './engine';
 import { compareGameNumbers, gameNumber } from './gameNumber';
 import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameSnapshot, type Hero } from './types';
 
@@ -74,6 +79,24 @@ describe('offline rewards', () => {
     const result = applyGameAction(snapshot, { type: 'claim_offline_rewards' });
 
     assert.equal(result.events[0].type, 'offline_rewards_claimed');
+  });
+});
+
+describe('hero upgrades', () => {
+  it('charges the rarity cost and preserves fractional power growth', () => {
+    const commonHero = { ...hero(5), id: 'common', rarity: 'Common' as const };
+    const result = upgradeHeroAction(
+      createSnapshot('2026-07-09T11:59:00.000Z', [commonHero]),
+      commonHero.id,
+    );
+    const event = result.events[0];
+
+    assert.equal(event.type, 'hero_upgraded');
+    assert.equal(event.goldCost, '100');
+    assert.equal(event.level, 2);
+    assert.equal(event.power, '7.5');
+    assert.equal(result.snapshot.gold, '900');
+    assert.equal(result.snapshot.heroes[0]?.power, '7.5');
   });
 });
 

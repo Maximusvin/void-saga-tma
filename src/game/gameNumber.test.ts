@@ -4,6 +4,7 @@ import { getMonsterMaxHealth } from './balance';
 import {
   addGameNumbers,
   compareGameNumbers,
+  divideGameNumbers,
   formatGameNumber,
   gameNumber,
   multiplyGameNumbers,
@@ -15,6 +16,8 @@ describe('game number arithmetic', () => {
     assert.equal(addGameNumbers(0.1, 0.2), '0.3');
     assert.equal(addGameNumbers('1002.5', '0.1'), '1002.6');
     assert.equal(multiplyGameNumbers('1e800', '1e200'), '1e+1000');
+    assert.equal(divideGameNumbers('1e1000', '2e200'), '5e+799');
+    assert.throws(() => divideGameNumbers(1, 0), /divisor must be positive/);
   });
 
   it('keeps stage 10,000 health finite and deterministic', () => {

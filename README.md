@@ -64,11 +64,20 @@ Server тести:
 npm run test:server
 ```
 
+Детермінована перевірка economy від сцени 1 до 10 000:
+
+```bash
+npm run balance:simulate
+```
+
+Припущення, сценарії та committed розрахункові таблиці описані в [`docs/balance/README.md`](docs/balance/README.md).
+
 ## Поточна структура
 
 - `server/` - Node API з versioned SQLite migrations, player snapshots та bounded idempotency ledger.
 - `src/game/content.ts` - versioned content seed: heroes, summon pool, rarity metadata, stage bands і boss rules.
 - `src/game/balance.ts` - формули economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost і helper exports для UI.
+- `src/game/balanceSimulator.ts` - відтворювана TTK/ROI/economy симуляція та CSV-звіти до stage 10 000.
 - `src/game/engine.ts` - чисті action-розрахунки для бою, summon і upgrade.
 - `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - React state adapter: backend API source of truth через `VITE_GAME_API_URL` або `localStorage` fallback без API.
