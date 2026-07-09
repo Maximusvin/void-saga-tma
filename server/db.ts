@@ -4,12 +4,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 const DEFAULT_DB_PATH = 'data/void-saga.sqlite';
 
-export const getDatabasePath = () => {
-  return resolve(process.env.VOID_SAGA_DB_PATH ?? DEFAULT_DB_PATH);
+export const getDatabasePath = (configuredPath = process.env.VOID_SAGA_DB_PATH) => {
+  return resolve(configuredPath ?? DEFAULT_DB_PATH);
 };
 
-export const openDatabase = () => {
-  const databasePath = getDatabasePath();
+export const openDatabase = (configuredPath?: string) => {
+  const databasePath = getDatabasePath(configuredPath);
   mkdirSync(dirname(databasePath), { recursive: true });
 
   const database = new DatabaseSync(databasePath);
