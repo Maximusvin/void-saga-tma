@@ -2,6 +2,7 @@ import {
   GAME_BALANCE,
   getMonsterMaxHealth,
   getNextHeroPower,
+  getStageBandForStage,
   getUpgradeCost,
   isBossStage,
   rollSummonTemplate,
@@ -74,11 +75,12 @@ export const applyDamageAction = (
   const defeatedStage = snapshot.stage;
   const nextStage = defeatedStage + 1;
   const nextMonsterMaxHealth = getMonsterMaxHealth(nextStage);
+  const defeatedStageBand = getStageBandForStage(defeatedStage);
   const defeatedBoss = isBossStage(defeatedStage);
   const goldReward = defeatedBoss
-    ? snapshot.monsterMaxHealth * GAME_BALANCE.bossGoldMultiplier
+    ? snapshot.monsterMaxHealth * defeatedStageBand.boss.goldMultiplier
     : snapshot.monsterMaxHealth * GAME_BALANCE.killGoldMultiplier;
-  const gemReward = defeatedBoss ? GAME_BALANCE.bossGemReward : 0;
+  const gemReward = defeatedBoss ? defeatedStageBand.boss.gemReward : 0;
 
   const updatedSnapshot = touchSnapshot({
     ...snapshot,

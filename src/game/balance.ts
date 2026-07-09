@@ -1,14 +1,41 @@
+import {
+  BOSS_EMOJI,
+  GAME_CONTENT,
+  GAME_CONTENT_VERSION,
+  HERO_RARITIES,
+  MONSTER_EMOJIS,
+  RARITY_COLORS,
+  RARITY_GRADIENTS,
+  RARITY_ORDER,
+  STAGE_BANDS,
+  SUMMON_POOL,
+  getStageBandForStage,
+} from './content';
 import type { Hero, HeroRarity, SummonHeroTemplate } from './types';
+
+export {
+  BOSS_EMOJI,
+  GAME_CONTENT,
+  GAME_CONTENT_VERSION,
+  HERO_RARITIES,
+  MONSTER_EMOJIS,
+  RARITY_COLORS,
+  RARITY_GRADIENTS,
+  RARITY_ORDER,
+  STAGE_BANDS,
+  SUMMON_POOL,
+  getStageBandForStage,
+};
 
 export const GAME_BALANCE = {
   storageKey: 'rift_heroes_save',
   initialGold: 1000,
   initialGems: 50,
   initialStage: 1,
-  baseMonsterHealth: 100,
-  monsterHealthGrowth: 1.2,
-  bossEveryStages: 5,
-  bossHealthMultiplier: 5,
+  baseMonsterHealth: STAGE_BANDS[0].baseMonsterHealth,
+  monsterHealthGrowth: STAGE_BANDS[0].monsterHealthGrowth,
+  bossEveryStages: STAGE_BANDS[0].boss.everyStages,
+  bossHealthMultiplier: STAGE_BANDS[0].boss.healthMultiplier,
   clickHeroPowerMultiplier: 0.1,
   passiveFallbackPower: 1,
   comboBonusPerHit: 0.02,
@@ -16,8 +43,8 @@ export const GAME_BALANCE = {
   comboDecayMs: 1500,
   comboDecayTickMs: 500,
   killGoldMultiplier: 0.5,
-  bossGoldMultiplier: 2,
-  bossGemReward: 2,
+  bossGoldMultiplier: STAGE_BANDS[0].boss.goldMultiplier,
+  bossGemReward: STAGE_BANDS[0].boss.gemReward,
   clickGoldMultiplier: 0.5,
   passiveTickMs: 1000,
   summonCostGems: 10,
@@ -35,47 +62,18 @@ export const GAME_BALANCE = {
   autoProjectileTravelMs: 400,
 } as const;
 
-export const HERO_RARITIES: HeroRarity[] = ['Common', 'Rare', 'Epic', 'Legendary'];
-
-export const SUMMON_POOL: SummonHeroTemplate[] = [
-  { name: 'Void Grunt', rarity: 'Common', power: 5, dropRate: 0.4, icon: '🛡️' },
-  { name: 'Void Mage', rarity: 'Rare', power: 10, dropRate: 0.3, icon: '⚔️' },
-  { name: 'Void Knight', rarity: 'Epic', power: 20, dropRate: 0.2, icon: '🔮' },
-  { name: 'Void Lord', rarity: 'Legendary', power: 50, dropRate: 0.1, icon: '👑' },
-];
-
-export const RARITY_ORDER: Record<HeroRarity, number> = {
-  Legendary: 4,
-  Epic: 3,
-  Rare: 2,
-  Common: 1,
+export const isBossStage = (stage: number) => {
+  const stageBand = getStageBandForStage(stage);
+  return stage % stageBand.boss.everyStages === 0;
 };
-
-export const RARITY_COLORS: Record<HeroRarity, string> = {
-  Common: '#a0a0a0',
-  Rare: '#3498db',
-  Epic: '#ff00ff',
-  Legendary: '#ffd700',
-};
-
-export const RARITY_GRADIENTS: Record<HeroRarity, string> = {
-  Common: 'linear-gradient(135deg, rgba(160,160,160,0.1), rgba(160,160,160,0))',
-  Rare: 'linear-gradient(135deg, rgba(52,152,219,0.2), rgba(52,152,219,0))',
-  Epic: 'linear-gradient(135deg, rgba(255,0,255,0.2), rgba(255,0,255,0))',
-  Legendary: 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.05))',
-};
-
-export const MONSTER_EMOJIS = ['👾', '👻', '💀', '👽', '👿', '🧌', '🕷️', '🦂', '🦇'] as const;
-export const BOSS_EMOJI = '👹';
-
-export const isBossStage = (stage: number) => stage % GAME_BALANCE.bossEveryStages === 0;
 
 export const getMonsterMaxHealth = (stage: number) => {
+  const stageBand = getStageBandForStage(stage);
   const scaledHealth = Math.floor(
-    GAME_BALANCE.baseMonsterHealth * Math.pow(GAME_BALANCE.monsterHealthGrowth, stage - 1),
+    stageBand.baseMonsterHealth * Math.pow(stageBand.monsterHealthGrowth, stage - 1),
   );
 
-  return scaledHealth * (isBossStage(stage) ? GAME_BALANCE.bossHealthMultiplier : 1);
+  return scaledHealth * (isBossStage(stage) ? stageBand.boss.healthMultiplier : 1);
 };
 
 export const getBaseClickPower = (heroes: Hero[]) => {
