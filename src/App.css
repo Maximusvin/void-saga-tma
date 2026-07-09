@@ -1,0 +1,88 @@
+.app-shell {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(6, 12, 24, 0.15), rgba(7, 9, 16, 0.9)),
+    url('/rift-backdrop.svg') center / cover no-repeat;
+  background-repeat: no-repeat;
+}
+
+.app-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(92, 255, 237, 0.16), transparent 38%),
+    linear-gradient(112deg, transparent 0 34%, rgba(102, 252, 241, 0.08) 48%, transparent 62%),
+    linear-gradient(68deg, transparent 0 22%, rgba(171, 92, 255, 0.08) 44%, transparent 68%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  mask-image: linear-gradient(to bottom, transparent, black 14%, black 70%, transparent);
+  animation: drift-light 12s ease-in-out infinite;
+}
+
+.app-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(80, 255, 235, 0.24), transparent 24%),
+    linear-gradient(180deg, transparent 0%, rgba(2, 4, 10, 0.4) 58%, rgba(2, 4, 10, 0.92) 100%);
+  pointer-events: none;
+}
+
+.game-frame {
+  position: relative;
+  width: min(100%, 560px);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+}
+
+.view-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.scene-fog {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  width: min(760px, 150vw);
+  height: 220px;
+  transform: translateX(-50%);
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 60%, rgba(89, 255, 234, 0.2), transparent 56%),
+    linear-gradient(90deg, transparent, rgba(164, 108, 255, 0.14), transparent);
+  filter: blur(10px);
+  opacity: 0.8;
+  animation: breathe-fog 7s ease-in-out infinite;
+}
+
+@keyframes drift-light {
+  0%, 100% { opacity: 0.7; transform: translate3d(-1.5%, 0, 0) scale(1); }
+  50% { opacity: 1; transform: translate3d(1.5%, -1%, 0) scale(1.04); }
+}
+
+@keyframes breathe-fog {
+  0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.62; }
+  50% { transform: translateX(-50%) scaleX(1.08); opacity: 0.9; }
+}

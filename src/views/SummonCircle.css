@@ -1,0 +1,56 @@
+.summon-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.summon-view::before {
+  content: '';
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  width: min(430px, 96vw);
+  height: min(430px, 96vw);
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background:
+    conic-gradient(from 180deg, transparent, rgba(102, 252, 241, 0.16), transparent, rgba(142, 101, 255, 0.2), transparent),
+    radial-gradient(circle, rgba(255, 255, 255, 0.12), rgba(102, 252, 241, 0.08) 34%, transparent 66%);
+  filter: blur(1px);
+  opacity: 0.82;
+  pointer-events: none;
+  animation: summon-aura 16s linear infinite;
+}
+
+.summon-heading {
+  position: relative;
+  z-index: 2;
+  margin: 12px 0 26px;
+  text-align: center;
+}
+
+.summon-heading h2 {
+  margin: 0;
+  font-size: clamp(2.15rem, 11vw, 3.2rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summon-heading p {
+  max-width: 310px;
+  margin-top: 4px;
+  color: rgba(228, 246, 248, 0.72);
+  font-size: 0.86rem;
+  font-style: italic;
+}
+
+.summon-rates {
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes summon-aura {
+  from { transform: translateX(-50%) rotate(0deg); }
+  to { transform: translateX(-50%) rotate(360deg); }
+}

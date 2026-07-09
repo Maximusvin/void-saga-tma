@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#12192f"/>
+      <stop offset="0.42" stop-color="#162032"/>
+      <stop offset="0.72" stop-color="#0c1020"/>
+      <stop offset="1" stop-color="#050711"/>
+    </linearGradient>
+    <radialGradient id="rift" cx="50%" cy="40%" r="42%">
+      <stop offset="0" stop-color="#c7fff8" stop-opacity=".85"/>
+      <stop offset=".13" stop-color="#42f8e9" stop-opacity=".55"/>
+      <stop offset=".36" stop-color="#734eff" stop-opacity=".24"/>
+      <stop offset=".68" stop-color="#030712" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#030712" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cliff" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#1a2632"/>
+      <stop offset=".55" stop-color="#0f1721"/>
+      <stop offset="1" stop-color="#050812"/>
+    </linearGradient>
+    <linearGradient id="crystal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#bffdf6"/>
+      <stop offset=".42" stop-color="#20ead7"/>
+      <stop offset="1" stop-color="#6c4dff"/>
+    </linearGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="1600" fill="url(#sky)"/>
+  <rect width="900" height="1600" fill="url(#rift)" filter="url(#softGlow)"/>
+
+  <path d="M0 525 C120 456 235 486 326 417 C420 346 548 350 650 420 C736 480 818 470 900 430 L900 1600 L0 1600 Z" fill="#0a1120" opacity=".55"/>
+  <path d="M0 655 C132 585 230 620 360 548 C465 490 588 528 700 592 C780 636 846 616 900 580 L900 1600 L0 1600 Z" fill="#08101d" opacity=".72"/>
+
+  <path d="M0 934 L132 786 L230 1020 L318 860 L420 1130 L520 812 L620 1016 L732 818 L900 956 L900 1600 L0 1600 Z" fill="url(#cliff)" opacity=".98"/>
+  <path d="M0 1136 C120 1050 214 1068 320 1134 C442 1210 548 1198 660 1118 C754 1050 824 1062 900 1102 L900 1600 L0 1600 Z" fill="#050812"/>
+  <path d="M90 1218 C220 1160 332 1200 450 1160 C580 1116 712 1168 826 1210 L900 1600 L0 1600 Z" fill="#02050b" opacity=".82"/>
+
+  <g opacity=".85" filter="url(#softGlow)">
+    <polygon points="94,1084 132,930 166,1084" fill="url(#crystal)"/>
+    <polygon points="742,1128 786,956 824,1128" fill="url(#crystal)" opacity=".85"/>
+    <polygon points="650,1280 680,1166 710,1280" fill="url(#crystal)" opacity=".65"/>
+    <polygon points="220,1296 250,1188 280,1296" fill="url(#crystal)" opacity=".62"/>
+  </g>
+
+  <g fill="#dffdfa" opacity=".5">
+    <circle cx="120" cy="182" r="2.4"/>
+    <circle cx="214" cy="318" r="1.7"/>
+    <circle cx="710" cy="260" r="2.2"/>
+    <circle cx="780" cy="412" r="1.6"/>
+    <circle cx="458" cy="238" r="1.8"/>
+    <circle cx="556" cy="150" r="1.4"/>
+    <circle cx="360" cy="520" r="1.6"/>
+    <circle cx="824" cy="700" r="1.8"/>
+    <circle cx="72" cy="720" r="1.5"/>
+  </g>
+</svg>

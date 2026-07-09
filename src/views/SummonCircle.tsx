@@ -11,6 +11,7 @@ import {
   getSummonDropPercent,
 } from '../game/balance';
 import type { Hero } from '../game/types';
+import './SummonCircle.css';
 
 interface SummonCircleProps {
   gems: number;
@@ -68,7 +69,7 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
 
   return (
     <motion.div 
-      className="view-container"
+      className="view-container summon-view"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -79,15 +80,15 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
         justifyContent: 'flex-start',
         height: '100%',
         flex: 1,
-        padding: '20px',
+        padding: '18px 16px 12px',
         overflowY: 'auto'
       }}
     >
-      <div style={{ textAlign: 'center', marginBottom: '30px', marginTop: '20px' }}>
-        <h2 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>
+      <div className="summon-heading">
+        <h2 className="text-gradient">
           Void Summon
         </h2>
-        <p style={{ color: 'var(--text-main)', fontSize: '0.9rem', marginTop: '5px', fontStyle: 'italic' }}>
+        <p>
           Awaken the legendary heroes of the rift
         </p>
       </div>
@@ -166,7 +167,7 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
       </div>
 
       {/* Drop Rates Info */}
-      <div className="glass-panel" style={{ 
+      <div className="glass-panel summon-rates" style={{
         width: '100%', maxWidth: '320px', padding: '15px', borderRadius: '15px', 
         marginBottom: '30px', display: 'flex', justifyContent: 'space-between',
         fontSize: '0.8rem', fontWeight: 'bold'

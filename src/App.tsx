@@ -8,6 +8,7 @@ import { SummonCircle } from './views/SummonCircle';
 import { HeroesRoster } from './views/HeroesRoster';
 import { initializeTelegramApp } from './utils/telegram';
 import { useEffect } from 'react';
+import './App.css';
 
 function App() {
   useEffect(() => {
@@ -17,10 +18,12 @@ function App() {
   const gameState = useGameState();
 
   return (
-    <>
+    <main className="app-shell">
+      <div className="scene-fog" />
+      <div className="game-frame">
       <TopBar gold={gameState.gold} gems={gameState.gems} />
       
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div className="view-stage">
         <AnimatePresence mode="wait">
           {gameState.activeView === 'rift' && (
             <TheRift 
@@ -56,7 +59,8 @@ function App() {
       </div>
 
       <BottomNav activeView={gameState.activeView} setActiveView={gameState.setActiveView} />
-    </>
+      </div>
+    </main>
   );
 }
 

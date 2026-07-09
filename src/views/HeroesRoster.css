@@ -1,0 +1,48 @@
+.roster-view {
+  color: var(--text-light);
+}
+
+.roster-header {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 0 12px;
+  background: linear-gradient(180deg, rgba(5, 8, 17, 0.82), rgba(5, 8, 17, 0));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.roster-header span {
+  color: rgba(225, 247, 248, 0.62);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.roster-header h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 8vw, 2.45rem);
+  line-height: 1;
+  font-weight: 900;
+  text-align: center;
+}
+
+.roster-empty {
+  width: min(360px, 92%);
+  margin: 46px auto 0;
+  padding: 26px;
+  border-radius: 12px;
+  text-align: center;
+  color: rgba(229, 244, 246, 0.76);
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
+  gap: 12px;
+  padding: 14px 0 26px;
+}

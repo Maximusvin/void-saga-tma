@@ -11,6 +11,7 @@ import {
   getUpgradeCost,
 } from '../game/balance';
 import type { Hero } from '../game/types';
+import './HeroesRoster.css';
 
 interface HeroesRosterProps {
   heroes: Hero[];
@@ -42,7 +43,7 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
 
   return (
     <motion.div 
-      className="view-container"
+      className="view-container roster-view"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -51,21 +52,22 @@ export const HeroesRoster: React.FC<HeroesRosterProps> = ({ heroes, upgradeHero,
         flexDirection: 'column',
         height: '100%',
         flex: 1,
-        padding: '0 16px',
+        padding: '2px 4px 12px',
         overflowY: 'auto',
         overflowX: 'hidden'
       }}
     >
-      <div style={{ position: 'sticky', top: 0, background: 'var(--bg-color)', zIndex: 10, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        <h2 className="text-gradient" style={{ fontSize: '1.8rem', textAlign: 'center', margin: 0 }}>Your Heroes ({heroes.length})</h2>
+      <div className="roster-header">
+        <span>Warband</span>
+        <h2 className="text-gradient">Your Heroes ({heroes.length})</h2>
       </div>
       
       {sortedHeroes.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '30px', textAlign: 'center', marginTop: '40px' }}>
-          <p>No heroes yet. Go to the Summoning Portal!</p>
+        <div className="glass-panel roster-empty">
+          <p>The warband is waiting for its first riftbound hero.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', padding: '16px 0 30px 0' }}>
+        <div className="roster-grid">
           <AnimatePresence>
             {sortedHeroes.map((hero) => {
               const upgradeCost = getUpgradeCost(hero);
