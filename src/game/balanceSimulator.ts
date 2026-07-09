@@ -1,11 +1,16 @@
 import {
   GAME_BALANCE,
+  SUMMON_POOL,
+  getAscensionShardCost,
   getBaseClickPower,
   getMonsterMaxHealth,
+  getDuplicateShardReward,
+  getHeroLevelCap,
   getNextHeroPower,
   getPassivePower,
   getStageBandForStage,
   getUpgradeCost,
+  isHeroAtLevelCap,
   isBossStage,
 } from './balance';
 import {
@@ -23,38 +28,53 @@ import {
 import type { Hero, HeroRarity } from './types';
 
 export interface SimulationHeroSeed {
+  ascension?: number;
   id: string;
   name: string;
   power: GameNumberInput;
   rarity: HeroRarity;
+  shards?: number;
+  templateId: string;
 }
 
 export interface BalanceSimulationConfig {
+  allowNewHeroesFromSummons: boolean;
+  automaticSummons: boolean;
   checkpointStages: readonly number[];
   endStage: number;
   heroes: readonly SimulationHeroSeed[];
   id: string;
+  initialGems: number;
   initialGold: GameNumberInput;
+  initialSummonsConsumed: number;
   maxUpgradesPerStage: number;
   normalTargetTtkSeconds: number;
   bossTargetTtkSeconds: number;
   sustainedComboMultiplier: number;
+  summonSequence: readonly string[];
   tapsPerSecond: number;
 }
 
 export interface BalanceSimulationRow {
+  ascensionsPurchased: number;
   blockedByGold: boolean;
+  blockedByProgression: boolean;
   cumulativeSeconds: GameNumber;
   goldAfter: GameNumber;
   goldBefore: GameNumber;
+  gemsAfter: number;
   isBoss: boolean;
   monsterHealth: GameNumber;
   stage: number;
   stageReward: GameNumber;
+  summonsPurchased: number;
   tapDps: GameNumber;
   teamPower: GameNumber;
   totalDps: GameNumber;
+  totalAscensions: number;
+  totalSummons: number;
   totalUpgrades: number;
+  targetMissed: boolean;
   ttkSeconds: GameNumber;
   upgradeSpend: GameNumber;
   upgradesPurchased: number;
@@ -64,12 +84,20 @@ export interface BalanceSimulationSummary {
   blockedStages: number;
   finalGold: GameNumber;
   finalHeroes: Array<{
+    ascension: number;
     id: string;
     level: number;
+    levelCap: number;
     power: GameNumber;
+    shards: number;
   }>;
+  finalGems: number;
   finalTeamPower: GameNumber;
+  goldBlockedStages: number;
+  progressionBlockedStages: number;
   totalSeconds: GameNumber;
+  totalAscensions: number;
+  totalSummons: number;
   totalUpgrades: number;
   worstBossStage: number;
   worstBossTtkSeconds: GameNumber;
@@ -98,39 +126,66 @@ export const BASELINE_CHECKPOINT_STAGES = [
   10_000,
 ] as const;
 
+export const DETERMINISTIC_SUMMON_SEQUENCE = [
+  'void-grunt',
+  'void-mage',
+  'void-knight',
+  'void-grunt',
+  'void-lord',
+  'void-mage',
+  'void-grunt',
+  'void-knight',
+  'void-mage',
+  'void-grunt',
+] as const;
+
 export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
+  allowNewHeroesFromSummons: true,
+  automaticSummons: true,
   checkpointStages: BASELINE_CHECKPOINT_STAGES,
   endStage: 10_000,
   heroes: [
-    { id: 'common-a', name: 'Common A', power: 5, rarity: 'Common' },
-    { id: 'common-b', name: 'Common B', power: 5, rarity: 'Common' },
-    { id: 'rare', name: 'Rare', power: 10, rarity: 'Rare' },
-    { id: 'epic', name: 'Epic', power: 20, rarity: 'Epic' },
-    { id: 'legendary', name: 'Legendary', power: 50, rarity: 'Legendary' },
+    { id: 'void-grunt', name: 'Void Grunt', power: 5, rarity: 'Common', shards: 1, templateId: 'void-grunt' },
+    { id: 'void-mage', name: 'Void Mage', power: 10, rarity: 'Rare', templateId: 'void-mage' },
+    { id: 'void-knight', name: 'Void Knight', power: 20, rarity: 'Epic', templateId: 'void-knight' },
+    { id: 'void-lord', name: 'Void Lord', power: 50, rarity: 'Legendary', templateId: 'void-lord' },
   ],
   id: 'baseline-five-summons',
+  initialGems: 0,
   initialGold: GAME_BALANCE.initialGold,
-  maxUpgradesPerStage: 50,
+  initialSummonsConsumed: 5,
+  maxUpgradesPerStage: 250,
   normalTargetTtkSeconds: 10,
   bossTargetTtkSeconds: 30,
   sustainedComboMultiplier: 1,
+  summonSequence: DETERMINISTIC_SUMMON_SEQUENCE,
   tapsPerSecond: 4,
 };
 
 export const FIVE_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
   ...BASELINE_BALANCE_SIMULATION,
-  heroes: Array.from({ length: 5 }, (_, index) => ({
-    id: `common-${index + 1}`,
-    name: `Common ${index + 1}`,
+  heroes: [{
+    id: 'void-grunt',
+    name: 'Void Grunt',
     power: 5,
-    rarity: 'Common' as const,
-  })),
-  id: 'five-common',
+    rarity: 'Common',
+    shards: 4,
+    templateId: 'void-grunt',
+  }],
+  id: 'unlucky-common-start',
 };
 
 export const SOLO_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
   ...BASELINE_BALANCE_SIMULATION,
-  heroes: [{ id: 'common', name: 'Common', power: 5, rarity: 'Common' }],
+  allowNewHeroesFromSummons: false,
+  heroes: [{
+    id: 'void-grunt',
+    name: 'Void Grunt',
+    power: 5,
+    rarity: 'Common',
+    shards: 4,
+    templateId: 'void-grunt',
+  }],
   id: 'solo-common',
 };
 
@@ -172,17 +227,28 @@ const normalizePositiveNumber = (value: number, label: string) => {
   return value;
 };
 
+const normalizeNonNegativeInteger = (value: number, label: string) => {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative safe integer`);
+  }
+
+  return value;
+};
+
 const createSimulationHeroes = (seeds: readonly SimulationHeroSeed[]): Hero[] => {
   if (seeds.length === 0) {
     throw new RangeError('Balance simulation requires at least one hero');
   }
 
   return seeds.map(seed => ({
+    ascension: seed.ascension ?? 0,
     id: seed.id,
     level: 1,
     name: seed.name,
     power: gameNumber(seed.power),
     rarity: seed.rarity,
+    shards: seed.shards ?? 0,
+    templateId: seed.templateId,
   }));
 };
 
@@ -213,6 +279,10 @@ const getBestUpgradeCandidate = (heroes: readonly Hero[], gold: GameNumber): Upg
   let bestCandidate: UpgradeCandidate | null = null;
 
   heroes.forEach((hero, heroIndex) => {
+    if (isHeroAtLevelCap(hero)) {
+      return;
+    }
+
     const cost = getUpgradeCost(hero);
     if (compareGameNumbers(gold, cost) < 0) {
       return;
@@ -241,6 +311,63 @@ const getBestUpgradeCandidate = (heroes: readonly Hero[], gold: GameNumber): Upg
   });
 
   return bestCandidate;
+};
+
+const getReadyAscensionHeroIndex = (heroes: readonly Hero[]) => {
+  let candidateIndex: number | null = null;
+
+  heroes.forEach((hero, heroIndex) => {
+    if (!isHeroAtLevelCap(hero) || hero.shards < getAscensionShardCost(hero)) {
+      return;
+    }
+
+    const currentCandidate = candidateIndex === null ? null : heroes[candidateIndex];
+    if (
+      !currentCandidate ||
+      hero.ascension < currentCandidate.ascension ||
+      (hero.ascension === currentCandidate.ascension && hero.id.localeCompare(currentCandidate.id) < 0)
+    ) {
+      candidateIndex = heroIndex;
+    }
+  });
+
+  return candidateIndex;
+};
+
+const applySimulationSummon = (
+  heroes: Hero[],
+  templateId: string,
+  allowNewHeroes: boolean,
+) => {
+  const template = SUMMON_POOL.find(entry => entry.id === templateId);
+  if (!template) {
+    throw new RangeError(`No summon template configured for ${templateId}`);
+  }
+
+  const existingIndex = heroes.findIndex(hero => hero.templateId === template.id);
+  if (existingIndex >= 0) {
+    const hero = heroes[existingIndex];
+    heroes[existingIndex] = {
+      ...hero,
+      shards: hero.shards + getDuplicateShardReward(hero.rarity),
+    };
+    return;
+  }
+
+  if (!allowNewHeroes) {
+    return;
+  }
+
+  heroes.push({
+    ascension: 0,
+    id: template.id,
+    level: 1,
+    name: template.name,
+    power: gameNumber(template.power),
+    rarity: template.rarity,
+    shards: 0,
+    templateId: template.id,
+  });
 };
 
 const getStageReward = (
@@ -277,10 +404,18 @@ export const runBalanceSimulation = (
   normalizePositiveNumber(config.bossTargetTtkSeconds, 'bossTargetTtkSeconds');
   normalizePositiveNumber(config.tapsPerSecond, 'tapsPerSecond');
   normalizePositiveNumber(config.sustainedComboMultiplier, 'sustainedComboMultiplier');
+  normalizeNonNegativeInteger(config.initialGems, 'initialGems');
+  normalizeNonNegativeInteger(config.initialSummonsConsumed, 'initialSummonsConsumed');
+  if (config.summonSequence.length === 0) {
+    throw new RangeError('summonSequence must contain at least one rarity');
+  }
 
   const heroes = createSimulationHeroes(config.heroes);
   let gold = gameNumber(config.initialGold);
+  let gems = config.initialGems;
   let cumulativeSeconds = ZERO_GAME_NUMBER;
+  let totalAscensions = 0;
+  let totalSummons = 0;
   let totalUpgrades = 0;
   const rows: BalanceSimulationRow[] = [];
 
@@ -289,6 +424,7 @@ export const runBalanceSimulation = (
     const goldBefore = gold;
     const targetTtk = isBossStage(stage) ? config.bossTargetTtkSeconds : config.normalTargetTtkSeconds;
     let projection = projectCombat(heroes, monsterHealth, config);
+    let ascensionsPurchased = 0;
     let upgradesPurchased = 0;
     let upgradeSpend = ZERO_GAME_NUMBER;
 
@@ -298,7 +434,20 @@ export const runBalanceSimulation = (
     ) {
       const candidate = getBestUpgradeCandidate(heroes, gold);
       if (!candidate) {
-        break;
+        const ascensionHeroIndex = getReadyAscensionHeroIndex(heroes);
+        if (ascensionHeroIndex === null) {
+          break;
+        }
+
+        const hero = heroes[ascensionHeroIndex];
+        heroes[ascensionHeroIndex] = {
+          ...hero,
+          ascension: hero.ascension + 1,
+          shards: hero.shards - getAscensionShardCost(hero),
+        };
+        ascensionsPurchased += 1;
+        totalAscensions += 1;
+        continue;
       }
 
       const hero = heroes[candidate.heroIndex];
@@ -314,25 +463,54 @@ export const runBalanceSimulation = (
       projection = projectCombat(heroes, monsterHealth, config);
     }
 
-    const blockedByGold = compareGameNumbers(projection.ttkSeconds, targetTtk) > 0 &&
-      getBestUpgradeCandidate(heroes, gold) === null;
+    const targetMissed = compareGameNumbers(projection.ttkSeconds, targetTtk) > 0;
+    const hasUncappedHero = heroes.some(hero => !isHeroAtLevelCap(hero));
+    const hasAffordableUpgrade = getBestUpgradeCandidate(heroes, gold) !== null;
+    const hasReadyAscension = getReadyAscensionHeroIndex(heroes) !== null;
+    const blockedByGold = targetMissed && hasUncappedHero && !hasAffordableUpgrade;
+    const blockedByProgression = targetMissed && !hasUncappedHero && !hasReadyAscension;
     const stageReward = getStageReward(stage, monsterHealth, projection.tapDps, projection.totalDps);
     gold = addGameNumbers(gold, stageReward);
+    if (isBossStage(stage)) {
+      gems += getStageBandForStage(stage).boss.gemReward;
+    }
+
+    let summonsPurchased = 0;
+    while (config.automaticSummons && gems >= GAME_BALANCE.summonCostGems) {
+      const sequenceIndex = (
+        config.initialSummonsConsumed + totalSummons
+      ) % config.summonSequence.length;
+      applySimulationSummon(
+        heroes,
+        config.summonSequence[sequenceIndex],
+        config.allowNewHeroesFromSummons,
+      );
+      gems -= GAME_BALANCE.summonCostGems;
+      summonsPurchased += 1;
+      totalSummons += 1;
+    }
     cumulativeSeconds = addGameNumbers(cumulativeSeconds, projection.ttkSeconds);
 
     rows.push({
+      ascensionsPurchased,
       blockedByGold,
+      blockedByProgression,
       cumulativeSeconds,
+      gemsAfter: gems,
       goldAfter: gold,
       goldBefore,
       isBoss: isBossStage(stage),
       monsterHealth,
       stage,
       stageReward,
+      summonsPurchased,
       tapDps: projection.tapDps,
       teamPower: projection.teamPower,
       totalDps: projection.totalDps,
+      totalAscensions,
+      totalSummons,
       totalUpgrades,
+      targetMissed,
       ttkSeconds: projection.ttkSeconds,
       upgradeSpend,
       upgradesPurchased,
@@ -347,13 +525,25 @@ export const runBalanceSimulation = (
     config,
     rows,
     summary: {
-      blockedStages: rows.filter(row => row.blockedByGold).length,
+      blockedStages: rows.filter(row => row.targetMissed).length,
       finalGold: finalRow.goldAfter,
       finalHeroes: heroes
-        .map(hero => ({ id: hero.id, level: hero.level, power: hero.power }))
+        .map(hero => ({
+          ascension: hero.ascension,
+          id: hero.id,
+          level: hero.level,
+          levelCap: getHeroLevelCap(hero),
+          power: hero.power,
+          shards: hero.shards,
+        }))
         .sort((left, right) => left.id.localeCompare(right.id)),
+      finalGems: finalRow.gemsAfter,
       finalTeamPower: finalRow.teamPower,
+      goldBlockedStages: rows.filter(row => row.blockedByGold).length,
+      progressionBlockedStages: rows.filter(row => row.blockedByProgression).length,
       totalSeconds: finalRow.cumulativeSeconds,
+      totalAscensions,
+      totalSummons,
       totalUpgrades,
       worstBossStage: worstBoss?.stage ?? 0,
       worstBossTtkSeconds: worstBoss?.ttkSeconds ?? ZERO_GAME_NUMBER,
@@ -384,7 +574,14 @@ export const renderBalanceSimulationCsv = (
       'upgrade_spend',
       'stage_reward',
       'gold_after',
+      'gems_after',
+      'summons',
+      'total_summons',
+      'ascensions',
+      'total_ascensions',
       'blocked_by_gold',
+      'blocked_by_progression',
+      'target_missed',
     ].join(','),
   ];
 
@@ -406,7 +603,14 @@ export const renderBalanceSimulationCsv = (
       row.upgradeSpend,
       row.stageReward,
       row.goldAfter,
+      row.gemsAfter,
+      row.summonsPurchased,
+      row.totalSummons,
+      row.ascensionsPurchased,
+      row.totalAscensions,
       row.blockedByGold,
+      row.blockedByProgression,
+      row.targetMissed,
     ].map(csvValue).join(','));
   }
 
@@ -418,6 +622,10 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
     'scenario',
     'hero_count',
     'blocked_stages',
+    'gold_blocked_stages',
+    'progression_blocked_stages',
+    'total_summons',
+    'total_ascensions',
     'total_upgrades',
     'total_seconds',
     'final_team_power',
@@ -431,8 +639,12 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
   for (const { config, summary } of results) {
     lines.push([
       config.id,
-      config.heroes.length,
+      summary.finalHeroes.length,
       summary.blockedStages,
+      summary.goldBlockedStages,
+      summary.progressionBlockedStages,
+      summary.totalSummons,
+      summary.totalAscensions,
       summary.totalUpgrades,
       summary.totalSeconds,
       summary.finalTeamPower,
@@ -453,10 +665,16 @@ export const formatBalanceSimulationSummary = (result: BalanceSimulationResult) 
     `Scenario: ${result.config.id}`,
     `Stages: 1-${result.config.endStage}`,
     `Blocked stages: ${summary.blockedStages}`,
+    `Gold-blocked stages: ${summary.goldBlockedStages}`,
+    `Progression-blocked stages: ${summary.progressionBlockedStages}`,
+    `Total summons: ${summary.totalSummons}`,
+    `Total ascensions: ${summary.totalAscensions}`,
     `Total upgrades: ${summary.totalUpgrades}`,
     `Worst normal TTK: ${formatGameNumber(summary.worstNormalTtkSeconds)}s at stage ${summary.worstNormalStage}`,
     `Worst boss TTK: ${formatGameNumber(summary.worstBossTtkSeconds)}s at stage ${summary.worstBossStage}`,
-    `Final hero levels: ${summary.finalHeroes.map(hero => `${hero.id}=${hero.level}`).join(', ')}`,
+    `Final heroes: ${summary.finalHeroes.map(hero => (
+      `${hero.id}=L${hero.level}/A${hero.ascension} (${hero.shards} shards)`
+    )).join(', ')}`,
     `Final team power: ${formatGameNumber(summary.finalTeamPower)}`,
     `Final gold: ${formatGameNumber(summary.finalGold)}`,
     `Total modeled combat time: ${formatGameNumber(summary.totalSeconds)}s`,

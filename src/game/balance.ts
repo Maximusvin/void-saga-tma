@@ -60,6 +60,15 @@ export const GAME_BALANCE = {
   summonCostGems: 10,
   summonChargeMs: 1500,
   summonRevealMs: 1500,
+  ascensionBaseLevelCap: 50,
+  ascensionLevelsPerRank: 50,
+  ascensionShardCost: 2,
+  duplicateShardsByRarity: {
+    Common: 1,
+    Rare: 2,
+    Epic: 3,
+    Legendary: 5,
+  },
   upgradeBaseGold: 100,
   upgradeCostGrowth: 1.5,
   upgradeRarityCostMultiplier: {
@@ -127,6 +136,23 @@ export const getUpgradeCost = (hero: Pick<Hero, 'level' | 'rarity'>) => {
     GAME_BALANCE.upgradeRarityCostMultiplier[hero.rarity],
     powGameNumber(GAME_BALANCE.upgradeCostGrowth, Math.max(0, hero.level - 1)),
   ));
+};
+
+export const getHeroLevelCap = (hero: Pick<Hero, 'ascension'>) => {
+  return GAME_BALANCE.ascensionBaseLevelCap +
+    Math.max(0, Math.floor(hero.ascension)) * GAME_BALANCE.ascensionLevelsPerRank;
+};
+
+export const getAscensionShardCost = (_hero: Pick<Hero, 'ascension'>) => {
+  return GAME_BALANCE.ascensionShardCost;
+};
+
+export const getDuplicateShardReward = (rarity: HeroRarity) => {
+  return GAME_BALANCE.duplicateShardsByRarity[rarity];
+};
+
+export const isHeroAtLevelCap = (hero: Pick<Hero, 'ascension' | 'level'>) => {
+  return hero.level >= getHeroLevelCap(hero);
 };
 
 export const getNextHeroPower = (hero: Pick<Hero, 'power'>) => {

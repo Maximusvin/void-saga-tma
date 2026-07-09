@@ -4,7 +4,9 @@ import { GAME_BALANCE } from './balance';
 import {
   applyCombatBatchAction,
   applyGameAction,
+  ascendHeroAction,
   claimOfflineRewardsAction,
+  summonHeroAction,
   upgradeHeroAction,
 } from './engine';
 import { compareGameNumbers, gameNumber } from './gameNumber';
@@ -13,11 +15,14 @@ import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameSnapshot, type Hero } from './ty
 const NOW_MS = Date.parse('2026-07-09T12:00:00.000Z');
 
 const hero = (power: number): Hero => ({
+  ascension: 0,
   id: `hero-${power}`,
   name: `Hero ${power}`,
   rarity: 'Rare',
   level: 1,
   power: gameNumber(power),
+  shards: 0,
+  templateId: `legacy:hero-${power}`,
 });
 
 const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot => ({
@@ -97,6 +102,72 @@ describe('hero upgrades', () => {
     assert.equal(event.power, '7.5');
     assert.equal(result.snapshot.gold, '900');
     assert.equal(result.snapshot.heroes[0]?.power, '7.5');
+  });
+
+  it('rejects upgrades at the ascension level cap', () => {
+    const cappedHero = { ...hero(100), level: 50 };
+    const snapshot = createSnapshot('2026-07-09T11:59:00.000Z', [cappedHero]);
+    const result = upgradeHeroAction(snapshot, cappedHero.id);
+
+    assert.deepEqual(result.events, [{ type: 'action_rejected', reason: 'level_cap_reached' }]);
+    assert.equal(result.snapshot, snapshot);
+  });
+
+  it('spends shards to ascend and unlock the next level band', () => {
+    const cappedHero = { ...hero(100), level: 50, shards: 2 };
+    const ascended = ascendHeroAction(
+      createSnapshot('2026-07-09T11:59:00.000Z', [cappedHero]),
+      cappedHero.id,
+    );
+    const event = ascended.events[0];
+
+    assert.equal(event.type, 'hero_ascended');
+    assert.equal(event.ascension, 1);
+    assert.equal(event.levelCap, 100);
+    assert.equal(event.shardsSpent, 2);
+    assert.equal(ascended.snapshot.heroes[0]?.shards, 0);
+    const fundedSnapshot = { ...ascended.snapshot, gold: gameNumber('1e20') };
+    assert.equal(upgradeHeroAction(fundedSnapshot, cappedHero.id).events[0]?.type, 'hero_upgraded');
+  });
+
+  it('rejects premature or underfunded ascension attempts', () => {
+    const prematureHero = { ...hero(100), level: 49, shards: 2 };
+    const underfundedHero = { ...hero(100), level: 50, shards: 1 };
+
+    assert.deepEqual(
+      ascendHeroAction(
+        createSnapshot('2026-07-09T11:59:00.000Z', [prematureHero]),
+        prematureHero.id,
+      ).events,
+      [{ type: 'action_rejected', reason: 'level_cap_not_reached' }],
+    );
+    assert.deepEqual(
+      ascendHeroAction(
+        createSnapshot('2026-07-09T11:59:00.000Z', [underfundedHero]),
+        underfundedHero.id,
+      ).events,
+      [{ type: 'action_rejected', reason: 'not_enough_shards' }],
+    );
+  });
+});
+
+describe('hero summons', () => {
+  it('unlocks one hero per template and converts duplicates into shards', () => {
+    const initial = createSnapshot('2026-07-09T11:59:00.000Z');
+    const unlocked = summonHeroAction(initial, 0);
+    const duplicate = summonHeroAction(unlocked.snapshot, 0);
+    const unlockEvent = unlocked.events[0];
+    const duplicateEvent = duplicate.events[0];
+
+    assert.equal(unlockEvent.type, 'hero_summoned');
+    assert.equal(unlockEvent.isDuplicate, false);
+    assert.equal(unlocked.snapshot.heroes[0]?.templateId, 'void-grunt');
+    assert.equal(duplicateEvent.type, 'hero_summoned');
+    assert.equal(duplicateEvent.isDuplicate, true);
+    assert.equal(duplicateEvent.shardsGranted, 1);
+    assert.equal(duplicate.snapshot.heroes.length, 1);
+    assert.equal(duplicate.snapshot.heroes[0]?.shards, 1);
+    assert.equal(duplicate.snapshot.gems, 30);
   });
 });
 

@@ -10,18 +10,19 @@ import {
   getHeroIcon,
   getSummonDropPercent,
 } from '../game/balance';
-import type { Hero } from '../game/types';
+import type { GameEvent, Hero } from '../game/types';
 import { formatNumber } from '../utils/formatNumber';
 import './SummonCircle.css';
 
 interface SummonCircleProps {
   gems: number;
-  summonHero: () => Promise<Hero | null>;
+  summonHero: () => Promise<Extract<GameEvent, { type: 'hero_summoned' }> | null>;
 }
 
 export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) => {
   const [isSummoning, setIsSummoning] = useState(false);
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
+  const [duplicateShards, setDuplicateShards] = useState(0);
   const [showSilhouette, setShowSilhouette] = useState(false);
 
   const handleSummon = () => {
@@ -32,19 +33,22 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
 
     setIsSummoning(true);
     setSummonedHero(null);
+    setDuplicateShards(0);
     setShowSilhouette(false);
     
     triggerHaptic('medium');
 
     setTimeout(() => {
-      void summonHero().then(newHero => {
-        if (!newHero) {
+      void summonHero().then(result => {
+        if (!result) {
           triggerHapticNotification('error');
           setIsSummoning(false);
           return;
         }
 
+        const newHero = result.hero;
         setSummonedHero(newHero);
+        setDuplicateShards(result.isDuplicate ? result.shardsGranted : 0);
         setIsSummoning(false);
         setShowSilhouette(true);
         triggerHaptic('heavy');
@@ -268,12 +272,14 @@ export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) 
                 color: RARITY_COLORS[summonedHero.rarity], 
                 marginBottom: '5px', fontSize: '2rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '2px', position: 'relative', zIndex: 1
               }}>
-                {summonedHero.rarity}!
+                {duplicateShards > 0 ? 'DUPLICATE!' : `${summonedHero.rarity}!`}
               </h3>
               <p style={{ fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '15px', position: 'relative', zIndex: 1 }}>{summonedHero.name}</p>
               
               <div style={{ background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '12px', marginBottom: '30px', position: 'relative', zIndex: 1 }}>
-                <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>⚡ Power: {formatNumber(summonedHero.power)}</p>
+                {duplicateShards > 0
+                  ? <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>+{duplicateShards} ascension shards</p>
+                  : <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>⚡ Power: {formatNumber(summonedHero.power)}</p>}
               </div>
 
               <motion.button 

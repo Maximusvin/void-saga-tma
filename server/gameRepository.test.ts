@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import { applyCombatBatchAction, applyDamageAction } from '../src/game/engine';
+import { GAME_SNAPSHOT_SCHEMA_VERSION } from '../src/game/types';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
 
@@ -140,10 +141,13 @@ describe('game repository persistence', () => {
         'SELECT snapshot_json FROM players WHERE id = ?',
       ).get('dev:legacy-numbers') as { snapshot_json: string }).snapshot_json) as Record<string, unknown>;
 
-      assert.equal(migrated.snapshot.schemaVersion, 2);
+      assert.equal(migrated.snapshot.schemaVersion, GAME_SNAPSHOT_SCHEMA_VERSION);
       assert.equal(migrated.snapshot.gold, '1002.6');
       assert.equal(migrated.snapshot.heroes[0]?.power, '10');
-      assert.equal(storedSnapshot.schemaVersion, 2);
+      assert.equal(migrated.snapshot.heroes[0]?.ascension, 0);
+      assert.equal(migrated.snapshot.heroes[0]?.shards, 0);
+      assert.equal(migrated.snapshot.heroes[0]?.templateId, 'legacy:legacy');
+      assert.equal(storedSnapshot.schemaVersion, GAME_SNAPSHOT_SCHEMA_VERSION);
       assert.equal(storedSnapshot.gold, '1002.6');
       assert.equal(replay.replayed, true);
       assert.equal(replay.result.events[0]?.type, 'monster_hit');
