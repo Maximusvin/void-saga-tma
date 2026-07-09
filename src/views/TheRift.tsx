@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
@@ -36,6 +36,13 @@ interface Projectile {
   rotate: number;
 }
 
+interface DefeatTransition {
+  id: number;
+  defeatedStage: number;
+  nextStage: number;
+  wasBoss: boolean;
+}
+
 export const TheRift: React.FC<TheRiftProps> = ({
   monsterHealth,
   monsterMaxHealth,
@@ -53,6 +60,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [clickCounter, setClickCounter] = useState(0);
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
+  const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const previousStageRef = useRef(stage);
+  const previousBossRef = useRef(isBoss);
+  const lastDefeatStageRef = useRef<number | null>(null);
 
   const sparks = useMemo(() => {
     return Array.from({ length: 18 }, (_, id) => ({
@@ -97,6 +108,37 @@ export const TheRift: React.FC<TheRiftProps> = ({
     return () => clearInterval(interval);
   }, [passivePower]);
 
+  const triggerDefeatTransition = (defeatedStage: number, nextStage: number, wasBoss: boolean) => {
+    lastDefeatStageRef.current = defeatedStage;
+    setDefeatTransition(current => ({
+      id: (current?.id ?? 0) + 1,
+      defeatedStage,
+      nextStage,
+      wasBoss,
+    }));
+  };
+
+  useEffect(() => {
+    const previousStage = previousStageRef.current;
+    const previousWasBoss = previousBossRef.current;
+
+    if (stage > previousStage && lastDefeatStageRef.current !== previousStage) {
+      triggerDefeatTransition(previousStage, stage, previousWasBoss);
+    }
+
+    previousStageRef.current = stage;
+    previousBossRef.current = isBoss;
+  }, [isBoss, stage]);
+
+  useEffect(() => {
+    if (!defeatTransition) {
+      return;
+    }
+
+    const timeout = setTimeout(() => setDefeatTransition(null), defeatTransition.wasBoss ? 1500 : 1050);
+    return () => clearTimeout(timeout);
+  }, [defeatTransition]);
+
   const handleAttack = (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
     if ('cancelable' in event && event.cancelable) {
       event.preventDefault();
@@ -105,6 +147,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     const point = 'touches' in event ? event.touches[0] : event;
     const isCrit = Math.random() < GAME_BALANCE.critChance;
     const finalDamage = isCrit ? clickPower * GAME_BALANCE.critMultiplier : clickPower;
+    const isLethalHit = monsterHealth - finalDamage <= 0;
     const nextClick = {
       id: clickCounter,
       x: point.clientX,
@@ -113,6 +156,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
       isCrit,
       driftX: (Math.random() - 0.5) * 92,
     };
+
+    if (isLethalHit) {
+      triggerDefeatTransition(stage, stage + 1, isBoss);
+    }
 
     dealDamage(finalDamage);
     registerHit();
@@ -229,14 +276,32 @@ export const TheRift: React.FC<TheRiftProps> = ({
             transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
           >
             <RiftPixiScene
+              defeatSignal={defeatTransition?.id ?? 0}
               hitSignal={impactState.id}
               isBoss={isBoss}
+              isBossDefeat={defeatTransition?.wasBoss ?? false}
               isHit={isHit}
               isLastHitCrit={impactState.isCrit}
               stage={stage}
             />
           </motion.span>
         </motion.button>
+
+        <AnimatePresence>
+          {defeatTransition && (
+            <motion.div
+              key={defeatTransition.id}
+              className={`rift-clear-banner ${defeatTransition.wasBoss ? 'boss' : 'normal'}`}
+              initial={{ opacity: 0, x: '-50%', y: 20, scale: 0.86 }}
+              animate={{ opacity: 1, x: '-50%', y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: '-50%', y: -22, scale: 0.94 }}
+              transition={{ duration: 0.26, ease: 'easeOut' }}
+            >
+              <span>{defeatTransition.wasBoss ? 'Boss Rift Cleared' : 'Rift Cleared'}</span>
+              <strong>Stage {defeatTransition.nextStage}</strong>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <footer className="rift-footer">
