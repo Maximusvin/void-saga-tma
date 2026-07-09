@@ -4,6 +4,7 @@ import { Activity, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
 import { GAME_BALANCE } from '../game/balance';
+import { RiftPixiScene } from './RiftPixiScene';
 import './TheRift.css';
 
 interface TheRiftProps {
@@ -220,23 +221,11 @@ export const TheRift: React.FC<TheRiftProps> = ({
           <span className="monster-ring outer" />
           <span className="monster-ring inner" />
           <motion.span
-            className="rift-beast"
+            className="rift-beast-shell"
             animate={isHit ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] } : { scale: [1, 1.035, 1] }}
             transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
           >
-            <span className="beast-shadow" />
-            <span className="beast-wing left" />
-            <span className="beast-wing right" />
-            <span className="beast-body">
-              <span className="beast-core" />
-              <span className="beast-eye left" />
-              <span className="beast-eye right" />
-              <span className="beast-mouth" />
-            </span>
-            <span className="beast-horn left" />
-            <span className="beast-horn right" />
-            <span className="beast-claw left" />
-            <span className="beast-claw right" />
+            <RiftPixiScene isBoss={isBoss} isHit={isHit} stage={stage} />
           </motion.span>
         </motion.button>
       </div>

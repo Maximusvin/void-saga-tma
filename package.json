@@ -16,6 +16,7 @@
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
+    "pixi.js": "^8.19.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
