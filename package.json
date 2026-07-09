@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && npm run server:check && vite build",
+    "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
     "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/game/**/*.test.ts",
     "preview": "vite preview",
+    "prod:compose:check": "node scripts/assert-production-compose.mjs",
     "server:check": "tsc -p tsconfig.server.json",
+    "server:bundle": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/index.mjs",
     "server:dev": "tsx server/index.ts"
   },
   "dependencies": {
@@ -27,6 +29,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "esbuild": "^0.28.1",
     "oxlint": "^1.71.0",
     "tsx": "^4.23.0",
     "typescript": "~6.0.2",

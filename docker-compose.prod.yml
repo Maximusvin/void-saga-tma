@@ -1,0 +1,94 @@
+name: void_saga_prod
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      VOID_SAGA_DB_PATH: /data/void-saga.sqlite
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}
+    volumes:
+      - game_data:/data
+    expose:
+      - "8787"
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${VOID_SAGA_PROXY_NETWORK:-coolify}
+      - traefik.http.middlewares.void-saga-redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.routers.void-saga-api-http.entryPoints=http
+      - traefik.http.routers.void-saga-api-http.rule=Host(`${VOID_SAGA_HOST:-game.riy.contact}`) && PathPrefix(`/api`)
+      - traefik.http.routers.void-saga-api-http.priority=100
+      - traefik.http.routers.void-saga-api-http.middlewares=void-saga-redirect-to-https
+      - traefik.http.routers.void-saga-api-http.service=void-saga-api
+      - traefik.http.routers.void-saga-api-https.entryPoints=https
+      - traefik.http.routers.void-saga-api-https.rule=Host(`${VOID_SAGA_HOST:-game.riy.contact}`) && PathPrefix(`/api`)
+      - traefik.http.routers.void-saga-api-https.priority=100
+      - traefik.http.routers.void-saga-api-https.tls=true
+      - traefik.http.routers.void-saga-api-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.void-saga-api-https.service=void-saga-api
+      - traefik.http.services.void-saga-api.loadbalancer.server.port=8787
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_GAME_API_URL: https://${VOID_SAGA_HOST:-game.riy.contact}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8080"
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${VOID_SAGA_PROXY_NETWORK:-coolify}
+      - traefik.http.middlewares.void-saga-gzip.compress=true
+      - traefik.http.middlewares.void-saga-web-redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.routers.void-saga-web-http.entryPoints=http
+      - traefik.http.routers.void-saga-web-http.rule=Host(`${VOID_SAGA_HOST:-game.riy.contact}`)
+      - traefik.http.routers.void-saga-web-http.priority=1
+      - traefik.http.routers.void-saga-web-http.middlewares=void-saga-web-redirect-to-https
+      - traefik.http.routers.void-saga-web-http.service=void-saga-web
+      - traefik.http.routers.void-saga-web-https.entryPoints=https
+      - traefik.http.routers.void-saga-web-https.rule=Host(`${VOID_SAGA_HOST:-game.riy.contact}`)
+      - traefik.http.routers.void-saga-web-https.priority=1
+      - traefik.http.routers.void-saga-web-https.middlewares=void-saga-gzip
+      - traefik.http.routers.void-saga-web-https.tls=true
+      - traefik.http.routers.void-saga-web-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.void-saga-web-https.service=void-saga-web
+      - traefik.http.services.void-saga-web.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  game_data:
+
+networks:
+  proxy:
+    external: true
+    name: ${VOID_SAGA_PROXY_NETWORK:-coolify}

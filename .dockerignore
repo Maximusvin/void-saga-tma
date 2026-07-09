@@ -1,0 +1,10 @@
+.git
+.github
+.codex
+.claude
+node_modules
+dist
+dist-server
+data
+*.log
+*.local
