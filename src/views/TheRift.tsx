@@ -52,6 +52,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [clickCounter, setClickCounter] = useState(0);
   const [isHit, setIsHit] = useState(false);
+  const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
 
   const sparks = useMemo(() => {
     return Array.from({ length: 18 }, (_, id) => ({
@@ -85,6 +86,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
       setTimeout(() => {
         setProjectiles(current => current.filter(item => item.id !== projectile.id));
         setIsHit(true);
+        setImpactState(current => ({ id: current.id + 1, isCrit: false }));
         setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
       }, GAME_BALANCE.autoProjectileTravelMs);
     }, Math.max(
@@ -116,6 +118,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     registerHit();
     triggerHaptic(isCrit ? 'heavy' : (isBoss ? 'medium' : 'light'));
     setIsHit(true);
+    setImpactState(current => ({ id: current.id + 1, isCrit }));
     setTimeout(() => setIsHit(false), GAME_BALANCE.hitFlashMs);
     setDamagePops(current => [...current, nextClick]);
     setClickCounter(value => value + 1);
@@ -225,7 +228,13 @@ export const TheRift: React.FC<TheRiftProps> = ({
             animate={isHit ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] } : { scale: [1, 1.035, 1] }}
             transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
           >
-            <RiftPixiScene isBoss={isBoss} isHit={isHit} stage={stage} />
+            <RiftPixiScene
+              hitSignal={impactState.id}
+              isBoss={isBoss}
+              isHit={isHit}
+              isLastHitCrit={impactState.isCrit}
+              stage={stage}
+            />
           </motion.span>
         </motion.button>
       </div>
