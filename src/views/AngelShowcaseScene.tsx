@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Application, Assets, Container, Graphics, Sprite, Texture, type Ticker } from 'pixi.js';
+import { Application, Assets, Container, Graphics, MeshPlane, Sprite, Texture, type Ticker } from 'pixi.js';
 import { getAngelShowcaseBudget, getAngelShowcaseFrame } from '../game/angelShowcase';
 import type { HeroShowcaseSpec } from '../game/types';
 import { getGameRenderProfile } from '../utils/renderQuality';
+import {
+  ANGEL_BODY_MESH_VERTICES_X,
+  ANGEL_BODY_MESH_VERTICES_Y,
+  ANGEL_HEAD_PIVOT_X,
+  ANGEL_HEAD_PIVOT_Y,
+  deformAngelBodyMesh,
+} from './angelLivingMesh';
 
 interface AngelShowcaseSceneProps {
   onError: () => void;
@@ -86,6 +93,38 @@ const buildCore = () => {
 
   core.addChild(glow, ring, light);
   return core;
+};
+
+const buildEyelid = (
+  x: number,
+  y: number,
+  radiusX: number,
+  radiusY: number,
+  rotation: number,
+) => {
+  const eyelid = new Graphics()
+    .ellipse(0, 0, radiusX, radiusY)
+    .fill({ color: 0xd7c8bd, alpha: 0.97 })
+    .moveTo(-radiusX, 0)
+    .quadraticCurveTo(0, radiusY * 0.86, radiusX, -0.2)
+    .stroke({ color: 0x7f6257, width: 1.5, alpha: 0.82 })
+    .moveTo(-radiusX * 0.72, -1.1)
+    .quadraticCurveTo(0, -radiusY * 0.72, radiusX * 0.74, -0.8)
+    .stroke({ color: 0xf0dfcf, width: 0.8, alpha: 0.45 });
+
+  eyelid.position.set(x, y);
+  eyelid.rotation = rotation;
+  return eyelid;
+};
+
+const buildEyelids = () => {
+  const eyelids = new Container();
+  eyelids.addChild(
+    buildEyelid(242.5, 144, 11.6, 4, -0.04),
+    buildEyelid(296, 143.5, 10.2, 3.8, 0.055),
+  );
+  eyelids.alpha = 0;
+  return eyelids;
 };
 
 const createLightMotes = (count: number) => Array.from({ length: count }, (_, index): LightMote => {
@@ -215,31 +254,44 @@ export function AngelShowcaseScene({
         const celestialField = new Container();
         const heroRig = new Container();
         const wingLayer = new Container();
-        const bodyLayer = new Container();
+        const bodyMotionLayer = new Container();
+        const bodyArtLayer = new Container();
         const foregroundLight = new Container();
         const halo = buildHalo();
         const floorSigil = buildFloorSigil();
         const core = buildCore();
+        const eyelids = buildEyelids();
         const leftWingSprite = new Sprite(textures.leftWing);
         const rightWingSprite = new Sprite(textures.rightWing);
-        const bodySprite = new Sprite(textures.body);
+        const bodyMesh = new MeshPlane({
+          texture: textures.body,
+          verticesX: ANGEL_BODY_MESH_VERTICES_X,
+          verticesY: ANGEL_BODY_MESH_VERTICES_Y,
+        });
+        const bodyPositionBuffer = bodyMesh.geometry.getAttribute('aPosition').buffer;
+        if (!(bodyPositionBuffer.data instanceof Float32Array)) {
+          throw new Error('Angel body mesh position buffer is not a Float32Array.');
+        }
+        const bodyPositions = bodyPositionBuffer.data;
+        const baseBodyPositions = new Float32Array(bodyPositions);
         const lightMotes = createLightMotes(budget.particleCount);
 
         leftWingSprite.anchor.set(0.86, 0.78);
         rightWingSprite.anchor.set(0.14, 0.78);
-        bodySprite.anchor.set(0.5, 1);
         leftWingSprite.blendMode = 'normal';
         rightWingSprite.blendMode = 'normal';
-        bodySprite.blendMode = 'normal';
+        bodyMesh.blendMode = 'normal';
         core.blendMode = 'add';
         halo.blendMode = 'add';
         floorSigil.blendMode = 'add';
 
         celestialField.addChild(halo, floorSigil, ...lightMotes.map(mote => mote.sprite));
         wingLayer.addChild(leftWingSprite, rightWingSprite);
-        bodyLayer.addChild(bodySprite);
+        bodyArtLayer.pivot.set(textures.body.width / 2, textures.body.height);
+        bodyArtLayer.addChild(bodyMesh, eyelids);
+        bodyMotionLayer.addChild(bodyArtLayer);
         foregroundLight.addChild(core);
-        heroRig.addChild(wingLayer, bodyLayer, foregroundLight);
+        heroRig.addChild(wingLayer, bodyMotionLayer, foregroundLight);
         scene.addChild(celestialField, heroRig);
         app.stage.addChild(scene);
 
@@ -262,7 +314,7 @@ export function AngelShowcaseScene({
           app.renderer.resize(width, height);
           scene.position.set(width / 2, 0);
           heroRig.position.set(0, groundY);
-          bodySprite.scale.set(bodyScale);
+          bodyArtLayer.scale.set(bodyScale);
           leftWingSprite.scale.set(leftWingScale);
           rightWingSprite.scale.set(rightWingScale);
           leftWingSprite.position.set(-shoulderOffset, shoulderY - groundY);
@@ -282,6 +334,9 @@ export function AngelShowcaseScene({
 
         let elapsedSeconds = 0;
         let surgeEnergy = 0;
+        let blinkCount = 0;
+        let eyeState = 'open';
+        let wasBlinkClosed = false;
         let lastHandledSurgeSignal = surgeSignalRef.current;
         const animateScene = (ticker: Ticker) => {
           const deltaSeconds = Math.min(0.05, ticker.deltaMS / 1000);
@@ -294,8 +349,28 @@ export function AngelShowcaseScene({
           surgeEnergy = Math.max(0, surgeEnergy - deltaSeconds * 0.92);
 
           const frame = getAngelShowcaseFrame(elapsedSeconds, surgeEnergy, reduceMotion);
-          bodyLayer.y = frame.bodyLift;
-          bodyLayer.scale.set(frame.bodyScaleX, frame.bodyScaleY);
+          bodyMotionLayer.y = frame.bodyLift;
+          bodyMotionLayer.scale.set(frame.bodyScaleX, frame.bodyScaleY);
+          if (!reduceMotion) {
+            deformAngelBodyMesh({
+              basePositions: baseBodyPositions,
+              frame,
+              height: textures.body.height,
+              positions: bodyPositions,
+              width: textures.body.width,
+            });
+            bodyPositionBuffer.update();
+          }
+          eyelids.alpha = 1 - frame.eyeOpenness;
+          eyelids.pivot.set(
+            textures.body.width * ANGEL_HEAD_PIVOT_X,
+            textures.body.height * ANGEL_HEAD_PIVOT_Y,
+          );
+          eyelids.position.set(
+            textures.body.width * ANGEL_HEAD_PIVOT_X + frame.headOffsetX,
+            textures.body.height * ANGEL_HEAD_PIVOT_Y + frame.headOffsetY,
+          );
+          eyelids.rotation = frame.headRotation;
           wingLayer.y = frame.bodyLift * 0.58;
           leftWingSprite.rotation = -frame.wingRotation;
           rightWingSprite.rotation = frame.wingRotation;
@@ -305,6 +380,22 @@ export function AngelShowcaseScene({
           core.scale.set(coreBaseScale * frame.coreScale);
           core.alpha = 0.72 + surgeEnergy * 0.28;
           floorSigil.alpha = 0.5 + Math.sin(elapsedSeconds * 1.3) * 0.12 + surgeEnergy * 0.28;
+
+          const nextEyeState = frame.eyeOpenness < 0.08
+            ? 'closed'
+            : frame.eyeOpenness < 0.92
+              ? 'moving'
+              : 'open';
+          if (nextEyeState !== eyeState) {
+            eyeState = nextEyeState;
+            host.dataset.eyeState = eyeState;
+          }
+          const blinkClosed = nextEyeState === 'closed';
+          if (blinkClosed && !wasBlinkClosed) {
+            blinkCount += 1;
+            host.dataset.blinkCount = String(blinkCount);
+          }
+          wasBlinkClosed = blinkClosed;
 
           for (const mote of lightMotes) {
             const travel = (elapsedSeconds * mote.speed * frame.particleSpeed + mote.phase) % 1;
@@ -327,6 +418,10 @@ export function AngelShowcaseScene({
         app.start();
         sceneBuildCount += 1;
         host.dataset.sceneBuildCount = String(sceneBuildCount);
+        host.dataset.blinkCount = '0';
+        host.dataset.eyeState = 'open';
+        host.dataset.livingIdle = reduceMotion ? 'reduced' : 'active';
+        host.dataset.meshVertexCount = String(bodyPositions.length / 2);
         host.dataset.particleCount = String(budget.particleCount);
         host.dataset.tickerMaxFps = String(budget.maxFps);
         host.dataset.renderResolution = String(app.renderer.resolution);
