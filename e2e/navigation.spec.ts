@@ -27,11 +27,125 @@ test('requests Telegram fullscreen and configures immersive host colors when sup
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__telegramBridgeCalls'))).toEqual([
     'ready',
     'expand',
-    'header:#0b2729',
+    'header:#071315',
     'background:#071315',
     'bottom:#071315',
     'fullscreen',
   ]);
+});
+
+test('keeps interactive HUD controls inside dynamic Telegram safe areas', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    const handlers: Record<string, () => void> = {};
+    const webApp = {
+      contentSafeAreaInset: { bottom: 0, left: 0, right: 0, top: 28 },
+      isFullscreen: true,
+      isVersionAtLeast: () => true,
+      onEvent: (eventType: string, handler: () => void) => {
+        handlers[eventType] = handler;
+      },
+      ready: () => undefined,
+      safeAreaInset: { bottom: 34, left: 8, right: 12, top: 28 },
+      setBackgroundColor: () => undefined,
+      setBottomBarColor: () => undefined,
+      setHeaderColor: () => undefined,
+      viewportStableHeight: 844,
+    };
+    Reflect.set(window, '__telegramSafeAreaHandlers', handlers);
+    window.Telegram = { WebApp: webApp };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  const initialLayout = await page.evaluate(() => {
+    const topbar = document.querySelector('.topbar')!.getBoundingClientRect();
+    const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+    const navigationButtons = [...document.querySelectorAll('.bottom-nav .nav-btn')]
+      .map(button => button.getBoundingClientRect());
+    const rootStyle = document.documentElement.style;
+    return {
+      buttonBottom: Math.max(...navigationButtons.map(button => button.bottom)),
+      navigationBottom: navigation.bottom,
+      runtimeBottom: rootStyle.getPropertyValue('--app-runtime-safe-area-inset-bottom'),
+      runtimeTop: rootStyle.getPropertyValue('--app-runtime-content-safe-area-inset-top'),
+      topbarLeft: topbar.left,
+      topbarRight: topbar.right,
+      topbarTop: topbar.top,
+    };
+  });
+
+  expect(initialLayout.runtimeTop).toBe('76px');
+  expect(initialLayout.runtimeBottom).toBe('34px');
+  expect(initialLayout.topbarTop).toBeGreaterThanOrEqual(76);
+  expect(initialLayout.topbarLeft).toBeGreaterThanOrEqual(8);
+  expect(initialLayout.topbarRight).toBeLessThanOrEqual(378);
+  expect(initialLayout.navigationBottom).toBe(844);
+  expect(initialLayout.buttonBottom).toBeLessThanOrEqual(810);
+
+  await page.evaluate(() => {
+    const webApp = window.Telegram!.WebApp!;
+    webApp.contentSafeAreaInset = { bottom: 0, left: 0, right: 0, top: 102 };
+    webApp.safeAreaInset = { bottom: 48, left: 0, right: 0, top: 32 };
+    const handlers = Reflect.get(window, '__telegramSafeAreaHandlers') as Record<string, () => void>;
+    handlers.contentSafeAreaChanged?.();
+    handlers.safeAreaChanged?.();
+  });
+
+  await expect.poll(() => page.locator('.topbar').evaluate(element => (
+    element.getBoundingClientRect().top
+  ))).toBeGreaterThanOrEqual(102);
+  await expect.poll(() => page.locator('.bottom-nav .nav-btn').last().evaluate(element => (
+    element.getBoundingClientRect().bottom
+  ))).toBeLessThanOrEqual(796);
+
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.evaluate(() => {
+    const webApp = window.Telegram!.WebApp!;
+    webApp.contentSafeAreaInset = { bottom: 0, left: 0, right: 0, top: 72 };
+    webApp.safeAreaInset = { bottom: 24, left: 8, right: 8, top: 24 };
+    webApp.viewportStableHeight = 568;
+    const handlers = Reflect.get(window, '__telegramSafeAreaHandlers') as Record<string, () => void>;
+    handlers.contentSafeAreaChanged?.();
+    handlers.safeAreaChanged?.();
+    handlers.viewportChanged?.();
+  });
+
+  const compactLayout = await page.evaluate(() => {
+    const navigationButtons = [...document.querySelectorAll('.bottom-nav .nav-btn')]
+      .map(button => button.getBoundingClientRect());
+    return {
+      appHeight: document.querySelector('.app-shell')!.getBoundingClientRect().height,
+      bodyHeight: document.body.scrollHeight,
+      bodyWidth: document.body.scrollWidth,
+      buttonBottom: Math.max(...navigationButtons.map(button => button.bottom)),
+      minButtonHeight: Math.min(...navigationButtons.map(button => button.height)),
+      topbarTop: document.querySelector('.topbar')!.getBoundingClientRect().top,
+    };
+  });
+  expect(compactLayout.appHeight).toBe(568);
+  expect(compactLayout.bodyHeight).toBe(568);
+  expect(compactLayout.bodyWidth).toBe(320);
+  expect(compactLayout.topbarTop).toBeGreaterThanOrEqual(72);
+  expect(compactLayout.buttonBottom).toBeLessThanOrEqual(544);
+  expect(compactLayout.minButtonHeight).toBeGreaterThanOrEqual(44);
+
+  await page.getByRole('button', { name: /server S-1.*Open server selection/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'World Servers' });
+  await expect(dialog).toBeVisible();
+  const safeDialogLayout = await dialog.evaluate(element => {
+    const action = element.querySelector<HTMLButtonElement>('.realm-row > button')!;
+    return {
+      actionBottom: action.getBoundingClientRect().bottom,
+      dialogBottom: element.getBoundingClientRect().bottom,
+    };
+  });
+  expect(Math.abs(safeDialogLayout.dialogBottom - 568)).toBeLessThan(1);
+  expect(safeDialogLayout.actionBottom).toBeLessThanOrEqual(544);
 });
 
 test('keeps the modal fallback clean on older Telegram clients', async ({ page }) => {

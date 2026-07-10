@@ -8,7 +8,11 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: 0;
-  padding: 7px 4px max(6px, env(safe-area-inset-bottom), var(--tg-content-safe-area-inset-bottom, 0px));
+  padding:
+    7px
+    max(4px, var(--app-content-safe-area-right))
+    max(6px, var(--app-content-safe-area-bottom))
+    max(4px, var(--app-content-safe-area-left));
   border: 0;
   border-top: 1px solid rgba(218, 255, 245, 0.38);
   border-radius: 0;
