@@ -1,3 +1,5 @@
+import { createPlayerProfile, DEFAULT_PLAYER_PROFILE } from '../shared/playerProfile';
+
 type HapticImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
 type HapticNotificationType = 'error' | 'success' | 'warning';
 
@@ -11,7 +13,11 @@ interface TelegramWebApp {
   initData?: string;
   initDataUnsafe?: {
     user?: {
+      first_name?: string;
       id?: number;
+      last_name?: string;
+      photo_url?: string;
+      username?: string;
     };
   };
   ready?: () => void;
@@ -65,6 +71,21 @@ export const getTelegramPlayerId = () => {
 export const getTelegramInitData = () => {
   const initData = getTelegramWebApp()?.initData;
   return typeof initData === 'string' && initData.length > 0 ? initData : null;
+};
+
+export const getLocalPlayerProfilePreview = () => {
+  const user = getTelegramWebApp()?.initDataUnsafe?.user;
+  if (!user) {
+    return DEFAULT_PLAYER_PROFILE;
+  }
+
+  return createPlayerProfile({
+    firstName: user.first_name,
+    lastName: user.last_name,
+    photoUrl: user.photo_url,
+    source: 'telegram',
+    username: user.username,
+  }) ?? DEFAULT_PLAYER_PROFILE;
 };
 
 export type { HapticImpactStyle, HapticNotificationType };

@@ -7,12 +7,14 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameEvent, type GameSnapshot } from '../src/game/types';
 import { gameNumber, subtractGameNumbers } from '../src/game/gameNumber';
+import type { PlayerProfile } from '../src/shared/playerProfile';
 import { createGameRequestHandler } from './app';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
 
 interface PlayerStateResponse {
   playerId: string;
+  playerProfile: PlayerProfile;
   snapshot: GameSnapshot;
 }
 
@@ -75,6 +77,12 @@ describe('game API persistence', () => {
 
       assert.equal(initialState.response.status, 200);
       assert.equal(initialState.body.playerId, playerId);
+      assert.deepEqual(initialState.body.playerProfile, {
+        displayName: 'Riftwalker',
+        photoUrl: null,
+        source: 'local',
+        username: null,
+      });
       assert.equal(initialState.body.snapshot.schemaVersion, GAME_SNAPSHOT_SCHEMA_VERSION);
       assert.equal(typeof initialState.body.snapshot.gold, 'string');
       assert.equal(typeof initialState.body.snapshot.monsterHealth, 'string');
@@ -95,6 +103,7 @@ describe('game API persistence', () => {
 
       assert.equal(actionResult.response.status, 200);
       assert.equal(actionResult.body.events[0]?.type, 'monster_hit');
+      assert.deepEqual(actionResult.body.playerProfile, initialState.body.playerProfile);
       const hitEvent = actionResult.body.events[0];
       assert.equal(hitEvent.type, 'monster_hit');
       assert.equal(

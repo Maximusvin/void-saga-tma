@@ -15,7 +15,7 @@
 
 .app-shell.view-rift {
   background:
-    linear-gradient(180deg, rgba(7, 20, 24, 0.08), rgba(5, 10, 16, 0.08) 52%, rgba(3, 7, 12, 0.7) 100%),
+    linear-gradient(180deg, rgba(12, 35, 32, 0.03), rgba(5, 18, 18, 0.02) 54%, rgba(3, 13, 14, 0.64) 100%),
     var(--rift-backdrop-image) center 56% / cover no-repeat;
 }
 
@@ -55,14 +55,14 @@
 
 .app-shell.view-rift::after {
   background:
-    linear-gradient(180deg, rgba(2, 7, 12, 0.24) 0, transparent 18%, transparent 58%, rgba(2, 6, 10, 0.78) 100%),
-    radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(2, 7, 12, 0.12) 76%, rgba(2, 7, 12, 0.34) 100%);
+    linear-gradient(180deg, rgba(3, 18, 19, 0.04) 0, transparent 29%, transparent 60%, rgba(2, 12, 13, 0.68) 100%),
+    radial-gradient(ellipse at 50% 50%, transparent 24%, rgba(6, 25, 24, 0.08) 78%, rgba(2, 14, 15, 0.24) 100%);
 }
 
 .app-shell.view-rift.rift-boss::after {
   background:
-    linear-gradient(180deg, rgba(23, 11, 34, 0.24) 0, transparent 20%, transparent 58%, rgba(17, 8, 28, 0.8) 100%),
-    radial-gradient(ellipse at 50% 48%, transparent 22%, rgba(49, 22, 69, 0.16) 72%, rgba(20, 9, 34, 0.38) 100%);
+    linear-gradient(180deg, rgba(36, 17, 47, 0.05) 0, transparent 28%, transparent 60%, rgba(21, 10, 29, 0.72) 100%),
+    radial-gradient(ellipse at 50% 48%, transparent 24%, rgba(67, 32, 78, 0.12) 74%, rgba(27, 13, 34, 0.3) 100%);
 }
 
 .game-frame {
@@ -71,7 +71,7 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  padding: max(6px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom));
 }
 
 .view-stage {

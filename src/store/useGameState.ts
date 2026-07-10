@@ -32,7 +32,12 @@ import type {
   HeroDamageContribution,
   HeroUpgradeAmount,
 } from '../game/types';
-import { getTelegramPlayerId } from '../utils/telegram';
+import {
+  DEFAULT_PLAYER_PROFILE,
+  normalizePlayerProfile,
+  type PlayerProfile,
+} from '../shared/playerProfile';
+import { getLocalPlayerProfilePreview, getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
 
@@ -166,6 +171,9 @@ const splitTapEvents = (events: GameEvent[], tapCount: number) => {
 export const useGameState = () => {
   const apiEnabled = isGameApiEnabled();
   const [snapshot, setSnapshot] = useState<GameSnapshot>(loadLocalSnapshot);
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile>(() => (
+    apiEnabled ? DEFAULT_PLAYER_PROFILE : getLocalPlayerProfilePreview()
+  ));
   const [activeView, setActiveView] = useState<ActiveView>('rift');
   const [comboCount, setComboCount] = useState(() => getActiveComboCount(snapshot));
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
@@ -218,12 +226,20 @@ export const useGameState = () => {
     scheduleLocalSnapshot(nextSnapshot);
   }, [scheduleLocalSnapshot]);
 
+  const applyPlayerProfile = useCallback((value: unknown) => {
+    const profile = normalizePlayerProfile(value);
+    if (profile) {
+      setPlayerProfile(profile);
+    }
+  }, []);
+
   const executePendingCommand = useCallback(async (command: PendingGameCommand) => {
     const response = await postGameAction(playerId, command.commandId, command.action);
     applySnapshot(requireSnapshot(response.snapshot));
+    applyPlayerProfile(response.playerProfile);
     removeActionOutbox(playerId, command.commandId);
     return response.events;
-  }, [applySnapshot, playerId]);
+  }, [applyPlayerProfile, applySnapshot, playerId]);
 
   const replayActionOutbox = useCallback(async (targetCommandId?: string) => {
     let targetEvents: GameEvent[] = [];
@@ -270,6 +286,7 @@ export const useGameState = () => {
         }
 
         applySnapshot(requireSnapshot(response.snapshot));
+        applyPlayerProfile(response.playerProfile);
         await replayActionOutbox();
         if (isCancelled) {
           return;
@@ -287,7 +304,7 @@ export const useGameState = () => {
     return () => {
       isCancelled = true;
     };
-  }, [apiEnabled, applySnapshot, playerId, replayActionOutbox]);
+  }, [apiEnabled, applyPlayerProfile, applySnapshot, playerId, replayActionOutbox]);
 
   const publishCombatFeedback = useCallback((events: GameEvent[]) => {
     if (events.some(event => event.type === 'boss_enraged')) {
@@ -543,6 +560,7 @@ export const useGameState = () => {
     passiveVolleyHeroContributions: passiveVolleyFeedback.heroContributions,
     passiveVolleySignal: passiveVolleyFeedback.signal,
     backendStatus,
+    playerProfile,
     playerId,
   };
 };

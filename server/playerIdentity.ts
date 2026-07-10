@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
+import { createPlayerProfile, DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../src/shared/playerProfile';
 import { normalizePlayerId } from './validation';
 
 export const TELEGRAM_INIT_DATA_HEADER = 'x-telegram-init-data';
@@ -8,7 +9,11 @@ const DEFAULT_TELEGRAM_AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const TELEGRAM_AUTH_CLOCK_SKEW_SECONDS = 60;
 
 interface TelegramUserPayload {
+  first_name?: unknown;
   id?: unknown;
+  last_name?: unknown;
+  photo_url?: unknown;
+  username?: unknown;
 }
 
 interface TelegramVerificationOptions {
@@ -24,11 +29,11 @@ interface PlayerIdentityOptions extends TelegramVerificationOptions {
 }
 
 type TelegramVerificationResult =
-  | { ok: true; playerId: string; authDate: number }
+  | { ok: true; playerId: string; authDate: number; playerProfile: PlayerProfile }
   | { ok: false; error: 'telegram_init_data_invalid' | 'telegram_init_data_expired' };
 
 export type PlayerIdentityResult =
-  | { ok: true; playerId: string; source: 'telegram' | 'dev' }
+  | { ok: true; playerId: string; playerProfile: PlayerProfile; source: 'telegram' | 'dev' }
   | { ok: false; statusCode: 400 | 401; error: 'playerId_required' | 'telegram_auth_required' | 'telegram_auth_invalid' };
 
 const getHeaderValue = (request: IncomingMessage, name: string) => {
@@ -69,14 +74,26 @@ const getDataCheckString = (params: URLSearchParams) => {
     .join('\n');
 };
 
-const parseTelegramUserId = (rawUser: string | null) => {
+const parseTelegramUser = (rawUser: string | null) => {
   if (!rawUser) {
     return null;
   }
 
   try {
     const user = JSON.parse(rawUser) as TelegramUserPayload;
-    return typeof user.id === 'number' && Number.isSafeInteger(user.id) && user.id > 0 ? user.id : null;
+    if (typeof user.id !== 'number' || !Number.isSafeInteger(user.id) || user.id <= 0) {
+      return null;
+    }
+
+    const playerProfile = createPlayerProfile({
+      firstName: user.first_name,
+      lastName: user.last_name,
+      photoUrl: user.photo_url,
+      source: 'telegram',
+      username: user.username,
+    });
+
+    return playerProfile ? { playerProfile, userId: user.id } : null;
   } catch {
     return null;
   }
@@ -95,9 +112,9 @@ export const verifyTelegramInitData = (
   const params = new URLSearchParams(initData);
   const receivedHash = params.get('hash');
   const authDate = Number(params.get('auth_date'));
-  const userId = parseTelegramUserId(params.get('user'));
+  const telegramUser = parseTelegramUser(params.get('user'));
 
-  if (!receivedHash || !Number.isSafeInteger(authDate) || authDate <= 0 || !userId) {
+  if (!receivedHash || !Number.isSafeInteger(authDate) || authDate <= 0 || !telegramUser) {
     return { ok: false, error: 'telegram_init_data_invalid' };
   }
 
@@ -116,7 +133,8 @@ export const verifyTelegramInitData = (
 
   return {
     ok: true,
-    playerId: `telegram:${userId}`,
+    playerId: `telegram:${telegramUser.userId}`,
+    playerProfile: telegramUser.playerProfile,
     authDate,
   };
 };
@@ -137,7 +155,12 @@ export const resolvePlayerIdentityFromCredentials = (options: PlayerIdentityOpti
       return { ok: false, statusCode: 401, error: 'telegram_auth_invalid' };
     }
 
-    return { ok: true, playerId: verified.playerId, source: 'telegram' };
+    return {
+      ok: true,
+      playerId: verified.playerId,
+      playerProfile: verified.playerProfile,
+      source: 'telegram',
+    };
   }
 
   const allowDevIdentity = options.allowDevIdentity ?? process.env.NODE_ENV !== 'production';
@@ -150,7 +173,7 @@ export const resolvePlayerIdentityFromCredentials = (options: PlayerIdentityOpti
     return { ok: false, statusCode: 400, error: 'playerId_required' };
   }
 
-  return { ok: true, playerId, source: 'dev' };
+  return { ok: true, playerId, playerProfile: DEFAULT_PLAYER_PROFILE, source: 'dev' };
 };
 
 export const resolvePlayerIdentity = (request: IncomingMessage, requestedPlayerId?: unknown) => {

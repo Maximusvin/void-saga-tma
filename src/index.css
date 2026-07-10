@@ -1,21 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  --bg-color: #060914;
-  --panel-bg: rgba(10, 15, 27, 0.62);
-  --panel-border: rgba(134, 232, 222, 0.24);
-  --panel-strong: rgba(4, 7, 14, 0.72);
-  --accent-cyan: #66fcf1;
-  --accent-teal: #45d6c8;
-  --accent-violet: #8e65ff;
-  --accent-rose: #ff4fa3;
-  --text-main: #c5d2d6;
+  --bg-color: #071315;
+  --panel-bg: rgba(8, 24, 27, 0.62);
+  --panel-border: rgba(177, 242, 226, 0.26);
+  --panel-strong: rgba(5, 17, 20, 0.76);
+  --hud-surface: rgba(6, 22, 25, 0.64);
+  --hud-surface-strong: rgba(4, 18, 21, 0.8);
+  --hud-stroke: rgba(212, 255, 243, 0.25);
+  --hud-stroke-strong: rgba(222, 255, 247, 0.36);
+  --hud-blur: 15px;
+  --radius-panel: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --accent-cyan: #75f6de;
+  --accent-teal: #3ccfb3;
+  --accent-violet: #a679dc;
+  --accent-rose: #ec68a4;
+  --text-main: #d4e7e2;
   --text-light: #ffffff;
-  --gold: #ffd36a;
-  --gem: #ff5cf4;
-  --danger: #ff4b6a;
-  --glass-shadow: 0 16px 45px rgba(0, 0, 0, 0.36);
-  --neon-shadow: 0 0 18px rgba(102, 252, 241, 0.38), 0 0 42px rgba(142, 101, 255, 0.22);
+  --gold: #ffda78;
+  --gem: #e990ff;
+  --danger: #ff637b;
+  --glass-shadow: 0 14px 36px rgba(1, 10, 12, 0.3);
+  --shadow-hud: 0 8px 22px rgba(2, 12, 14, 0.26);
+  --neon-shadow: 0 0 18px rgba(102, 252, 241, 0.34), 0 0 38px rgba(166, 121, 220, 0.18);
 }
 
 * {
@@ -53,6 +63,18 @@ button {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .text-gradient {

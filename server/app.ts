@@ -42,7 +42,10 @@ export const createGameRequestHandler = (gameRepository: GameRepository): Reques
           return;
         }
 
-        sendJson(response, 200, gameRepository.getOrCreatePlayer(identity.playerId));
+        sendJson(response, 200, {
+          ...gameRepository.getOrCreatePlayer(identity.playerId),
+          playerProfile: identity.playerProfile,
+        });
         return;
       }
 
@@ -78,6 +81,7 @@ export const createGameRequestHandler = (gameRepository: GameRepository): Reques
 
           return {
             ...command.result,
+            playerProfile: identity.playerProfile,
             replayed: command.replayed,
           };
         });

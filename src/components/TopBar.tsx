@@ -1,38 +1,104 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Coins, Gem } from 'lucide-react';
 import './TopBar.css';
 import { formatNumber } from '../utils/formatNumber';
 import type { BackendStatus } from '../store/useGameState';
 import type { GameNumber } from '../game/gameNumber';
+import { getPlayerInitials, type PlayerProfile } from '../shared/playerProfile';
 
 interface TopBarProps {
   backendStatus: BackendStatus;
   gold: GameNumber;
   gems: number;
+  level: number;
+  playerProfile: PlayerProfile;
 }
 
 const STATUS_LABELS: Record<BackendStatus, string> = {
-  error: 'Sync error',
-  loading: 'Syncing',
-  local: 'Local save',
-  synced: 'Cloud save',
+  error: 'Progress sync unavailable',
+  loading: 'Syncing progress',
+  local: 'Local preview save',
+  synced: 'Progress synced',
 };
 
-export const TopBar: React.FC<TopBarProps> = ({ backendStatus, gold, gems }) => {
+interface PlayerAvatarProps {
+  backendStatus: BackendStatus;
+  level: number;
+  playerProfile: PlayerProfile;
+}
+
+const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ backendStatus, level, playerProfile }) => {
+  const [photoFailed, setPhotoFailed] = useState(false);
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [playerProfile.photoUrl]);
+
+  const showPhoto = Boolean(playerProfile.photoUrl) && !photoFailed;
+
   return (
-    <div className="topbar">
-      <div className={`topbar-status ${backendStatus}`} aria-live="polite">
-        <span className="status-dot" />
-        <span>{STATUS_LABELS[backendStatus]}</span>
+    <span className="player-avatar-frame">
+      {showPhoto ? (
+        <img
+          alt=""
+          className="player-avatar-image"
+          decoding="async"
+          onError={() => setPhotoFailed(true)}
+          referrerPolicy="no-referrer"
+          src={playerProfile.photoUrl ?? undefined}
+        />
+      ) : (
+        <span className="player-avatar-fallback" aria-hidden="true">
+          {getPlayerInitials(playerProfile.displayName)}
+        </span>
+      )}
+      <span className={`profile-sync-indicator ${backendStatus}`} aria-hidden="true" />
+      <span className="player-level-badge">LV {Math.max(1, Math.floor(level))}</span>
+    </span>
+  );
+};
+
+export const TopBar: React.FC<TopBarProps> = ({
+  backendStatus,
+  gold,
+  gems,
+  level,
+  playerProfile,
+}) => {
+  const profileSourceLabel = playerProfile.source === 'telegram' ? 'Telegram linked' : 'Riftbound';
+
+  return (
+    <header className="topbar">
+      <div
+        aria-label={`${playerProfile.displayName}, level ${Math.max(1, Math.floor(level))}. ${STATUS_LABELS[backendStatus]}`}
+        className="player-hud"
+        data-profile-source={playerProfile.source}
+        role="group"
+        title={STATUS_LABELS[backendStatus]}
+      >
+        <PlayerAvatar
+          backendStatus={backendStatus}
+          level={level}
+          playerProfile={playerProfile}
+        />
+        <span className="player-identity-copy">
+          <span className="player-kicker">{profileSourceLabel}</span>
+          <strong className="player-name">{playerProfile.displayName}</strong>
+        </span>
       </div>
-      <div className="resource-pill gold">
-        <Coins size={18} className="icon" />
-        <span className="amount">{formatNumber(gold)}</span>
+      <div className="resource-cluster" aria-label="Player resources" role="group">
+        <div className="resource-item gold">
+          <Coins size={17} className="icon" aria-hidden="true" />
+          <span className="sr-only">Gold</span>
+          <span className="amount">{formatNumber(gold)}</span>
+        </div>
+        <div className="resource-item gem">
+          <Gem size={17} className="icon" aria-hidden="true" />
+          <span className="sr-only">Gems</span>
+          <span className="amount">{formatNumber(gems)}</span>
+        </div>
       </div>
-      <div className="resource-pill gem">
-        <Gem size={18} className="icon" />
-        <span className="amount">{formatNumber(gems)}</span>
-      </div>
-    </div>
+      <span className="sr-only" aria-live="polite">{STATUS_LABELS[backendStatus]}</span>
+    </header>
   );
 };
