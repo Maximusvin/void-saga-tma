@@ -1,6 +1,6 @@
-import type { GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
+import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-002';
+export const GAME_CONTENT_VERSION = 'void-saga-content-003';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
@@ -35,6 +35,12 @@ export const RARITY_GRADIENTS: Record<HeroRarity, string> = {
 export const MONSTER_EMOJIS = ['👾', '👻', '💀', '👽', '👿', '🧌', '🕷️', '🦂', '🦇'] as const;
 export const BOSS_EMOJI = '👹';
 
+export const BOSS_PHASES = [
+  { id: 'dominion', label: 'Dominion', minimumHealthPercent: 67 },
+  { id: 'fracture', label: 'Fracture', minimumHealthPercent: 34 },
+  { id: 'cataclysm', label: 'Cataclysm', minimumHealthPercent: 0 },
+] as const satisfies readonly BossPhaseRule[];
+
 export const STAGE_BANDS = [
   {
     id: 'rift-outskirts',
@@ -44,11 +50,13 @@ export const STAGE_BANDS = [
     monsterHealthGrowth: 1.2,
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
+      attemptSeconds: 35,
       everyStages: 5,
       healthMultiplier: 5,
       goldMultiplier: 2,
       gemReward: 2,
       emoji: BOSS_EMOJI,
+      phases: BOSS_PHASES,
     },
   },
 ] as const satisfies readonly StageBand[];

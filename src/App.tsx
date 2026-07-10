@@ -42,6 +42,9 @@ function App() {
               clickPower={gameState.clickPower}
               stage={gameState.stage}
               isBoss={gameState.isBoss}
+              bossEncounterEndsAt={gameState.bossEncounterEndsAt}
+              bossEnrageSignal={gameState.bossEnrageSignal}
+              snapshotUpdatedAt={gameState.snapshotUpdatedAt}
               comboCount={gameState.comboCount}
               comboMultiplier={gameState.comboMultiplier}
               registerHit={gameState.registerHit}

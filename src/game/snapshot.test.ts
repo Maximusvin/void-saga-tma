@@ -5,7 +5,7 @@ import { normalizeGameSnapshot, normalizeStoredGameEvents } from './snapshot';
 const timestamp = '2026-07-09T12:00:00.000Z';
 
 describe('game snapshot normalization', () => {
-  it('migrates legacy numeric economy fields and progression to schema v3', () => {
+  it('migrates legacy numeric economy fields and progression to schema v4', () => {
     const snapshot = normalizeGameSnapshot({
       comboCount: 3,
       comboExpiresAt: null,
@@ -20,7 +20,8 @@ describe('game snapshot normalization', () => {
     });
 
     assert.ok(snapshot);
-    assert.equal(snapshot.schemaVersion, 3);
+    assert.equal(snapshot.schemaVersion, 4);
+    assert.equal(snapshot.bossEncounterEndsAt, null);
     assert.equal(snapshot.gold, '1002.6');
     assert.equal(snapshot.heroes[0]?.power, '10.5');
     assert.equal(snapshot.heroes[0]?.ascension, 0);
@@ -80,6 +81,22 @@ describe('game snapshot normalization', () => {
     assert.doesNotMatch(JSON.stringify(snapshot), /Infinity|NaN/);
   });
 
+  it('preserves a valid boss deadline and clears stale non-boss deadlines', () => {
+    const bossSnapshot = normalizeGameSnapshot({
+      stage: 5,
+      bossEncounterEndsAt: '2026-07-09T12:00:35.000Z',
+    });
+    const normalSnapshot = normalizeGameSnapshot({
+      stage: 6,
+      bossEncounterEndsAt: '2026-07-09T12:00:35.000Z',
+    });
+
+    assert.ok(bossSnapshot);
+    assert.ok(normalSnapshot);
+    assert.equal(bossSnapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+    assert.equal(normalSnapshot.bossEncounterEndsAt, null);
+  });
+
   it('normalizes legacy command events to the string API contract', () => {
     const events = normalizeStoredGameEvents([
       {
@@ -112,6 +129,12 @@ describe('game snapshot normalization', () => {
         shardsRemaining: 0,
         shardsSpent: 2,
       },
+      {
+        type: 'boss_enraged',
+        attemptEndsAt: '2026-07-09T12:00:35.000Z',
+        monsterHealth: 1035,
+        stage: 5,
+      },
     ]);
 
     assert.equal(events[0]?.type, 'monster_hit');
@@ -122,5 +145,6 @@ describe('game snapshot normalization', () => {
     assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].fromLevel : null, 1);
     assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].levelsGained : null, 1);
     assert.equal(events[4]?.type === 'hero_ascended' ? events[4].levelCap : null, 100);
+    assert.equal(events[5]?.type === 'boss_enraged' ? events[5].monsterHealth : null, '1035');
   });
 });

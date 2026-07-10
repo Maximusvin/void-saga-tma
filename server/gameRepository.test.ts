@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import { applyCombatBatchAction, applyDamageAction } from '../src/game/engine';
+import { getMonsterMaxHealth } from '../src/game/balance';
 import { GAME_SNAPSHOT_SCHEMA_VERSION } from '../src/game/types';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
@@ -25,8 +26,16 @@ describe('game repository persistence', () => {
         initialState.snapshot.monsterMaxHealth,
         'tap',
       );
+      const bossMaxHealth = getMonsterMaxHealth(5);
+      const persistedSnapshot = {
+        ...killResult.snapshot,
+        stage: 5,
+        monsterMaxHealth: bossMaxHealth,
+        monsterHealth: bossMaxHealth,
+        bossEncounterEndsAt: '2026-07-09T12:00:35.000Z',
+      };
 
-      firstRepository.savePlayer('dev:persistent-player', killResult.snapshot);
+      firstRepository.savePlayer('dev:persistent-player', persistedSnapshot);
       firstDatabase.close();
       firstDatabase = null;
 
@@ -37,9 +46,10 @@ describe('game repository persistence', () => {
       secondDatabase = null;
 
       assert.equal(restoredState.playerId, 'dev:persistent-player');
-      assert.equal(restoredState.snapshot.stage, killResult.snapshot.stage);
-      assert.equal(restoredState.snapshot.gold, killResult.snapshot.gold);
-      assert.equal(restoredState.snapshot.monsterHealth, killResult.snapshot.monsterHealth);
+      assert.equal(restoredState.snapshot.stage, persistedSnapshot.stage);
+      assert.equal(restoredState.snapshot.gold, persistedSnapshot.gold);
+      assert.equal(restoredState.snapshot.monsterHealth, persistedSnapshot.monsterHealth);
+      assert.equal(restoredState.snapshot.bossEncounterEndsAt, persistedSnapshot.bossEncounterEndsAt);
     } finally {
       firstDatabase?.close();
       secondDatabase?.close();

@@ -1,6 +1,7 @@
 import {
   GAME_BALANCE,
   MAX_COMBO_HITS,
+  getBossAttemptDurationMs,
   getAscensionShardCost,
   getBaseClickPower,
   getComboMultiplier,
@@ -17,6 +18,7 @@ import {
 import {
   ZERO_GAME_NUMBER,
   addGameNumbers,
+  compareGameNumbers,
   floorGameNumber,
   gameNumber,
   isPositiveGameNumber,
@@ -52,6 +54,50 @@ const getOfflineElapsedSeconds = (lastSeenAt: string, nowMs: number) => {
   return Math.max(0, Math.floor((nowMs - lastSeenMs) / 1000));
 };
 
+const createBossAttemptEndsAt = (stage: number, nowMs: number) => {
+  return new Date(nowMs + getBossAttemptDurationMs(stage)).toISOString();
+};
+
+const prepareBossAttempt = (snapshot: GameSnapshot, nowMs: number): GameActionResult => {
+  if (!isBossStage(snapshot.stage)) {
+    return {
+      snapshot: snapshot.bossEncounterEndsAt === null
+        ? snapshot
+        : { ...snapshot, bossEncounterEndsAt: null },
+      events: [],
+    };
+  }
+
+  const currentAttemptEndsAtMs = snapshot.bossEncounterEndsAt
+    ? Date.parse(snapshot.bossEncounterEndsAt)
+    : Number.NaN;
+  if (Number.isFinite(currentAttemptEndsAtMs) && currentAttemptEndsAtMs > nowMs) {
+    return { snapshot, events: [] };
+  }
+
+  const attemptEndsAt = createBossAttemptEndsAt(snapshot.stage, nowMs);
+  const wasDamaged = compareGameNumbers(snapshot.monsterHealth, snapshot.monsterMaxHealth) < 0;
+  const nextSnapshot: GameSnapshot = {
+    ...snapshot,
+    bossEncounterEndsAt: attemptEndsAt,
+    comboCount: wasDamaged ? 0 : snapshot.comboCount,
+    comboExpiresAt: wasDamaged ? null : snapshot.comboExpiresAt,
+    monsterHealth: wasDamaged ? snapshot.monsterMaxHealth : snapshot.monsterHealth,
+  };
+
+  return {
+    snapshot: nextSnapshot,
+    events: wasDamaged
+      ? [{
+          type: 'boss_enraged',
+          attemptEndsAt,
+          monsterHealth: nextSnapshot.monsterHealth,
+          stage: snapshot.stage,
+        }]
+      : [],
+  };
+};
+
 export const createInitialGameSnapshot = (): GameSnapshot => {
   const stage = GAME_BALANCE.initialStage;
   const monsterMaxHealth = getMonsterMaxHealth(stage);
@@ -59,6 +105,7 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
   const now = nowIso();
   return {
     schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+    bossEncounterEndsAt: null,
     comboCount: 0,
     comboExpiresAt: null,
     gold: gameNumber(GAME_BALANCE.initialGold),
@@ -96,6 +143,8 @@ export const applyDamageAction = (
     };
   }
 
+  const actionNow = options.now ?? nowIso();
+
   const nextMonsterHealth = subtractGameNumbers(snapshot.monsterHealth, damage);
   const hitEvent = {
     type: 'monster_hit' as const,
@@ -113,7 +162,7 @@ export const applyDamageAction = (
         ? addGameNumbers(snapshot.gold, multiplyGameNumbers(damage, GAME_BALANCE.clickGoldMultiplier))
         : snapshot.gold,
       monsterHealth: nextMonsterHealth,
-    }, options.now);
+    }, actionNow);
 
     return {
       snapshot: updatedSnapshot,
@@ -130,9 +179,13 @@ export const applyDamageAction = (
     ? multiplyGameNumbers(snapshot.monsterMaxHealth, defeatedStageBand.boss.goldMultiplier)
     : multiplyGameNumbers(snapshot.monsterMaxHealth, GAME_BALANCE.killGoldMultiplier);
   const gemReward = defeatedBoss ? defeatedStageBand.boss.gemReward : 0;
+  const actionNowMs = Date.parse(actionNow);
 
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
+    bossEncounterEndsAt: isBossStage(nextStage)
+      ? createBossAttemptEndsAt(nextStage, Number.isFinite(actionNowMs) ? actionNowMs : Date.now())
+      : null,
     gold: addGameNumbers(
       snapshot.gold,
       goldReward,
@@ -142,7 +195,7 @@ export const applyDamageAction = (
     stage: nextStage,
     monsterMaxHealth: nextMonsterMaxHealth,
     monsterHealth: nextMonsterMaxHealth,
-  }, options.now);
+  }, actionNow);
 
   return {
     snapshot: updatedSnapshot,
@@ -181,14 +234,17 @@ export const applyCombatBatchAction = (
 
   const nowMs = options.nowMs ?? Date.now();
   const now = new Date(nowMs).toISOString();
-  const comboExpiresAtMs = snapshot.comboExpiresAt ? Date.parse(snapshot.comboExpiresAt) : 0;
-  let comboCount = Number.isFinite(comboExpiresAtMs) && comboExpiresAtMs > nowMs
-    ? Math.max(0, Math.floor(snapshot.comboCount))
+  const preparedBossAttempt = prepareBossAttempt(snapshot, nowMs);
+  const comboExpiresAtMs = preparedBossAttempt.snapshot.comboExpiresAt
+    ? Date.parse(preparedBossAttempt.snapshot.comboExpiresAt)
     : 0;
-  let currentSnapshot = snapshot;
-  const events: GameActionResult['events'] = [];
+  let comboCount = Number.isFinite(comboExpiresAtMs) && comboExpiresAtMs > nowMs
+    ? Math.max(0, Math.floor(preparedBossAttempt.snapshot.comboCount))
+    : 0;
+  let currentSnapshot = preparedBossAttempt.snapshot;
+  const events: GameActionResult['events'] = [...preparedBossAttempt.events];
   const random = options.random ?? Math.random;
-  const baseClickPower = getBaseClickPower(snapshot.heroes);
+  const baseClickPower = getBaseClickPower(currentSnapshot.heroes);
 
   for (let index = 0; index < normalizedTapCount; index += 1) {
     const isCrit = random() < GAME_BALANCE.critChance;
@@ -208,7 +264,7 @@ export const applyCombatBatchAction = (
     events.push(...result.events);
   }
 
-  const passivePower = getPassivePower(snapshot.heroes);
+  const passivePower = getPassivePower(currentSnapshot.heroes);
   for (let index = 0; index < normalizedPassiveTicks && isPositiveGameNumber(passivePower); index += 1) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
       comboCount,
@@ -220,7 +276,7 @@ export const applyCombatBatchAction = (
 
   const comboExpiresAt = normalizedTapCount > 0
     ? new Date(nowMs + GAME_BALANCE.comboDecayMs).toISOString()
-    : (comboExpiresAtMs > nowMs ? snapshot.comboExpiresAt : null);
+    : (comboExpiresAtMs > nowMs ? currentSnapshot.comboExpiresAt : null);
 
   return {
     snapshot: touchSnapshot({

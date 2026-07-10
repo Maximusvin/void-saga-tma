@@ -11,6 +11,7 @@
 - deterministic summon sequence відтворює розподіл Common/Rare/Epic/Legendary `40/30/20/10`;
 - duplicate дає rarity-scaled shards, а 2 shards відкривають наступні 50 рівнів через ascension;
 - цільовий TTK: до 10 секунд для звичайної сцени та до 30 секунд для боса;
+- hard limit boss-спроби: 35 секунд; simulator окремо перевіряє, що кожен baseline boss вкладається і в target TTK, і в серверний enrage deadline;
 - перед боєм купується найкращий доступний апгрейд, поки TTK не вкладається в ціль;
 - ROI з різницею до 0,1% вважається еквівалентним, тоді прокачується герой нижчого рівня;
 - click gold оцінюється за часткою tap damage у загальному DPS.

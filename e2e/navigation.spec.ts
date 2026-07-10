@@ -51,3 +51,38 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
     expect(layout.panelWidth).toBeLessThanOrEqual(layout.viewportWidth);
   }
 });
+
+test('boss attempt exposes phases and resets through the shared engine after enrage', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 4,
+      bossEncounterEndsAt: new Date(now - 1_000).toISOString(),
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000',
+      heroes: [],
+      stage: 5,
+      monsterMaxHealth: '1035',
+      monsterHealth: '100',
+      lastSeenAt: new Date(now - 2_000).toISOString(),
+      updatedAt: new Date(now - 2_000).toISOString(),
+    }));
+  });
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Attack Crowned Rift Sovereign' })).toBeVisible();
+  await expect(page.getByText('Phase 3 · Cataclysm', { exact: true })).toBeVisible();
+  await expect(page.getByRole('timer')).toContainText('0s');
+
+  await page.getByRole('button', { name: 'Attack Crowned Rift Sovereign' }).click();
+
+  await expect(page.getByRole('status')).toContainText('HP restored');
+  await expect(page.getByText('Phase 1 · Dominion', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
+    return snapshot.monsterHealth;
+  })).toBe('1034');
+  await expect(page.getByRole('timer')).toContainText(/3[45]s/);
+});

@@ -27,6 +27,7 @@ const hero = (power: number): Hero => ({
 
 const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot => ({
   schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+  bossEncounterEndsAt: null,
   comboCount: 0,
   comboExpiresAt: null,
   gold: gameNumber(1000),
@@ -244,5 +245,79 @@ describe('server-authoritative combat batches', () => {
     assert.equal(hit.type, 'monster_hit');
     assert.equal(hit.damage, '1');
     assert.equal(result.snapshot.comboCount, 1);
+  });
+
+  it('starts a timed attempt when stage progression enters a boss', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      stage: 4,
+      monsterMaxHealth: gameNumber(1),
+      monsterHealth: gameNumber(1),
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+
+    assert.equal(result.snapshot.stage, 5);
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+  });
+
+  it('resets boss health and combo before applying a hit after enrage', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      stage: 5,
+      bossEncounterEndsAt: '2026-07-09T11:59:59.000Z',
+      comboCount: 100,
+      comboExpiresAt: '2026-07-09T12:00:01.000Z',
+      monsterMaxHealth: gameNumber(1000),
+      monsterHealth: gameNumber(100),
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+
+    assert.deepEqual(result.events.map(event => event.type), ['boss_enraged', 'monster_hit']);
+    assert.equal(result.events[0]?.type === 'boss_enraged' ? result.events[0].monsterHealth : null, '1000');
+    assert.equal(result.snapshot.monsterHealth, '999');
+    assert.equal(result.snapshot.comboCount, 1);
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+  });
+
+  it('preserves boss progress while an attempt is active', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      stage: 5,
+      bossEncounterEndsAt: '2026-07-09T12:00:10.000Z',
+      monsterMaxHealth: gameNumber(1000),
+      monsterHealth: gameNumber(100),
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+
+    assert.equal(result.events.some(event => event.type === 'boss_enraged'), false);
+    assert.equal(result.snapshot.monsterHealth, '99');
+    assert.equal(result.snapshot.bossEncounterEndsAt, snapshot.bossEncounterEndsAt);
+  });
+
+  it('opens a fresh attempt without a false enrage when boss health is full', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      stage: 5,
+      bossEncounterEndsAt: '2026-07-09T11:59:59.000Z',
+      monsterMaxHealth: gameNumber(1035),
+      monsterHealth: gameNumber(1035),
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+
+    assert.deepEqual(result.events.map(event => event.type), ['monster_hit']);
+    assert.equal(result.snapshot.monsterHealth, '1034');
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
   });
 });

@@ -3,8 +3,9 @@ import type { GameNumber } from './gameNumber';
 export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type HeroUpgradeAmount = 1 | 10 | 'max';
 export type ActiveView = 'rift' | 'summon' | 'roster';
+export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
 
-export const GAME_SNAPSHOT_SCHEMA_VERSION = 3;
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 4;
 
 export interface Hero {
   ascension: number;
@@ -27,11 +28,19 @@ export interface SummonHeroTemplate {
 }
 
 export interface BossRule {
+  attemptSeconds: number;
   everyStages: number;
   healthMultiplier: number;
   goldMultiplier: number;
   gemReward: number;
   emoji: string;
+  phases: readonly BossPhaseRule[];
+}
+
+export interface BossPhaseRule {
+  id: BossPhaseId;
+  label: string;
+  minimumHealthPercent: number;
 }
 
 export interface StageBand {
@@ -53,6 +62,7 @@ export interface GameContent {
 
 export interface GameSnapshot {
   schemaVersion: typeof GAME_SNAPSHOT_SCHEMA_VERSION;
+  bossEncounterEndsAt: string | null;
   comboCount: number;
   comboExpiresAt: string | null;
   gold: GameNumber;
@@ -83,6 +93,12 @@ export type GameEvent =
       stage: number;
     }
   | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: GameNumber; gemReward: number }
+  | {
+      type: 'boss_enraged';
+      attemptEndsAt: string;
+      monsterHealth: GameNumber;
+      stage: number;
+    }
   | {
       type: 'hero_summoned';
       hero: Hero;

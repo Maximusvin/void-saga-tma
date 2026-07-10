@@ -1,5 +1,6 @@
 import {
   BOSS_EMOJI,
+  BOSS_PHASES,
   GAME_CONTENT,
   GAME_CONTENT_VERSION,
   HERO_RARITIES,
@@ -26,6 +27,7 @@ import {
 
 export {
   BOSS_EMOJI,
+  BOSS_PHASES,
   GAME_CONTENT,
   GAME_CONTENT_VERSION,
   HERO_RARITIES,
@@ -103,6 +105,19 @@ export const isBossStage = (stage: number) => {
   const normalizedStage = normalizeStage(stage);
   const stageBand = getStageBandForStage(normalizedStage);
   return normalizedStage % stageBand.boss.everyStages === 0;
+};
+
+export const getBossAttemptDurationMs = (stage: number) => {
+  const normalizedStage = normalizeStage(stage);
+  return getStageBandForStage(normalizedStage).boss.attemptSeconds * 1000;
+};
+
+export const getBossPhaseForHealthPercent = (stage: number, healthPercent: number) => {
+  const normalizedPercent = Number.isFinite(healthPercent)
+    ? Math.max(0, Math.min(100, healthPercent))
+    : 100;
+  const phases = getStageBandForStage(normalizeStage(stage)).boss.phases;
+  return phases.find(phase => normalizedPercent >= phase.minimumHealthPercent) ?? phases[phases.length - 1];
 };
 
 export const getMonsterMaxHealth = (stage: number) => {

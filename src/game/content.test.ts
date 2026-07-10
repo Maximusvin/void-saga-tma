@@ -8,7 +8,13 @@ import {
   SUMMON_POOL,
   getStageBandForStage,
 } from './content';
-import { getMonsterMaxHealth, isBossStage, rollSummonTemplate } from './balance';
+import {
+  getBossAttemptDurationMs,
+  getBossPhaseForHealthPercent,
+  getMonsterMaxHealth,
+  isBossStage,
+  rollSummonTemplate,
+} from './balance';
 
 const RATE_TOTAL_EPSILON = 0.000001;
 
@@ -46,10 +52,19 @@ describe('game content invariants', () => {
       assert.ok(stageBand.monsterHealthGrowth >= 1);
       assert.ok(stageBand.monsterEmojis.length > 0);
       assert.ok(stageBand.boss.everyStages > 1);
+      assert.ok(stageBand.boss.attemptSeconds >= 30);
       assert.ok(stageBand.boss.healthMultiplier > 1);
       assert.ok(stageBand.boss.goldMultiplier >= 1);
       assert.ok(stageBand.boss.gemReward >= 0);
       assert.ok(stageBand.boss.emoji.length > 0);
+      assert.ok(stageBand.boss.phases.length >= 2);
+      assert.equal(stageBand.boss.phases.at(-1)?.minimumHealthPercent, 0);
+      for (let index = 1; index < stageBand.boss.phases.length; index += 1) {
+        assert.ok(
+          stageBand.boss.phases[index - 1].minimumHealthPercent >
+          stageBand.boss.phases[index].minimumHealthPercent,
+        );
+      }
       previousFromStage = stageBand.fromStage;
     }
   });
@@ -60,6 +75,10 @@ describe('game content invariants', () => {
     assert.equal(isBossStage(5), true);
     assert.equal(getMonsterMaxHealth(1), '100');
     assert.equal(getMonsterMaxHealth(5), '1035');
+    assert.equal(getBossAttemptDurationMs(5), 35_000);
+    assert.equal(getBossPhaseForHealthPercent(5, 100).id, 'dominion');
+    assert.equal(getBossPhaseForHealthPercent(5, 66).id, 'fracture');
+    assert.equal(getBossPhaseForHealthPercent(5, 0).id, 'cataclysm');
   });
 
   it('keeps deterministic summon roll boundaries stable', () => {

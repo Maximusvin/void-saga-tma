@@ -3,7 +3,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Activity, Crown, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
-import { GAME_BALANCE, isBossStage } from '../game/balance';
+import {
+  GAME_BALANCE,
+  getBossAttemptDurationMs,
+  getBossPhaseForHealthPercent,
+  getStageBandForStage,
+  isBossStage,
+} from '../game/balance';
 import {
   ceilGameNumber,
   compareGameNumbers,
@@ -13,6 +19,7 @@ import {
 } from '../game/gameNumber';
 import type { GameEvent } from '../game/types';
 import { getRiftEnemyVisual } from '../game/riftVisuals';
+import { BossClock } from './BossClock';
 import './TheRift.css';
 
 const RiftPixiScene = lazy(async () => {
@@ -31,6 +38,9 @@ interface TheRiftProps {
   comboMultiplier: number;
   registerHit: () => void;
   passivePower: GameNumber;
+  bossEncounterEndsAt: string | null;
+  bossEnrageSignal: number;
+  snapshotUpdatedAt: string;
 }
 
 interface DamagePop {
@@ -82,15 +92,21 @@ export const TheRift: React.FC<TheRiftProps> = ({
   comboMultiplier,
   registerHit,
   passivePower,
+  bossEncounterEndsAt,
+  bossEnrageSignal,
+  snapshotUpdatedAt,
 }) => {
   const [damagePops, setDamagePops] = useState<DamagePop[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
+  const [visibleBossEnrageSignal, setVisibleBossEnrageSignal] = useState<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
+  const lastHandledBossEnrageSignalRef = useRef(bossEnrageSignal);
   const lastDefeatStageRef = useRef<number | null>(null);
   const clickCounterRef = useRef(0);
   const hitResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,6 +140,18 @@ export const TheRift: React.FC<TheRiftProps> = ({
       activeTimeouts.clear();
     };
   }, []);
+
+  useEffect(() => {
+    if (bossEnrageSignal === lastHandledBossEnrageSignalRef.current) {
+      return;
+    }
+
+    lastHandledBossEnrageSignalRef.current = bossEnrageSignal;
+    setVisibleBossEnrageSignal(bossEnrageSignal);
+    scheduleTimeout(() => {
+      setVisibleBossEnrageSignal(current => current === bossEnrageSignal ? null : current);
+    }, 1_250);
+  }, [bossEnrageSignal, scheduleTimeout]);
 
   const sparks = useMemo(() => {
     return Array.from({ length: 18 }, (_, id) => ({
@@ -298,10 +326,13 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const combatTone = isBoss ? 'boss' : 'normal';
   const enemyVisual = getRiftEnemyVisual(stage, isBoss);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
+  const bossPhases = getStageBandForStage(stage).boss.phases;
+  const bossPhase = getBossPhaseForHealthPercent(stage, healthPercent);
+  const bossPhaseIndex = Math.max(1, bossPhases.findIndex(phase => phase.id === bossPhase.id) + 1);
 
   return (
     <motion.section
-      className={`rift-view ${combatTone}`}
+      className={`rift-view ${combatTone} ${isBoss ? `boss-phase-${bossPhaseIndex}` : ''}`}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
@@ -341,21 +372,30 @@ export const TheRift: React.FC<TheRiftProps> = ({
         <div className="combat-dashboard">
           <div className={`encounter-rank ${isBoss ? 'boss' : ''}`}>
             {isBoss && <Crown size={14} aria-hidden="true" />}
-            <span>{enemyVisual.title}</span>
+            <span>{isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}</span>
           </div>
-        <AnimatePresence>
-          {comboCount > 0 && (
-            <motion.div
-              className="combo-chip"
-              initial={{ opacity: 0, x: 26, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 26, scale: 0.9 }}
-            >
-              <span>{comboCount} hits</span>
-              <strong>x{comboMultiplier.toFixed(2)}</strong>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          <div className="combat-status-right">
+            {isBoss && (
+              <BossClock
+                attemptDurationMs={bossAttemptDurationMs}
+                attemptEndsAt={bossEncounterEndsAt}
+                snapshotUpdatedAt={snapshotUpdatedAt}
+              />
+            )}
+            <AnimatePresence>
+              {comboCount > 0 && (
+                <motion.div
+                  className="combo-chip"
+                  initial={{ opacity: 0, x: 26, scale: 0.9 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 26, scale: 0.9 }}
+                >
+                  <span>{comboCount} hits</span>
+                  <strong>x{comboMultiplier.toFixed(2)}</strong>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
         <AnimatePresence>
           {projectiles.map(projectile => (
@@ -393,7 +433,9 @@ export const TheRift: React.FC<TheRiftProps> = ({
             <Suspense fallback={<span className="rift-pixi-loading" />}>
               <RiftPixiScene
                 defeatSignal={defeatTransition?.id ?? 0}
+                enrageSignal={bossEnrageSignal}
                 hitSignal={impactState.id}
+                bossPhase={bossPhaseIndex}
                 isBoss={isBoss}
                 isBossDefeat={defeatTransition?.wasBoss ?? false}
                 isHit={isHit}
@@ -403,6 +445,29 @@ export const TheRift: React.FC<TheRiftProps> = ({
             </Suspense>
           </motion.span>
         </motion.button>
+
+        <AnimatePresence>
+          {visibleBossEnrageSignal !== null && (
+            <motion.div
+              key={visibleBossEnrageSignal}
+              className="boss-enrage-banner"
+              initial={prefersReducedMotion
+                ? { opacity: 0, x: '-50%', scale: 1 }
+                : { opacity: 0, x: '-50%', scale: 0.76 }}
+              animate={prefersReducedMotion
+                ? { opacity: 1, x: '-50%', scale: 1 }
+                : { opacity: 1, x: '-50%', scale: [0.76, 1.08, 1] }}
+              exit={prefersReducedMotion
+                ? { opacity: 0, x: '-50%', scale: 1 }
+                : { opacity: 0, x: '-50%', scale: 1.08 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: 'easeOut' }}
+              role="status"
+            >
+              <span>Rift collapse</span>
+              <strong>HP restored</strong>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="enemy-panel">
           <div className="enemy-title-row">

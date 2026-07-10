@@ -112,7 +112,7 @@ npm run balance:simulate
 - React render crash показує відновлюваний fallback замість чорного екрана; render/global errors надсилаються у bounded endpoint `POST /api/client-errors`, який редагує credential-like дані, хешує player id і rate-limit-ить події.
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
-- Snapshot schema v3 зберігає одного героя на content template: duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- Snapshot schema v4 зберігає серверний deadline поточної boss-спроби. Hero progression із v3 лишається незмінною: один герой на content template, duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
 - `upgrade_hero` підтримує `amount: 1 | 10 | "max"`: сервер сам рахує точну сумарну ціну, купує доступні рівні до cap і обмежує одну команду 50 рівнями. Відсутній `amount` backward-compatible означає `1`.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.

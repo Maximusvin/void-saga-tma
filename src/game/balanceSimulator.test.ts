@@ -9,6 +9,7 @@ import {
   getHeroLevelCap,
   getHeroUpgradeQuote,
   getNextHeroPower,
+  getStageBandForStage,
   getUpgradeCost,
 } from './balance';
 import {
@@ -90,6 +91,13 @@ describe('balance simulation', () => {
         ? BASELINE_BALANCE_SIMULATION.bossTargetTtkSeconds
         : BASELINE_BALANCE_SIMULATION.normalTargetTtkSeconds;
       assert.ok(compareGameNumbers(row.ttkSeconds, target) <= 0, `stage ${row.stage} exceeded TTK target`);
+      if (row.isBoss) {
+        const attemptSeconds = getStageBandForStage(row.stage).boss.attemptSeconds;
+        assert.ok(
+          compareGameNumbers(row.ttkSeconds, attemptSeconds) <= 0,
+          `boss stage ${row.stage} cannot be cleared before enrage`,
+        );
+      }
     }
 
     for (const hero of baselineResult.summary.finalHeroes) {
