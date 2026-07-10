@@ -31,6 +31,18 @@
     url('/assets/summon/rift-sanctuary.webp') center 48% / cover no-repeat;
 }
 
+.app-shell.view-roster {
+  background:
+    linear-gradient(180deg, rgba(4, 27, 31, 0.18), rgba(3, 15, 20, 0.76) 52%, rgba(2, 10, 14, 0.96)),
+    url('/assets/rift/luminous-verge.webp') center 46% / cover no-repeat;
+}
+
+.app-shell.view-roster::after {
+  background:
+    linear-gradient(180deg, rgba(3, 17, 21, 0.08), rgba(2, 12, 16, 0.66) 44%, rgba(1, 8, 12, 0.96)),
+    radial-gradient(ellipse at 50% 18%, rgba(116, 252, 227, 0.14), transparent 42%);
+}
+
 .app-shell::before {
   content: '';
   position: absolute;

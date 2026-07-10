@@ -18,6 +18,7 @@ interface RealmSelectRequest {
 }
 
 const MAX_COMBAT_TAPS_PER_BATCH = 20;
+const MAX_ACTIVE_WARBAND_HEROES = 4;
 const COMMAND_ID_PATTERN = /^[A-Za-z0-9:_-]{8,96}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -149,6 +150,28 @@ export const parseGameActionRequest = (
       requestedPlayerId,
       action: {
         type: 'summon',
+      },
+    };
+  }
+
+  if (request.action.type === 'set_active_warband') {
+    const heroIds = request.action.heroIds;
+    if (
+      !Array.isArray(heroIds) ||
+      heroIds.length > MAX_ACTIVE_WARBAND_HEROES ||
+      heroIds.some(heroId => typeof heroId !== 'string' || !heroId.trim() || heroId.length > 128) ||
+      new Set(heroIds).size !== heroIds.length
+    ) {
+      return null;
+    }
+
+    return {
+      characterId,
+      commandId,
+      requestedPlayerId,
+      action: {
+        type: 'set_active_warband',
+        heroIds,
       },
     };
   }

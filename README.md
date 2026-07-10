@@ -87,14 +87,15 @@ npm run balance:simulate
 - `src/game/content.ts` - versioned content seed: heroes, summon pool, rarity metadata, stage bands і boss rules.
 - `src/game/balance.ts` - формули economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost і helper exports для UI.
 - `src/game/balanceSimulator.ts` - відтворювана TTK/ROI/economy симуляція та CSV-звіти до stage 10 000.
-- `src/game/engine.ts` - чисті action-розрахунки для бою, summon і upgrade.
+- `src/game/engine.ts` - чисті action-розрахунки для бою, summon, Warband, upgrade та offline rewards.
 - `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - React state adapter: backend API source of truth через `VITE_GAME_API_URL` або `localStorage` fallback без API.
 - `src/api/actionOutbox.ts` - локальний ordered outbox для retry тієї самої команди після network failure або reload.
 - `src/components/RealmSwitcher.tsx` - backend-driven вибір `S-*`/`M-*` без вигаданих світів у клієнті.
 - `src/views/TheRift.tsx` - основний бойовий екран.
 - `src/views/SummonCircle.tsx` - gacha summon flow.
-- `src/views/HeroesRoster.tsx` - список героїв і upgrade.
+- `src/views/HeroesRoster.tsx` - чотирислотова active Warband, sorting/filtering і продуктивна collection grid з upgrade.
+- `src/components/HeroPortrait.tsx` - спільний WebP portrait renderer з automatic quality tiers для Heroes, Summon і combat HUD.
 - `src/views/LeaguesHall.tsx` - чесний preseason-екран майбутніх асинхронних ліг без вигаданих рейтингів до появи серверного сезону.
 - `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
 - `src/observability/` - privacy-safe client error contract і доставлення Telegram-authenticated telemetry у backend runtime logs.
@@ -104,6 +105,8 @@ npm run balance:simulate
 Проєкт використовує `framer-motion` для DOM/UI-анімацій: transitions, gestures, появи/зникнення елементів і micro-interactions.
 
 `PixiJS` рендерить істоту Rift, hit/death particles і shockwaves через Canvas/WebGL. Він завантажується окремим lazy chunk, а один `Application` живе протягом усього бойового екрану; зміна stage перебудовує лише display tree, не WebGL-контекст. React лишається власником HUD і меню.
+
+Hero collection використовує оптимізовані WebP portrait assets та обмежений CSS 2.5D motion тільки в active formation, summon reveal і combat volley. Grid лишається статичним і не створює Pixi contexts. Повноцінні premium skeletal heroes пізніше підключаються через Spine Pixi лише разом із готовими rig assets; рішення описане в [`docs/adr/0003-hero-portrait-rendering.md`](docs/adr/0003-hero-portrait-rendering.md).
 
 ## Примітки для розвитку
 
@@ -116,7 +119,8 @@ npm run balance:simulate
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Passive tick повертає один агрегований hit із per-hero `heroContributions`; warband HUD і projectiles відтворюють лише цей підтверджений event, не локальний декоративний DPS-таймер.
 - Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
-- Snapshot schema v4 зберігає серверний deadline поточної boss-спроби. Hero progression із v3 лишається незмінною: один герой на content template, duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- Snapshot schema v5 зберігає серверний deadline boss-спроби та ordered `activeHeroIds` максимум із чотирьох owned героїв. Hero progression із v3 лишається незмінною: один герой на content template, duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- Tap bonus, passive damage, `heroContributions` і offline rewards рахуються лише з active Warband. `set_active_warband` серверно перевіряє ліміт, унікальність та ownership; новий summon автоматично займає вільний слот.
 - `upgrade_hero` підтримує `amount: 1 | 10 | "max"`: сервер сам рахує точну сумарну ціну, купує доступні рівні до cap і обмежує одну команду 50 рівнями. Відсутній `amount` backward-compatible означає `1`.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
 - Telegram account і realm character розділені: кожен `S-*` має окремий snapshot/outbox, а merge змінює canonical realm без переписування прогресу. Рішення описане в [`docs/adr/0002-logical-realm-servers.md`](docs/adr/0002-logical-realm-servers.md).

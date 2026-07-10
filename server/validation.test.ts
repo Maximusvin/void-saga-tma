@@ -19,6 +19,13 @@ describe('game action request validation', () => {
     );
     assert.deepEqual(
       parseGameActionRequest({
+        commandId: 'cmd:test-warband',
+        action: { type: 'set_active_warband', heroIds: ['void-lord', 'void-mage'] },
+      })?.action,
+      { type: 'set_active_warband', heroIds: ['void-lord', 'void-mage'] },
+    );
+    assert.deepEqual(
+      parseGameActionRequest({
         commandId: 'cmd:test-upgrade-old',
         action: { type: 'upgrade_hero', heroId: 'void-grunt' },
       })?.action,
@@ -50,6 +57,20 @@ describe('game action request validation', () => {
       parseGameActionRequest({
         commandId: 'cmd:test-0002',
         action: { type: 'summon', randomValue: 0.999 },
+      }),
+      null,
+    );
+    assert.equal(
+      parseGameActionRequest({
+        commandId: 'cmd:test-warband-duplicate',
+        action: { type: 'set_active_warband', heroIds: ['void-lord', 'void-lord'] },
+      }),
+      null,
+    );
+    assert.equal(
+      parseGameActionRequest({
+        commandId: 'cmd:test-warband-large',
+        action: { type: 'set_active_warband', heroIds: ['one', 'two', 'three', 'four', 'five'] },
       }),
       null,
     );

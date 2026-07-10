@@ -355,6 +355,136 @@ test('bottom navigation exposes campaign and leagues while surviving Pixi remoun
   expect(pageErrors).toEqual([]);
 });
 
+test('Heroes builds and persists a four-slot Warband without overflowing mobile viewports', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 5,
+      activeHeroIds: ['void-lord', 'void-knight', 'void-mage', 'void-grunt'],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000000000',
+      heroes: [
+        { ascension: 1, id: 'void-grunt', name: 'Void Grunt', rarity: 'Common', level: 62, power: '9000000', shards: 4, templateId: 'void-grunt' },
+        { ascension: 1, id: 'void-mage', name: 'Void Mage', rarity: 'Rare', level: 58, power: '41000', shards: 7, templateId: 'void-mage' },
+        { ascension: 2, id: 'void-knight', name: 'Void Knight', rarity: 'Epic', level: 91, power: '283000', shards: 11, templateId: 'void-knight' },
+        { ascension: 3, id: 'void-lord', name: 'Void Lord', rarity: 'Legendary', level: 137, power: '3300000', shards: 18, templateId: 'void-lord' },
+      ],
+      stage: 150,
+      monsterMaxHealth: '1000000000',
+      monsterHealth: '1000000000',
+      lastSeenAt: now,
+      updatedAt: now,
+    }));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Heroes', exact: true }).click();
+
+  await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(4);
+  await expect(page.locator('.hero-card')).toHaveCount(4);
+  await expect.poll(() => page.locator('.hero-portrait-art img').evaluateAll(images => (
+    images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth === 512)
+  ))).toBe(true);
+
+  await page.getByRole('button', { name: 'Remove Void Mage from Warband' }).click();
+  await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(3);
+  await expect.poll(() => page.evaluate(() => (
+    JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}').activeHeroIds
+  ))).toEqual(['void-lord', 'void-knight', 'void-grunt']);
+
+  await page.getByRole('button', { name: 'Add Void Mage to Warband' }).click();
+  await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(4);
+  await page.getByRole('combobox', { name: 'Sort heroes' }).selectOption('power');
+  await expect(page.locator('.hero-card h3').first()).toHaveText('Void Grunt');
+
+  const layout = await page.evaluate(() => {
+    const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+    const slots = [...document.querySelectorAll('.active-hero-slot')].map(slot => slot.getBoundingClientRect());
+    const cards = [...document.querySelectorAll('.hero-card')].map(card => card.getBoundingClientRect());
+    return {
+      bodyWidth: document.body.scrollWidth,
+      cardMinWidth: Math.min(...cards.map(card => card.width)),
+      navigationBottom: navigation.bottom,
+      portraitAnimations: [...document.querySelectorAll('.hero-portrait-art')]
+        .reduce((total, portrait) => total + portrait.getAnimations({ subtree: true }).length, 0),
+      slotMinWidth: Math.min(...slots.map(slot => slot.width)),
+      viewportHeight: innerHeight,
+      viewportWidth: innerWidth,
+    };
+  });
+  expect(layout.bodyWidth).toBe(layout.viewportWidth);
+  expect(layout.navigationBottom).toBe(layout.viewportHeight);
+  expect(layout.slotMinWidth).toBeGreaterThanOrEqual(68);
+  expect(layout.cardMinWidth).toBeGreaterThanOrEqual(140);
+  expect(layout.portraitAnimations).toBeLessThanOrEqual(8);
+});
+
+test('Heroes keeps a 120-item collection contained and activates only visible portrait effects', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    const knownHeroes = [
+      { ascension: 0, id: 'void-grunt', name: 'Void Grunt', rarity: 'Common', level: 10, power: '50', shards: 0, templateId: 'void-grunt' },
+      { ascension: 0, id: 'void-mage', name: 'Void Mage', rarity: 'Rare', level: 10, power: '100', shards: 0, templateId: 'void-mage' },
+      { ascension: 0, id: 'void-knight', name: 'Void Knight', rarity: 'Epic', level: 10, power: '200', shards: 0, templateId: 'void-knight' },
+      { ascension: 0, id: 'void-lord', name: 'Void Lord', rarity: 'Legendary', level: 10, power: '500', shards: 0, templateId: 'void-lord' },
+    ];
+    const rarities = ['Common', 'Rare', 'Epic', 'Legendary'] as const;
+    const legacyHeroes = Array.from({ length: 116 }, (_, index) => ({
+      ascension: 0,
+      id: `legacy-${index}`,
+      name: `Riftbound ${String(index + 1).padStart(3, '0')}`,
+      rarity: rarities[index % rarities.length],
+      level: (index % 50) + 1,
+      power: String((index + 1) * 17),
+      shards: 0,
+      templateId: `legacy:${index}`,
+    }));
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 5,
+      activeHeroIds: knownHeroes.map(hero => hero.id),
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000000',
+      heroes: [...knownHeroes, ...legacyHeroes],
+      stage: 20,
+      monsterMaxHealth: '100000',
+      monsterHealth: '100000',
+      lastSeenAt: now,
+      updatedAt: now,
+    }));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Heroes', exact: true }).click();
+
+  const grid = page.locator('.roster-grid');
+  await expect(grid).toHaveAttribute('data-hero-count', '120');
+  await expect(page.locator('.hero-card')).toHaveCount(120);
+  const renderBudget = await page.locator('.hero-card').first().evaluate(card => ({
+    animations: [...document.querySelectorAll('.hero-portrait-art')]
+      .reduce((total, portrait) => total + portrait.getAnimations({ subtree: true }).length, 0),
+    contain: getComputedStyle(card).contain,
+    contentVisibility: getComputedStyle(card).contentVisibility,
+    viewportWidth: innerWidth,
+    bodyWidth: document.body.scrollWidth,
+  }));
+  expect(renderBudget.contentVisibility).toBe('auto');
+  expect(['content', 'layout paint style']).toContain(renderBudget.contain);
+  expect(renderBudget.bodyWidth).toBe(renderBudget.viewportWidth);
+  expect(renderBudget.animations).toBeLessThanOrEqual(8);
+
+  await page.locator('.roster-view').evaluate(view => {
+    view.scrollTop = view.scrollHeight;
+  });
+  await expect(page.locator('.hero-card').last()).toBeVisible();
+  await expect(page.getByTestId('game-crash-fallback')).toHaveCount(0);
+});
+
 test('rift loads production art without overflowing narrow Telegram viewports', async ({ page }) => {
   await page.goto('/');
 
@@ -413,7 +543,8 @@ test.describe('average Telegram Android performance profile', () => {
     await page.addInitScript(() => {
       const now = new Date().toISOString();
       localStorage.setItem('rift_heroes_save', JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 5,
+        activeHeroIds: ['grunt-150', 'mage-150', 'knight-150', 'lord-150'],
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
@@ -451,7 +582,8 @@ test.describe('average Telegram Android performance profile', () => {
       const bounds = canvas.getBoundingClientRect();
       const beastShell = document.querySelector('.rift-beast-shell')!;
       return {
-        canvasResolution: canvas.width / bounds.width,
+        canvasWidth: canvas.width,
+        canvasCssWidth: bounds.width,
         renderQuality: document.documentElement.dataset.renderQuality,
         sceneBuilds: Number(element.getAttribute('data-scene-build-count')),
         shellAnimations: beastShell.getAnimations().length,
@@ -459,7 +591,7 @@ test.describe('average Telegram Android performance profile', () => {
     });
 
     expect(renderBudget.renderQuality).toBe('balanced');
-    expect(renderBudget.canvasResolution).toBeLessThanOrEqual(1.51);
+    expect(renderBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(renderBudget.canvasCssWidth * 1.5));
     expect(renderBudget.sceneBuilds - initialSceneBuilds).toBe(1);
     expect(renderBudget.shellAnimations).toBe(0);
     expect(pageErrors).toEqual([]);
@@ -561,7 +693,8 @@ test('boss attempt exposes phases and resets through the shared engine after enr
     Math.random = () => 0.5;
     const now = Date.now();
     localStorage.setItem('rift_heroes_save', JSON.stringify({
-      schemaVersion: 4,
+      schemaVersion: 5,
+      activeHeroIds: [],
       bossEncounterEndsAt: new Date(now - 1_000).toISOString(),
       comboCount: 0,
       comboExpiresAt: null,
@@ -596,7 +729,8 @@ test('authoritative passive volleys animate every hero without overflowing the c
   await page.addInitScript(() => {
     const now = new Date().toISOString();
     localStorage.setItem('rift_heroes_save', JSON.stringify({
-      schemaVersion: 4,
+      schemaVersion: 5,
+      activeHeroIds: ['grunt-1', 'mage-1', 'knight-1', 'lord-1'],
       bossEncounterEndsAt: null,
       comboCount: 0,
       comboExpiresAt: null,

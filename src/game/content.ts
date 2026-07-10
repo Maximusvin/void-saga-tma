@@ -1,6 +1,6 @@
 import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-004';
+export const GAME_CONTENT_VERSION = 'void-saga-content-005';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
@@ -11,6 +11,8 @@ export const SUMMON_POOL = [
     combatRole: 'Vanguard',
     id: 'void-grunt',
     name: 'Void Grunt',
+    portrait: '/assets/heroes/void-grunt.webp',
+    portraitMotion: 'still',
     rarity: 'Common',
     power: 5,
     dropRate: 0.4,
@@ -22,6 +24,8 @@ export const SUMMON_POOL = [
     combatRole: 'Arcanist',
     id: 'void-mage',
     name: 'Void Mage',
+    portrait: '/assets/heroes/void-mage.webp',
+    portraitMotion: 'aura',
     rarity: 'Rare',
     power: 10,
     dropRate: 0.3,
@@ -33,6 +37,8 @@ export const SUMMON_POOL = [
     combatRole: 'Spellblade',
     id: 'void-knight',
     name: 'Void Knight',
+    portrait: '/assets/heroes/void-knight.webp',
+    portraitMotion: 'embers',
     rarity: 'Epic',
     power: 20,
     dropRate: 0.2,
@@ -44,6 +50,8 @@ export const SUMMON_POOL = [
     combatRole: 'Sovereign',
     id: 'void-lord',
     name: 'Void Lord',
+    portrait: '/assets/heroes/void-lord.webp',
+    portraitMotion: 'mythic',
     rarity: 'Legendary',
     power: 50,
     dropRate: 0.1,

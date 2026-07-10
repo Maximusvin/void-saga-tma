@@ -21,6 +21,7 @@ import {
   type Hero,
   type HeroRarity,
 } from './types';
+import { normalizeWarbandHeroIds } from './warband';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -151,17 +152,19 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
   );
   const now = new Date().toISOString();
   const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : now;
+  const heroes = Array.isArray(value.heroes)
+    ? mergeDuplicateHeroes(value.heroes.map(normalizeHero).filter((hero): hero is Hero => hero !== null))
+    : [];
 
   return {
     schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+    activeHeroIds: normalizeWarbandHeroIds(value.activeHeroIds, heroes),
     bossEncounterEndsAt: isBossStage(stage) ? normalizeIsoTimestamp(value.bossEncounterEndsAt) : null,
     comboCount: normalizeInteger(value.comboCount, 0, 0),
     comboExpiresAt: typeof value.comboExpiresAt === 'string' ? value.comboExpiresAt : null,
     gems: normalizeInteger(value.gems, GAME_BALANCE.initialGems, 0),
     gold: parseGameNumber(value.gold, gameNumber(GAME_BALANCE.initialGold)),
-    heroes: Array.isArray(value.heroes)
-      ? mergeDuplicateHeroes(value.heroes.map(normalizeHero).filter((hero): hero is Hero => hero !== null))
-      : [],
+    heroes,
     lastSeenAt: typeof value.lastSeenAt === 'string' ? value.lastSeenAt : updatedAt,
     monsterHealth,
     monsterMaxHealth,
@@ -288,6 +291,16 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         cappedSeconds: normalizeInteger(value.cappedSeconds, 0, 0),
         goldReward: parseGameNumber(value.goldReward),
         passivePower: parseGameNumber(value.passivePower),
+      };
+    }
+    case 'active_warband_updated': {
+      if (!Array.isArray(value.heroIds) || value.heroIds.some(heroId => typeof heroId !== 'string')) {
+        return null;
+      }
+
+      return {
+        type: 'active_warband_updated',
+        heroIds: [...new Set(value.heroIds)].slice(0, 4),
       };
     }
     case 'action_rejected':
