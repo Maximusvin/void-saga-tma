@@ -7,19 +7,19 @@ import {
   GAME_BALANCE,
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
+  getHeroTemplateById,
   getStageBandForStage,
   isBossStage,
 } from '../game/balance';
 import {
   ceilGameNumber,
-  compareGameNumbers,
-  gameNumberToClampedNumber,
   gameNumberToPercent,
   type GameNumber,
 } from '../game/gameNumber';
-import type { GameEvent } from '../game/types';
+import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
 import { getRiftEnemyVisual } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
+import { RiftWarband } from './RiftWarband';
 import './TheRift.css';
 
 const RiftPixiScene = lazy(async () => {
@@ -38,6 +38,10 @@ interface TheRiftProps {
   comboMultiplier: number;
   registerHit: () => void;
   passivePower: GameNumber;
+  heroes: Hero[];
+  passiveVolleyDamage: GameNumber;
+  passiveVolleyHeroContributions: HeroDamageContribution[];
+  passiveVolleySignal: number;
   bossEncounterEndsAt: string | null;
   bossEnrageSignal: number;
   snapshotUpdatedAt: string;
@@ -53,10 +57,13 @@ interface DamagePop {
 }
 
 interface Projectile {
+  attackStyle: HeroAttackStyle;
+  color: string;
   id: number;
   startX: number;
   startY: number;
   rotate: number;
+  volleySignal: number;
 }
 
 interface DefeatTransition {
@@ -92,6 +99,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
   comboMultiplier,
   registerHit,
   passivePower,
+  heroes,
+  passiveVolleyDamage,
+  passiveVolleyHeroContributions,
+  passiveVolleySignal,
   bossEncounterEndsAt,
   bossEnrageSignal,
   snapshotUpdatedAt,
@@ -101,12 +112,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const [visiblePassiveVolleySignal, setVisiblePassiveVolleySignal] = useState<number | null>(null);
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
   const [visibleBossEnrageSignal, setVisibleBossEnrageSignal] = useState<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
   const lastHandledBossEnrageSignalRef = useRef(bossEnrageSignal);
+  const lastHandledPassiveVolleySignalRef = useRef(passiveVolleySignal);
   const lastDefeatStageRef = useRef<number | null>(null);
   const clickCounterRef = useRef(0);
   const hitResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -164,41 +177,54 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, []);
 
   useEffect(() => {
-    if (compareGameNumbers(passivePower, GAME_BALANCE.passiveProjectileThreshold) <= 0) {
+    if (
+      passiveVolleySignal === lastHandledPassiveVolleySignalRef.current ||
+      passiveVolleyHeroContributions.length === 0
+    ) {
       return;
     }
 
-    const maximumProjectileSpeedPower = (
-      GAME_BALANCE.autoProjectileBaseIntervalMs - GAME_BALANCE.autoProjectileMinIntervalMs
-    ) / GAME_BALANCE.autoProjectilePowerSpeedupMs;
-    const projectileSpeedPower = gameNumberToClampedNumber(passivePower, maximumProjectileSpeedPower);
+    lastHandledPassiveVolleySignalRef.current = passiveVolleySignal;
+    const heroById = new Map(heroes.map(hero => [hero.id, hero]));
+    const contributionCount = passiveVolleyHeroContributions.length;
+    const nextProjectiles = passiveVolleyHeroContributions.flatMap((contribution, index) => {
+      const hero = heroById.get(contribution.heroId);
+      const template = hero ? getHeroTemplateById(hero.templateId) : null;
+      if (!hero || !template) {
+        return [];
+      }
 
-    const interval = setInterval(() => {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = window.innerWidth > 500 ? 280 : window.innerWidth * 0.82;
-      const startX = Math.cos(angle) * radius;
-      const startY = Math.sin(angle) * radius;
-      const projectile = {
-        id: Date.now() + Math.random(),
+      const startX = (index - (contributionCount - 1) / 2) * 54;
+      const startY = 150 + (index % 2) * 18;
+      return [{
+        attackStyle: template.attackStyle,
+        color: template.accentColor,
+        id: passiveVolleySignal * 10 + index,
+        rotate: Math.atan2(-startY, -startX) * 180 / Math.PI,
         startX,
         startY,
-        rotate: Math.atan2(-startY, -startX) * 180 / Math.PI,
-      };
+        volleySignal: passiveVolleySignal,
+      }];
+    });
 
-      setProjectiles(current => [...current, projectile]);
+    setProjectiles(nextProjectiles);
+    setVisiblePassiveVolleySignal(passiveVolleySignal);
 
-      scheduleTimeout(() => {
-        setProjectiles(current => current.filter(item => item.id !== projectile.id));
-        flashHit();
-        setImpactState(current => ({ id: current.id + 1, isCrit: false }));
-      }, GAME_BALANCE.autoProjectileTravelMs);
-    }, Math.max(
-      GAME_BALANCE.autoProjectileMinIntervalMs,
-      GAME_BALANCE.autoProjectileBaseIntervalMs - projectileSpeedPower * GAME_BALANCE.autoProjectilePowerSpeedupMs,
-    ));
-
-    return () => clearInterval(interval);
-  }, [flashHit, passivePower, scheduleTimeout]);
+    scheduleTimeout(() => {
+      setProjectiles(current => current.filter(projectile => projectile.volleySignal !== passiveVolleySignal));
+      flashHit();
+      setImpactState(current => ({ id: current.id + 1, isCrit: false }));
+    }, GAME_BALANCE.passiveVolleyTravelMs);
+    scheduleTimeout(() => {
+      setVisiblePassiveVolleySignal(current => current === passiveVolleySignal ? null : current);
+    }, GAME_BALANCE.passiveVolleyFeedbackMs);
+  }, [
+    flashHit,
+    heroes,
+    passiveVolleyHeroContributions,
+    passiveVolleySignal,
+    scheduleTimeout,
+  ]);
 
   const triggerDefeatTransition = (
     defeatedStage: number,
@@ -401,13 +427,33 @@ export const TheRift: React.FC<TheRiftProps> = ({
           {projectiles.map(projectile => (
             <motion.span
               key={projectile.id}
-              className="auto-projectile"
-              initial={{ x: projectile.startX, y: projectile.startY, opacity: 0, scaleX: 0.4, rotate: projectile.rotate }}
+              className={`warband-projectile ${projectile.attackStyle}`}
+              style={{ '--projectile-color': projectile.color } as React.CSSProperties}
+              initial={prefersReducedMotion
+                ? { x: 0, y: 0, opacity: 0, scale: 1, rotate: 0 }
+                : { x: projectile.startX, y: projectile.startY, opacity: 0, scaleX: 0.4, rotate: projectile.rotate }}
               animate={{ x: 0, y: 0, opacity: 1, scaleX: 1 }}
               exit={{ opacity: 0, scale: 2.4 }}
-              transition={{ duration: 0.4, ease: 'easeIn' }}
+              transition={{ duration: prefersReducedMotion ? 0 : GAME_BALANCE.passiveVolleyTravelMs / 1000, ease: 'easeIn' }}
             />
           ))}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {visiblePassiveVolleySignal !== null && (
+            <motion.div
+              key={visiblePassiveVolleySignal}
+              className="warband-damage-pop"
+              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.84 }}
+              animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: -10, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.24, ease: 'easeOut' }}
+              aria-hidden="true"
+            >
+              <span>Warband</span>
+              -{formatNumber(passiveVolleyDamage)}
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <motion.button
@@ -533,11 +579,18 @@ export const TheRift: React.FC<TheRiftProps> = ({
         </AnimatePresence>
       </div>
 
-      <footer className="rift-footer">
-        <Crosshair size={17} />
-        <span>Tap power</span>
-        <strong>{formatNumber(clickPower)}</strong>
-        <Zap size={16} />
+      <footer className="rift-combat-footer">
+        <RiftWarband
+          heroes={heroes}
+          heroContributions={passiveVolleyHeroContributions}
+          volleySignal={passiveVolleySignal}
+        />
+        <div className="rift-footer">
+          <Crosshair size={17} />
+          <span>Tap power</span>
+          <strong>{formatNumber(clickPower)}</strong>
+          <Zap size={16} />
+        </div>
       </footer>
 
       <AnimatePresence>

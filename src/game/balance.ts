@@ -10,6 +10,7 @@ import {
   RARITY_ORDER,
   STAGE_BANDS,
   SUMMON_POOL,
+  getHeroTemplateById,
   getStageBandForStage,
 } from './content';
 import type { Hero, HeroRarity, HeroUpgradeAmount, SummonHeroTemplate } from './types';
@@ -37,6 +38,7 @@ export {
   RARITY_ORDER,
   STAGE_BANDS,
   SUMMON_POOL,
+  getHeroTemplateById,
   getStageBandForStage,
 };
 
@@ -50,7 +52,6 @@ export const GAME_BALANCE = {
   bossEveryStages: STAGE_BANDS[0].boss.everyStages,
   bossHealthMultiplier: STAGE_BANDS[0].boss.healthMultiplier,
   clickHeroPowerMultiplier: 0.1,
-  passiveProjectileThreshold: 1,
   comboBonusPerHit: 0.02,
   comboMaxBonus: 2,
   comboDecayMs: 1500,
@@ -89,10 +90,8 @@ export const GAME_BALANCE = {
   critMultiplier: 2,
   hitFlashMs: 50,
   damageTextLifetimeMs: 800,
-  autoProjectileBaseIntervalMs: 1000,
-  autoProjectilePowerSpeedupMs: 5,
-  autoProjectileMinIntervalMs: 200,
-  autoProjectileTravelMs: 400,
+  passiveVolleyTravelMs: 420,
+  passiveVolleyFeedbackMs: 720,
 } as const;
 
 const normalizeStage = (stage: number) => {

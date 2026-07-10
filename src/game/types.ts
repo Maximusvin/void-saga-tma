@@ -4,6 +4,8 @@ export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type HeroUpgradeAmount = 1 | 10 | 'max';
 export type ActiveView = 'rift' | 'summon' | 'roster';
 export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
+export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
+export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';
 
 export const GAME_SNAPSHOT_SCHEMA_VERSION = 4;
 
@@ -19,12 +21,20 @@ export interface Hero {
 }
 
 export interface SummonHeroTemplate {
+  accentColor: string;
+  attackStyle: HeroAttackStyle;
+  combatRole: HeroCombatRole;
   id: string;
   name: string;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
   icon: string;
+}
+
+export interface HeroDamageContribution {
+  damage: GameNumber;
+  heroId: string;
 }
 
 export interface BossRule {
@@ -87,6 +97,7 @@ export type GameEvent =
       type: 'monster_hit';
       comboCount: number;
       damage: GameNumber;
+      heroContributions: HeroDamageContribution[];
       isCrit: boolean;
       monsterHealth: GameNumber;
       source: 'tap' | 'passive';

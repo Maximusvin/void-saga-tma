@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import { applyCombatBatchAction, applyDamageAction } from '../src/game/engine';
 import { getMonsterMaxHealth } from '../src/game/balance';
+import { gameNumber } from '../src/game/gameNumber';
 import { GAME_SNAPSHOT_SCHEMA_VERSION } from '../src/game/types';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
@@ -69,7 +70,19 @@ describe('game repository persistence', () => {
       const firstRepository = new GameRepository(firstDatabase);
       const applyMutation = (snapshot: ReturnType<GameRepository['getOrCreatePlayer']>['snapshot']) => {
         mutationCount += 1;
-        return applyCombatBatchAction(snapshot, 3, 0, { random: () => 0.5 });
+        return applyCombatBatchAction({
+          ...snapshot,
+          heroes: [{
+            ascension: 0,
+            id: 'persistent-hero',
+            level: 1,
+            name: 'Void Mage',
+            power: gameNumber(10),
+            rarity: 'Rare',
+            shards: 0,
+            templateId: 'void-mage',
+          }],
+        }, 0, 1, { random: () => 0.5 });
       };
 
       const first = firstRepository.runIdempotentCommand('dev:command-player', 'cmd:test-0001', applyMutation);
@@ -79,6 +92,12 @@ describe('game repository persistence', () => {
       assert.equal(replay.replayed, true);
       assert.equal(mutationCount, 1);
       assert.deepEqual(replay.result, first.result);
+      assert.deepEqual(
+        first.result.events[0]?.type === 'monster_hit'
+          ? first.result.events[0].heroContributions
+          : null,
+        [{ damage: '10', heroId: 'persistent-hero' }],
+      );
       firstDatabase.close();
       firstDatabase = null;
 
@@ -164,6 +183,12 @@ describe('game repository persistence', () => {
       assert.equal(
         replay.result.events[0]?.type === 'monster_hit' ? replay.result.events[0].damage : null,
         '1.2',
+      );
+      assert.deepEqual(
+        replay.result.events[0]?.type === 'monster_hit'
+          ? replay.result.events[0].heroContributions
+          : null,
+        [],
       );
     } finally {
       database?.close();

@@ -32,6 +32,7 @@ import {
   type GameActionResult,
   type GameSnapshot,
   type Hero,
+  type HeroDamageContribution,
   type HeroUpgradeAmount,
 } from './types';
 
@@ -125,6 +126,7 @@ export const applyDamageAction = (
   source: 'tap' | 'passive',
   options: {
     comboCount?: number;
+    heroContributions?: readonly HeroDamageContribution[];
     isCrit?: boolean;
     now?: string;
   } = {},
@@ -150,6 +152,9 @@ export const applyDamageAction = (
     type: 'monster_hit' as const,
     comboCount: options.comboCount ?? snapshot.comboCount,
     damage,
+    heroContributions: source === 'passive'
+      ? [...(options.heroContributions ?? [])]
+      : [],
     isCrit: options.isCrit ?? false,
     monsterHealth: nextMonsterHealth,
     source,
@@ -264,10 +269,14 @@ export const applyCombatBatchAction = (
     events.push(...result.events);
   }
 
-  const passivePower = getPassivePower(currentSnapshot.heroes);
+  const passiveContributions = currentSnapshot.heroes
+    .filter(hero => isPositiveGameNumber(hero.power))
+    .map(hero => ({ damage: hero.power, heroId: hero.id }));
+  const passivePower = addGameNumbers(...passiveContributions.map(contribution => contribution.damage));
   for (let index = 0; index < normalizedPassiveTicks && isPositiveGameNumber(passivePower); index += 1) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
       comboCount,
+      heroContributions: passiveContributions,
       now,
     });
     currentSnapshot = result.snapshot;

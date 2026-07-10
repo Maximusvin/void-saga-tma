@@ -228,6 +228,27 @@ describe('server-authoritative combat batches', () => {
     assert.equal(hit.isCrit, true);
     assert.equal(hit.damage, '4');
     assert.equal(hit.comboCount, 1);
+    assert.deepEqual(hit.heroContributions, []);
+  });
+
+  it('keeps one passive hit while exposing each hero contribution', () => {
+    const result = applyCombatBatchAction(
+      createSnapshot('2026-07-09T11:59:00.000Z', [hero(10), hero(25)]),
+      0,
+      1,
+      { nowMs: NOW_MS, random: () => 0.5 },
+    );
+    const hit = result.events[0];
+
+    assert.deepEqual(result.events.map(event => event.type), ['monster_hit']);
+    assert.equal(hit.type, 'monster_hit');
+    assert.equal(hit.source, 'passive');
+    assert.equal(hit.damage, '35');
+    assert.deepEqual(hit.heroContributions, [
+      { damage: '10', heroId: 'hero-10' },
+      { damage: '25', heroId: 'hero-25' },
+    ]);
+    assert.equal(result.snapshot.monsterHealth, '65');
   });
 
   it('resets an expired combo before resolving the next batch', () => {

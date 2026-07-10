@@ -1,14 +1,54 @@
 import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-003';
+export const GAME_CONTENT_VERSION = 'void-saga-content-004';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
 export const SUMMON_POOL = [
-  { id: 'void-grunt', name: 'Void Grunt', rarity: 'Common', power: 5, dropRate: 0.4, icon: '🛡️' },
-  { id: 'void-mage', name: 'Void Mage', rarity: 'Rare', power: 10, dropRate: 0.3, icon: '⚔️' },
-  { id: 'void-knight', name: 'Void Knight', rarity: 'Epic', power: 20, dropRate: 0.2, icon: '🔮' },
-  { id: 'void-lord', name: 'Void Lord', rarity: 'Legendary', power: 50, dropRate: 0.1, icon: '👑' },
+  {
+    accentColor: '#79d9c4',
+    attackStyle: 'slash',
+    combatRole: 'Vanguard',
+    id: 'void-grunt',
+    name: 'Void Grunt',
+    rarity: 'Common',
+    power: 5,
+    dropRate: 0.4,
+    icon: '🛡️',
+  },
+  {
+    accentColor: '#63d9ff',
+    attackStyle: 'bolt',
+    combatRole: 'Arcanist',
+    id: 'void-mage',
+    name: 'Void Mage',
+    rarity: 'Rare',
+    power: 10,
+    dropRate: 0.3,
+    icon: '✨',
+  },
+  {
+    accentColor: '#d27cff',
+    attackStyle: 'hex',
+    combatRole: 'Spellblade',
+    id: 'void-knight',
+    name: 'Void Knight',
+    rarity: 'Epic',
+    power: 20,
+    dropRate: 0.2,
+    icon: '⚔️',
+  },
+  {
+    accentColor: '#ffd36f',
+    attackStyle: 'nova',
+    combatRole: 'Sovereign',
+    id: 'void-lord',
+    name: 'Void Lord',
+    rarity: 'Legendary',
+    power: 50,
+    dropRate: 0.1,
+    icon: '👑',
+  },
 ] as const satisfies readonly SummonHeroTemplate[];
 
 export const RARITY_ORDER: Record<HeroRarity, number> = {
@@ -73,4 +113,8 @@ export const getStageBandForStage = (stage: number) => {
   return [...STAGE_BANDS]
     .reverse()
     .find(stageBand => normalizedStage >= stageBand.fromStage) ?? STAGE_BANDS[0];
+};
+
+export const getHeroTemplateById = (templateId: string) => {
+  return SUMMON_POOL.find(template => template.id === templateId) ?? null;
 };

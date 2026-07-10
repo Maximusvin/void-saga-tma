@@ -18,9 +18,16 @@ import {
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
-import { multiplyGameNumbers } from '../game/gameNumber';
+import { ZERO_GAME_NUMBER, multiplyGameNumbers, type GameNumber } from '../game/gameNumber';
 import { normalizeGameSnapshot } from '../game/snapshot';
-import type { ActiveView, GameAction, GameEvent, GameSnapshot, HeroUpgradeAmount } from '../game/types';
+import type {
+  ActiveView,
+  GameAction,
+  GameEvent,
+  GameSnapshot,
+  HeroDamageContribution,
+  HeroUpgradeAmount,
+} from '../game/types';
 import { getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
@@ -34,6 +41,12 @@ const TAP_BATCH_WINDOW_MS = 80;
 
 interface PendingTap {
   resolve: (events: GameEvent[]) => void;
+}
+
+interface PassiveVolleyFeedback {
+  damage: GameNumber;
+  heroContributions: HeroDamageContribution[];
+  signal: number;
 }
 
 const loadLocalSnapshot = (): GameSnapshot => {
@@ -153,6 +166,11 @@ export const useGameState = () => {
   const [comboCount, setComboCount] = useState(() => getActiveComboCount(snapshot));
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
   const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
+  const [passiveVolleyFeedback, setPassiveVolleyFeedback] = useState<PassiveVolleyFeedback>({
+    damage: ZERO_GAME_NUMBER,
+    heroContributions: [],
+    signal: 0,
+  });
   const playerIdRef = useRef<string | null>(null);
   const snapshotRef = useRef(snapshot);
   const actionQueueRef = useRef(Promise.resolve());
@@ -269,6 +287,15 @@ export const useGameState = () => {
   const publishCombatFeedback = useCallback((events: GameEvent[]) => {
     if (events.some(event => event.type === 'boss_enraged')) {
       setBossEnrageSignal(current => current + 1);
+    }
+
+    const passiveHit = events.find(event => event.type === 'monster_hit' && event.source === 'passive');
+    if (passiveHit?.type === 'monster_hit') {
+      setPassiveVolleyFeedback(current => ({
+        damage: passiveHit.damage,
+        heroContributions: passiveHit.heroContributions,
+        signal: current.signal + 1,
+      }));
     }
 
     return events;
@@ -499,6 +526,9 @@ export const useGameState = () => {
     comboMultiplier,
     registerHit,
     passivePower,
+    passiveVolleyDamage: passiveVolleyFeedback.damage,
+    passiveVolleyHeroContributions: passiveVolleyFeedback.heroContributions,
+    passiveVolleySignal: passiveVolleyFeedback.signal,
     backendStatus,
     playerId,
   };
