@@ -25,6 +25,12 @@
     url('/assets/rift/sovereign-gate.webp') center 48% / cover no-repeat;
 }
 
+.app-shell.view-summon {
+  background:
+    linear-gradient(180deg, rgba(5, 36, 44, 0.08), rgba(7, 37, 40, 0.04) 52%, rgba(4, 24, 28, 0.48) 100%),
+    url('/assets/summon/rift-sanctuary.webp') center 48% / cover no-repeat;
+}
+
 .app-shell::before {
   content: '';
   position: absolute;
@@ -75,6 +81,25 @@
   background:
     linear-gradient(180deg, rgba(12, 20, 30, 0.08), transparent 28%, rgba(5, 15, 20, 0.72) 100%),
     radial-gradient(ellipse at 50% 42%, rgba(255, 219, 128, 0.12), transparent 38%);
+}
+
+.app-shell.view-summon::before {
+  background:
+    linear-gradient(104deg, rgba(255, 231, 169, 0.1), transparent 34% 68%, rgba(100, 228, 211, 0.12)),
+    radial-gradient(ellipse at 50% 44%, rgba(255, 255, 255, 0.18), transparent 34%);
+  mask-image: none;
+}
+
+.app-shell.view-summon::after {
+  background:
+    linear-gradient(180deg, rgba(3, 27, 33, 0.2) 0, transparent 24%, transparent 56%, rgba(3, 25, 29, 0.72) 100%),
+    radial-gradient(ellipse at 50% 45%, transparent 22%, rgba(6, 39, 43, 0.12) 68%, rgba(3, 22, 27, 0.38) 100%);
+}
+
+.app-shell.view-summon .scene-fog {
+  background:
+    radial-gradient(ellipse at 50% 60%, rgba(255, 240, 190, 0.18), transparent 54%),
+    linear-gradient(90deg, transparent, rgba(104, 235, 213, 0.16), transparent);
 }
 
 .game-frame {
