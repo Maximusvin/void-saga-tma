@@ -7,6 +7,7 @@ import './BottomNav.css';
 
 interface BottomNavProps {
   activeView: ActiveView;
+  preloadView: (view: ActiveView) => void;
   setActiveView: (view: ActiveView) => void;
 }
 
@@ -24,7 +25,11 @@ const NAVIGATION_ITEMS = [
   { icon: Users, label: 'Heroes', primary: false, view: 'roster' },
 ] as const satisfies readonly NavigationItem[];
 
-export const BottomNav = memo(function BottomNav({ activeView, setActiveView }: BottomNavProps) {
+export const BottomNav = memo(function BottomNav({
+  activeView,
+  preloadView,
+  setActiveView,
+}: BottomNavProps) {
   const prefersReducedMotion = useReducedMotion();
 
   const navigate = (view: ActiveView) => {
@@ -48,7 +53,10 @@ export const BottomNav = memo(function BottomNav({ activeView, setActiveView }: 
             aria-current={isActive ? 'page' : undefined}
             aria-label={item.label}
             className={`nav-btn ${item.primary ? 'nav-primary' : ''} ${isActive ? 'active' : ''}`}
+            onFocus={() => preloadView(item.view)}
             onClick={() => navigate(item.view)}
+            onPointerDown={() => preloadView(item.view)}
+            onPointerEnter={() => preloadView(item.view)}
             transition={{ type: 'spring', stiffness: 520, damping: 34 }}
             type="button"
             whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}

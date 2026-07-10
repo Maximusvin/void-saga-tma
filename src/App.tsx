@@ -2,6 +2,7 @@
 import { AnimatePresence } from 'framer-motion';
 import { useGameState } from './store/useGameState';
 import { getRiftEnemyVisual } from './game/riftVisuals';
+import type { ActiveView } from './game/types';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { RealmSwitcher } from './components/RealmSwitcher';
@@ -12,9 +13,23 @@ import './App.css';
 
 // The rift is the landing view. Keeping the other three eager would ship them —
 // and canvas-confetti, which only Summon uses — in the first-paint chunk.
-const SummonCircle = lazy(() => import('./views/SummonCircle').then(m => ({ default: m.SummonCircle })));
-const HeroesRoster = lazy(() => import('./views/HeroesRoster').then(m => ({ default: m.HeroesRoster })));
-const LeaguesHall = lazy(() => import('./views/LeaguesHall').then(m => ({ default: m.LeaguesHall })));
+const loadSummonCircle = () => import('./views/SummonCircle').then(m => ({ default: m.SummonCircle }));
+const loadHeroesRoster = () => import('./views/HeroesRoster').then(m => ({ default: m.HeroesRoster }));
+const loadLeaguesHall = () => import('./views/LeaguesHall').then(m => ({ default: m.LeaguesHall }));
+
+const SummonCircle = lazy(loadSummonCircle);
+const HeroesRoster = lazy(loadHeroesRoster);
+const LeaguesHall = lazy(loadLeaguesHall);
+
+const VIEW_PRELOADERS: Partial<Record<ActiveView, () => Promise<unknown>>> = {
+  leagues: loadLeaguesHall,
+  roster: loadHeroesRoster,
+  summon: loadSummonCircle,
+};
+
+const preloadView = (view: ActiveView) => {
+  void VIEW_PRELOADERS[view]?.();
+};
 
 function App() {
   const [realmSwitcherOpen, setRealmSwitcherOpen] = useState(false);
@@ -23,9 +38,11 @@ function App() {
   // never waits on a network round trip.
   useEffect(() => {
     const prefetchViews = () => {
-      void import('./views/SummonCircle');
-      void import('./views/HeroesRoster');
-      void import('./views/LeaguesHall');
+      Object.values(VIEW_PRELOADERS).forEach(loader => {
+        if (loader) {
+          void loader();
+        }
+      });
     };
 
     if (typeof window.requestIdleCallback === 'function') {
@@ -126,7 +143,11 @@ function App() {
         </Suspense>
       </div>
 
-      <BottomNav activeView={gameState.activeView} setActiveView={gameState.setActiveView} />
+      <BottomNav
+        activeView={gameState.activeView}
+        preloadView={preloadView}
+        setActiveView={gameState.setActiveView}
+      />
       <AnimatePresence>
         {realmSwitcherOpen && (
           <RealmSwitcher
