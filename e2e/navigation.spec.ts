@@ -1096,3 +1096,48 @@ test('authoritative passive volleys animate every hero without overflowing the c
   expect(layout.footerLeft).toBeGreaterThanOrEqual(0);
   expect(layout.footerRight).toBeLessThanOrEqual(layout.viewportWidth);
 });
+
+const seedRiftSave = (page: import('@playwright/test').Page, overrides: { lastSeenMsAgo: number }) => (
+  page.addInitScript(msAgo => {
+    const now = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 6,
+      activeHeroIds: ['idle-hero'],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000',
+      heroes: [{ ascension: 0, id: 'idle-hero', name: 'Idle Hero', rarity: 'Rare', level: 3, power: '10', shards: 0, templateId: 'void-mage' }],
+      stage: 1,
+      monsterMaxHealth: '1000000000',
+      monsterHealth: '1000000000',
+      lastPassiveTickAt: iso(now),
+      lastSeenAt: iso(now - msAgo),
+      updatedAt: iso(now - msAgo),
+    }));
+  }, overrides.lastSeenMsAgo)
+);
+
+test('welcomes the player back with the offline reward after a long absence', async ({ page }) => {
+  await seedRiftSave(page, { lastSeenMsAgo: 60 * 60 * 1000 }); // an hour away
+  await page.goto('/');
+
+  const modal = page.locator('.welcome-back-modal');
+  await expect(modal).toBeVisible();
+  await expect(modal).toContainText(/хв|г/); // away duration label
+  await expect(page.locator('.welcome-back-gold')).toContainText('+');
+
+  await page.getByRole('button', { name: 'Забрати' }).click();
+  await expect(modal).toHaveCount(0);
+});
+
+test('does not interrupt a returning player who was only away briefly', async ({ page }) => {
+  await seedRiftSave(page, { lastSeenMsAgo: 90 * 1000 }); // 90s — under the 5 min modal threshold
+  await page.goto('/');
+
+  await expect(page.locator('.health-track')).toBeVisible();
+  // The gold is still credited silently; the modal must never appear.
+  await expect(page.locator('.welcome-back-modal')).toHaveCount(0);
+});

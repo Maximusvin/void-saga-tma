@@ -69,6 +69,9 @@ export const GAME_BALANCE = {
   offlineRewardMinSeconds: 60,
   offlineRewardMaxSeconds: 8 * 60 * 60,
   offlineGoldPerPowerSecond: 0.05,
+  // Gold is still credited from 60s away, but the welcome-back modal only
+  // interrupts the player after a meaningful absence so tab-aways stay silent.
+  offlineRewardModalMinSeconds: 5 * 60,
   summonCostGems: 10,
   summonChargeMs: 1500,
   summonRevealMs: 1500,

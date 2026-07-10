@@ -5,6 +5,7 @@ import { getRiftEnemyVisual } from './game/riftVisuals';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { RealmSwitcher } from './components/RealmSwitcher';
+import { WelcomeBackModal } from './components/WelcomeBackModal';
 import { TheRift } from './views/TheRift';
 import { Suspense, lazy, useEffect, useState, type CSSProperties } from 'react';
 import './App.css';
@@ -127,6 +128,15 @@ function App() {
             key="realm-switcher"
             onClose={() => setRealmSwitcherOpen(false)}
             onSelect={gameState.switchRealm}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {gameState.offlineReward && (
+          <WelcomeBackModal
+            key="welcome-back"
+            reward={gameState.offlineReward}
+            onCollect={gameState.dismissOfflineReward}
           />
         )}
       </AnimatePresence>
