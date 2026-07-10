@@ -29,7 +29,13 @@ function App() {
     >
       <div className="scene-fog" />
       <div className="game-frame">
-      <TopBar backendStatus={gameState.backendStatus} gold={gameState.gold} gems={gameState.gems} />
+      <TopBar
+        backendStatus={gameState.backendStatus}
+        gems={gameState.gems}
+        gold={gameState.gold}
+        level={gameState.stage}
+        playerProfile={gameState.playerProfile}
+      />
       
       <div className="view-stage">
         <AnimatePresence mode="wait">

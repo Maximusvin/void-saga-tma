@@ -1,5 +1,84 @@
 import { expect, test } from '@playwright/test';
 
+test('player HUD renders Telegram identity, game level, and a compact narrow layout', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.route('https://assets.example.test/player-avatar.svg', route => route.fulfill({
+    body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#d8a45d"/><circle cx="32" cy="25" r="13" fill="#f6dfc2"/><path d="M12 64c2-17 11-25 20-25s18 8 20 25" fill="#2d797d"/></svg>',
+    contentType: 'image/svg+xml',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    window.Telegram = {
+      WebApp: {
+        initDataUnsafe: {
+          user: {
+            first_name: 'Oleksandr',
+            id: 778899,
+            last_name: 'Very Long Riftwalker Name',
+            photo_url: 'https://assets.example.test/player-avatar.svg',
+            username: 'rift_commander',
+          },
+        },
+      },
+    };
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/');
+
+  const playerHud = page.locator('.player-hud');
+  await expect(playerHud).toContainText('Oleksandr Very Long Riftwalker Name');
+  await expect(playerHud).toContainText('LV 1');
+  await expect(playerHud.locator('.player-avatar-image')).toBeVisible();
+  await expect(playerHud).toHaveAttribute('data-profile-source', 'telegram');
+
+  const layout = await page.evaluate(() => {
+    const topbar = document.querySelector('.topbar')?.getBoundingClientRect();
+    const player = document.querySelector('.player-hud')?.getBoundingClientRect();
+    const resources = document.querySelector('.resource-cluster')?.getBoundingClientRect();
+    return {
+      bodyWidth: document.body.scrollWidth,
+      playerRight: player?.right ?? Number.POSITIVE_INFINITY,
+      resourcesLeft: resources?.left ?? -1,
+      topbarRight: topbar?.right ?? Number.POSITIVE_INFINITY,
+      viewportWidth: window.innerWidth,
+    };
+  });
+
+  expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.playerRight).toBeLessThanOrEqual(layout.resourcesLeft);
+  expect(layout.topbarRight).toBeLessThanOrEqual(layout.viewportWidth);
+});
+
+test('player HUD falls back to initials when Telegram has no usable photo', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    window.Telegram = {
+      WebApp: {
+        initDataUnsafe: {
+          user: {
+            first_name: 'Marta',
+            id: 112233,
+            last_name: 'Nova',
+            photo_url: 'http://insecure.example.test/avatar.jpg',
+          },
+        },
+      },
+    };
+  });
+  await page.goto('/');
+
+  await expect(page.locator('.player-avatar-fallback')).toHaveText('MN');
+  await expect(page.locator('.player-avatar-image')).toHaveCount(0);
+});
+
 test('bottom navigation survives repeated Pixi unmount and remount cycles', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));

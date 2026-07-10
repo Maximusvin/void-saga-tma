@@ -108,7 +108,7 @@ npm run balance:simulate
 - Без `VITE_GAME_API_URL` frontend лишається в автономному `localStorage` fallback для швидкого прототипування.
 - Якщо `TELEGRAM_BOT_TOKEN` заданий, backend вимагає signed `Telegram.WebApp.initData` у заголовку `x-telegram-init-data` і сам виводить `playerId` у форматі `telegram:<id>`.
 - Якщо `TELEGRAM_BOT_TOKEN` не заданий, backend дозволяє dev `playerId` fallback лише поза `NODE_ENV=production`; production працює fail-closed.
-- Frontend підключає офіційний `telegram-web-app.js` у `<head>`, використовує stable Telegram viewport і передає лише raw `initData`, який перевіряє backend.
+- Frontend підключає офіційний `telegram-web-app.js` у `<head>`, використовує stable Telegram viewport і передає лише raw `initData`, який перевіряє backend. Після перевірки backend повертає bounded `playerProfile` з ім'ям, username і HTTPS `photoUrl`; HUD не довіряє `initDataUnsafe` у production, не надсилає referrer для фото й має fallback з ініціалами.
 - React render crash показує відновлюваний fallback замість чорного екрана; render/global errors надсилаються у bounded endpoint `POST /api/client-errors`, який редагує credential-like дані, хешує player id і rate-limit-ить події.
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Passive tick повертає один агрегований hit із per-hero `heroContributions`; warband HUD і projectiles відтворюють лише цей підтверджений event, не локальний декоративний DPS-таймер.
@@ -124,7 +124,7 @@ npm run balance:simulate
 
 - `GET /api/health`
 - `GET /api/game/content` повертає `contentVersion`, `content`, `balance` і backward-compatible `summonPool`
-- `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі
+- `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі; відповідь містить snapshot і перевірений `playerProfile`
 - `POST /api/game/action`
 - `POST /api/client-errors` приймає bounded client telemetry з Telegram auth і записує privacy-safe structured event у backend runtime logs
 

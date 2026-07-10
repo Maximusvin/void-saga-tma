@@ -1,8 +1,10 @@
 import type { GameAction, GameEvent, GameSnapshot } from '../game/types';
+import type { PlayerProfile } from '../shared/playerProfile';
 import { getTelegramInitData } from '../utils/telegram';
 
-interface PlayerStateResponse {
+export interface PlayerStateResponse {
   playerId: string;
+  playerProfile: PlayerProfile;
   snapshot: GameSnapshot;
 }
 
