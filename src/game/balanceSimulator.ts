@@ -3,7 +3,8 @@ import {
   SUMMON_POOL,
   getAscensionShardCost,
   getBaseClickPower,
-  getMonsterMaxHealth,
+  getEncounterMaxHealth,
+  getEnemiesInStage,
   getDuplicateShardReward,
   getHeroLevelCap,
   getNextHeroPower,
@@ -60,6 +61,7 @@ export interface BalanceSimulationRow {
   blockedByGold: boolean;
   blockedByProgression: boolean;
   cumulativeSeconds: GameNumber;
+  enemiesInStage: number;
   goldAfter: GameNumber;
   goldBefore: GameNumber;
   gemsAfter: number;
@@ -126,18 +128,22 @@ export const BASELINE_CHECKPOINT_STAGES = [
   10_000,
 ] as const;
 
-export const DETERMINISTIC_SUMMON_SEQUENCE = [
-  'void-grunt',
-  'void-mage',
-  'void-knight',
-  'void-grunt',
-  'void-lord',
-  'void-mage',
-  'void-grunt',
-  'void-knight',
-  'void-mage',
-  'void-grunt',
-] as const;
+const RARE_SUMMON_POSITIONS = new Set([3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46]);
+const EPIC_SUMMON_POSITIONS = new Set([10, 20, 30, 40, 45]);
+
+export const DETERMINISTIC_SUMMON_SEQUENCE = Array.from({ length: 50 }, (_, index) => {
+  const position = index + 1;
+  if (position === 50) {
+    return 'void-lord';
+  }
+  if (EPIC_SUMMON_POSITIONS.has(position)) {
+    return 'void-knight';
+  }
+  if (RARE_SUMMON_POSITIONS.has(position)) {
+    return 'void-mage';
+  }
+  return 'void-grunt';
+});
 
 export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   allowNewHeroesFromSummons: true,
@@ -147,16 +153,14 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   heroes: [
     { id: 'void-grunt', name: 'Void Grunt', power: 5, rarity: 'Common', shards: 1, templateId: 'void-grunt' },
     { id: 'void-mage', name: 'Void Mage', power: 10, rarity: 'Rare', templateId: 'void-mage' },
-    { id: 'void-knight', name: 'Void Knight', power: 20, rarity: 'Epic', templateId: 'void-knight' },
-    { id: 'void-lord', name: 'Void Lord', power: 50, rarity: 'Legendary', templateId: 'void-lord' },
   ],
-  id: 'baseline-five-summons',
+  id: 'baseline-three-summons',
   initialGems: 0,
   initialGold: GAME_BALANCE.initialGold,
-  initialSummonsConsumed: 5,
+  initialSummonsConsumed: 3,
   maxUpgradesPerStage: 250,
   normalTargetTtkSeconds: 10,
-  bossTargetTtkSeconds: 30,
+  bossTargetTtkSeconds: 40,
   sustainedComboMultiplier: 1,
   summonSequence: DETERMINISTIC_SUMMON_SEQUENCE,
   tapsPerSecond: 4,
@@ -169,7 +173,7 @@ export const FIVE_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
     name: 'Void Grunt',
     power: 5,
     rarity: 'Common',
-    shards: 4,
+    shards: 2,
     templateId: 'void-grunt',
   }],
   id: 'unlucky-common-start',
@@ -183,7 +187,7 @@ export const SOLO_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
     name: 'Void Grunt',
     power: 5,
     rarity: 'Common',
-    shards: 4,
+    shards: 2,
     templateId: 'void-grunt',
   }],
   id: 'solo-common',
@@ -420,57 +424,85 @@ export const runBalanceSimulation = (
   const rows: BalanceSimulationRow[] = [];
 
   for (let stage = 1; stage <= endStage; stage += 1) {
-    const monsterHealth = getMonsterMaxHealth(stage);
+    const enemiesInStage = getEnemiesInStage(stage);
     const goldBefore = gold;
-    const targetTtk = isBossStage(stage) ? config.bossTargetTtkSeconds : config.normalTargetTtkSeconds;
-    let projection = projectCombat(heroes, monsterHealth, config);
+    const targetTtkPerEncounter = isBossStage(stage)
+      ? config.bossTargetTtkSeconds
+      : config.normalTargetTtkSeconds;
+    let projection = projectCombat(heroes, getEncounterMaxHealth(stage, 0), config);
     let ascensionsPurchased = 0;
+    let blockedByGold = false;
+    let blockedByProgression = false;
+    let monsterHealth = ZERO_GAME_NUMBER;
+    let stageReward = ZERO_GAME_NUMBER;
+    let stageTtkSeconds = ZERO_GAME_NUMBER;
+    let targetMissed = false;
     let upgradesPurchased = 0;
     let upgradeSpend = ZERO_GAME_NUMBER;
 
-    while (
-      compareGameNumbers(projection.ttkSeconds, targetTtk) > 0 &&
-      upgradesPurchased < maxUpgradesPerStage
-    ) {
-      const candidate = getBestUpgradeCandidate(heroes, gold);
-      if (!candidate) {
-        const ascensionHeroIndex = getReadyAscensionHeroIndex(heroes);
-        if (ascensionHeroIndex === null) {
-          break;
+    for (let enemyIndex = 0; enemyIndex < enemiesInStage; enemyIndex += 1) {
+      const encounterHealth = getEncounterMaxHealth(stage, enemyIndex);
+      monsterHealth = addGameNumbers(monsterHealth, encounterHealth);
+      projection = projectCombat(heroes, encounterHealth, config);
+
+      while (
+        compareGameNumbers(projection.ttkSeconds, targetTtkPerEncounter) > 0 &&
+        upgradesPurchased < maxUpgradesPerStage
+      ) {
+        const candidate = getBestUpgradeCandidate(heroes, gold);
+        if (!candidate) {
+          const ascensionHeroIndex = getReadyAscensionHeroIndex(heroes);
+          if (ascensionHeroIndex === null) {
+            break;
+          }
+
+          const hero = heroes[ascensionHeroIndex];
+          heroes[ascensionHeroIndex] = {
+            ...hero,
+            ascension: hero.ascension + 1,
+            shards: hero.shards - getAscensionShardCost(hero),
+          };
+          ascensionsPurchased += 1;
+          totalAscensions += 1;
+          continue;
         }
 
-        const hero = heroes[ascensionHeroIndex];
-        heroes[ascensionHeroIndex] = {
+        const hero = heroes[candidate.heroIndex];
+        heroes[candidate.heroIndex] = {
           ...hero,
-          ascension: hero.ascension + 1,
-          shards: hero.shards - getAscensionShardCost(hero),
+          level: hero.level + 1,
+          power: candidate.nextPower,
         };
-        ascensionsPurchased += 1;
-        totalAscensions += 1;
-        continue;
+        gold = subtractGameNumbers(gold, candidate.cost);
+        upgradeSpend = addGameNumbers(upgradeSpend, candidate.cost);
+        upgradesPurchased += 1;
+        totalUpgrades += 1;
+        projection = projectCombat(heroes, encounterHealth, config);
       }
 
-      const hero = heroes[candidate.heroIndex];
-      heroes[candidate.heroIndex] = {
-        ...hero,
-        level: hero.level + 1,
-        power: candidate.nextPower,
-      };
-      gold = subtractGameNumbers(gold, candidate.cost);
-      upgradeSpend = addGameNumbers(upgradeSpend, candidate.cost);
-      upgradesPurchased += 1;
-      totalUpgrades += 1;
-      projection = projectCombat(heroes, monsterHealth, config);
+      const encounterTargetMissed = compareGameNumbers(
+        projection.ttkSeconds,
+        targetTtkPerEncounter,
+      ) > 0;
+      const hasUncappedHero = heroes.some(hero => !isHeroAtLevelCap(hero));
+      const hasAffordableUpgrade = getBestUpgradeCandidate(heroes, gold) !== null;
+      const hasReadyAscension = getReadyAscensionHeroIndex(heroes) !== null;
+      targetMissed ||= encounterTargetMissed;
+      blockedByGold ||= encounterTargetMissed && hasUncappedHero && !hasAffordableUpgrade;
+      blockedByProgression ||= encounterTargetMissed && !hasUncappedHero && !hasReadyAscension;
+
+      const encounterReward = getStageReward(
+        stage,
+        encounterHealth,
+        projection.tapDps,
+        projection.totalDps,
+      );
+      stageReward = addGameNumbers(stageReward, encounterReward);
+      gold = addGameNumbers(gold, encounterReward);
+      stageTtkSeconds = addGameNumbers(stageTtkSeconds, projection.ttkSeconds);
+      cumulativeSeconds = addGameNumbers(cumulativeSeconds, projection.ttkSeconds);
     }
 
-    const targetMissed = compareGameNumbers(projection.ttkSeconds, targetTtk) > 0;
-    const hasUncappedHero = heroes.some(hero => !isHeroAtLevelCap(hero));
-    const hasAffordableUpgrade = getBestUpgradeCandidate(heroes, gold) !== null;
-    const hasReadyAscension = getReadyAscensionHeroIndex(heroes) !== null;
-    const blockedByGold = targetMissed && hasUncappedHero && !hasAffordableUpgrade;
-    const blockedByProgression = targetMissed && !hasUncappedHero && !hasReadyAscension;
-    const stageReward = getStageReward(stage, monsterHealth, projection.tapDps, projection.totalDps);
-    gold = addGameNumbers(gold, stageReward);
     if (isBossStage(stage)) {
       gems += getStageBandForStage(stage).boss.gemReward;
     }
@@ -489,13 +521,13 @@ export const runBalanceSimulation = (
       summonsPurchased += 1;
       totalSummons += 1;
     }
-    cumulativeSeconds = addGameNumbers(cumulativeSeconds, projection.ttkSeconds);
 
     rows.push({
       ascensionsPurchased,
       blockedByGold,
       blockedByProgression,
       cumulativeSeconds,
+      enemiesInStage,
       gemsAfter: gems,
       goldAfter: gold,
       goldBefore,
@@ -511,7 +543,7 @@ export const runBalanceSimulation = (
       totalSummons,
       totalUpgrades,
       targetMissed,
-      ttkSeconds: projection.ttkSeconds,
+      ttkSeconds: stageTtkSeconds,
       upgradeSpend,
       upgradesPurchased,
     });
@@ -564,6 +596,7 @@ export const renderBalanceSimulationCsv = (
     [
       'stage',
       'boss',
+      'enemies_in_stage',
       'monster_health',
       'team_power',
       'total_dps',
@@ -593,6 +626,7 @@ export const renderBalanceSimulationCsv = (
     lines.push([
       row.stage,
       row.isBoss,
+      row.enemiesInStage,
       row.monsterHealth,
       row.teamPower,
       row.totalDps,

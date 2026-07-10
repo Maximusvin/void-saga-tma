@@ -8,7 +8,7 @@ export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
 export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';
 export type HeroPortraitMotion = 'still' | 'aura' | 'embers' | 'mythic';
 
-export const GAME_SNAPSHOT_SCHEMA_VERSION = 6;
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 7;
 
 export interface Hero {
   ascension: number;
@@ -30,6 +30,7 @@ export interface SummonHeroTemplate {
   portrait: string;
   portraitMotion: HeroPortraitMotion;
   showcase?: HeroShowcaseSpec;
+  videoShowcase?: HeroVideoShowcaseSpec;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
@@ -44,6 +45,13 @@ export interface HeroShowcaseSpec {
   leftWingAssetLow: string;
   rightWingAsset: string;
   rightWingAssetLow: string;
+}
+
+export interface HeroVideoShowcaseSpec {
+  id: string;
+  video: string;
+  poster: string;
+  tagline: string;
 }
 
 export interface HeroDamageContribution {
@@ -73,6 +81,8 @@ export interface StageBand {
   fromStage: number;
   baseMonsterHealth: number;
   monsterHealthGrowth: number;
+  normalEnemiesPerStage: number;
+  normalEnemyHealthGrowth: number;
   monsterEmojis: readonly string[];
   boss: BossRule;
 }
@@ -90,6 +100,7 @@ export interface GameSnapshot {
   bossEncounterEndsAt: string | null;
   comboCount: number;
   comboExpiresAt: string | null;
+  enemyIndex: number;
   gold: GameNumber;
   gems: number;
   heroes: Hero[];
@@ -100,6 +111,7 @@ export interface GameSnapshot {
   // grants, so a client cannot earn passive damage faster than wall-clock time.
   lastPassiveTickAt: string | null;
   lastSeenAt: string;
+  summonPity: number;
   updatedAt: string;
 }
 
@@ -122,7 +134,17 @@ export type GameEvent =
       source: 'tap' | 'passive';
       stage: number;
     }
-  | { type: 'monster_defeated'; stage: number; nextStage: number; goldReward: GameNumber; gemReward: number }
+  | {
+      type: 'monster_defeated';
+      enemiesInStage: number;
+      enemyIndex: number;
+      gemReward: number;
+      goldReward: GameNumber;
+      nextEnemyIndex: number;
+      nextStage: number;
+      stage: number;
+      stageCleared: boolean;
+    }
   | {
       type: 'boss_enraged';
       attemptEndsAt: string;
@@ -134,7 +156,9 @@ export type GameEvent =
       hero: Hero;
       costGems: number;
       isDuplicate: boolean;
+      legendaryPityTriggered: boolean;
       shardsGranted: number;
+      summonsUntilLegendaryPity: number;
     }
   | {
       type: 'hero_upgraded';

@@ -27,13 +27,15 @@ const baselineResult = scenarioResults[0];
 describe('balance formulas', () => {
   it('scales upgrade cost by level and rarity without truncating hero power', () => {
     assert.equal(getUpgradeCost({ level: 1, rarity: 'Common' }), '100');
-    assert.equal(getUpgradeCost({ level: 1, rarity: 'Legendary' }), '1000');
+    assert.equal(getUpgradeCost({ level: 1, rarity: 'Legendary' }), '700');
     assert.equal(getUpgradeCost({ level: 10, rarity: 'Common' }), '3844');
     assert.equal(getNextHeroPower({ power: gameNumber(5) }), '7.5');
     assert.equal(GAME_BALANCE.upgradeCostGrowth, GAME_BALANCE.upgradePowerMultiplier);
     assert.equal(getHeroLevelCap({ ascension: 0 }), 50);
     assert.equal(getHeroLevelCap({ ascension: 2 }), 150);
-    assert.equal(getAscensionShardCost({ ascension: 99 }), 2);
+    assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Common' }), 3);
+    assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Rare' }), 2);
+    assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Legendary' }), 3);
     assert.equal(getDuplicateShardReward('Common'), 1);
     assert.equal(getDuplicateShardReward('Legendary'), 5);
   });
@@ -83,13 +85,13 @@ describe('balance simulation', () => {
     assert.equal(baselineResult.rows.length, 10_000);
     assert.equal(baselineResult.summary.blockedStages, 0);
     assert.equal(baselineResult.summary.totalSummons, 400);
-    assert.equal(baselineResult.summary.totalAscensions, 345);
-    assert.equal(baselineResult.summary.totalUpgrades, 17_442);
+    assert.equal(baselineResult.summary.totalAscensions, 236);
+    assert.equal(baselineResult.summary.totalUpgrades, 11_995);
 
     for (const row of baselineResult.rows) {
       const target = row.isBoss
         ? BASELINE_BALANCE_SIMULATION.bossTargetTtkSeconds
-        : BASELINE_BALANCE_SIMULATION.normalTargetTtkSeconds;
+        : BASELINE_BALANCE_SIMULATION.normalTargetTtkSeconds * row.enemiesInStage;
       assert.ok(compareGameNumbers(row.ttkSeconds, target) <= 0, `stage ${row.stage} exceeded TTK target`);
       if (row.isBoss) {
         const attemptSeconds = getStageBandForStage(row.stage).boss.attemptSeconds;
@@ -99,6 +101,10 @@ describe('balance simulation', () => {
         );
       }
     }
+
+    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 3_300) >= 0);
+    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 4_800) <= 0);
+    assert.ok(compareGameNumbers(baselineResult.summary.totalSeconds, 280_000) >= 0);
 
     for (const hero of baselineResult.summary.finalHeroes) {
       assert.ok(hero.level <= hero.levelCap);
@@ -114,7 +120,7 @@ describe('balance simulation', () => {
     assert.equal(unluckyResult.summary.blockedStages, 0);
     assert.equal(unluckyResult.summary.finalHeroes.length, 4);
     assert.ok(soloResult.summary.progressionBlockedStages > 0);
-    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 2_110);
+    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 774);
     assert.ok(compareGameNumbers(
       soloResult.summary.totalSeconds,
       baselineResult.summary.totalSeconds,

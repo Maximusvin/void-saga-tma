@@ -73,6 +73,7 @@ function App() {
                 monsterMaxHealth={gameState.monsterMaxHealth}
                 dealDamage={gameState.dealDamage}
                 clickPower={gameState.clickPower}
+                enemyIndex={gameState.enemyIndex}
                 stage={gameState.stage}
                 isBoss={gameState.isBoss}
                 bossEncounterEndsAt={gameState.bossEncounterEndsAt}
@@ -92,6 +93,7 @@ function App() {
               <SummonCircle
                 key="summon"
                 gems={gameState.gems}
+                summonPity={gameState.summonPity}
                 summonHero={gameState.summonHero}
               />
             )}

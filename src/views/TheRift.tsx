@@ -7,6 +7,7 @@ import {
   GAME_BALANCE,
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
+  getEnemiesInStage,
   getHeroTemplateById,
   getStageBandForStage,
   isBossStage,
@@ -35,6 +36,7 @@ interface TheRiftProps {
   monsterMaxHealth: GameNumber;
   dealDamage: () => Promise<GameEvent[]>;
   clickPower: GameNumber;
+  enemyIndex: number;
   stage: number;
   isBoss: boolean;
   comboCount: number;
@@ -74,7 +76,10 @@ interface Projectile {
 interface DefeatTransition {
   id: number;
   defeatedStage: number;
+  enemiesInStage: number;
+  nextEnemyIndex: number;
   nextStage: number;
+  stageCleared: boolean;
   wasBoss: boolean;
   goldReward: GameNumber | null;
   gemReward: number | null;
@@ -125,6 +130,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   monsterMaxHealth,
   dealDamage,
   clickPower,
+  enemyIndex,
   stage,
   isBoss,
   comboCount,
@@ -150,7 +156,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   });
   const [critState, setCritState] = useState<EnemyCritSignal>({ id: 0, impactId: 0 });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
-  const [enemySceneStage, setEnemySceneStage] = useState(stage);
+  const [enemySceneEncounter, setEnemySceneEncounter] = useState({ enemyIndex, stage });
   const [biomeEnter, setBiomeEnter] = useState<{ id: string; name: string } | null>(null);
   const [visiblePassiveVolleySignal, setVisiblePassiveVolleySignal] = useState<number | null>(null);
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
@@ -210,22 +216,28 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, [bossEnrageSignal, scheduleTimeout]);
 
   useEffect(() => {
-    if (enemySceneStage === stage) {
+    if (enemySceneEncounter.stage === stage && enemySceneEncounter.enemyIndex === enemyIndex) {
       return;
     }
 
-    const defeatedVisual = getRiftEnemyVisual(enemySceneStage, isBossStage(enemySceneStage));
-    if (stage > enemySceneStage && defeatedVisual.rig?.kind === 'layered-pixi') {
+    const defeatedVisualStage = enemySceneEncounter.stage + enemySceneEncounter.enemyIndex;
+    const defeatedVisual = getRiftEnemyVisual(
+      defeatedVisualStage,
+      isBossStage(enemySceneEncounter.stage),
+    );
+    const progressed = stage > enemySceneEncounter.stage
+      || (stage === enemySceneEncounter.stage && enemyIndex > enemySceneEncounter.enemyIndex);
+    if (progressed && defeatedVisual.rig?.kind === 'layered-pixi') {
       const activeTimeouts = timeoutsRef.current;
-      const timeout = scheduleTimeout(() => setEnemySceneStage(stage), 700);
+      const timeout = scheduleTimeout(() => setEnemySceneEncounter({ enemyIndex, stage }), 700);
       return () => {
         clearTimeout(timeout);
         activeTimeouts.delete(timeout);
       };
     }
 
-    setEnemySceneStage(stage);
-  }, [enemySceneStage, scheduleTimeout, stage]);
+    setEnemySceneEncounter({ enemyIndex, stage });
+  }, [enemyIndex, enemySceneEncounter, scheduleTimeout, stage]);
 
   useEffect(() => {
     if (
@@ -293,7 +305,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
     setDefeatTransition(current => ({
       id: (current?.id ?? 0) + 1,
       defeatedStage,
+      enemiesInStage: getEnemiesInStage(defeatedStage),
+      nextEnemyIndex: 0,
       nextStage,
+      stageCleared: true,
       wasBoss,
       goldReward: rewards?.goldReward ?? null,
       gemReward: rewards?.gemReward ?? null,
@@ -306,7 +321,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
       if (current?.defeatedStage === defeatedEvent.stage) {
         return {
           ...current,
+          enemiesInStage: defeatedEvent.enemiesInStage,
+          nextEnemyIndex: defeatedEvent.nextEnemyIndex,
           nextStage: defeatedEvent.nextStage,
+          stageCleared: defeatedEvent.stageCleared,
           wasBoss: isBossStage(defeatedEvent.stage),
           goldReward: defeatedEvent.goldReward,
           gemReward: defeatedEvent.gemReward,
@@ -316,7 +334,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
       return {
         id: (current?.id ?? 0) + 1,
         defeatedStage: defeatedEvent.stage,
+        enemiesInStage: defeatedEvent.enemiesInStage,
+        nextEnemyIndex: defeatedEvent.nextEnemyIndex,
         nextStage: defeatedEvent.nextStage,
+        stageCleared: defeatedEvent.stageCleared,
         wasBoss: isBossStage(defeatedEvent.stage),
         goldReward: defeatedEvent.goldReward,
         gemReward: defeatedEvent.gemReward,
@@ -361,7 +382,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     const activeTimeouts = timeoutsRef.current;
     const timeout = scheduleTimeout(
       () => setDefeatTransition(null),
-      defeatTransition.wasBoss ? 2100 : 1650,
+      defeatTransition.wasBoss ? 2100 : defeatTransition.stageCleared ? 1450 : 850,
     );
     return () => {
       clearTimeout(timeout);
@@ -431,9 +452,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
   const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
-  const enemyVisual = getRiftEnemyVisual(stage, isBoss);
+  const enemiesInStage = getEnemiesInStage(stage);
+  const enemyVisual = getRiftEnemyVisual(stage + enemyIndex, isBoss);
   const usesLayeredRig = enemyVisual.rig?.kind === 'layered-pixi';
-  const enemySceneIsBoss = isBossStage(enemySceneStage);
+  const enemySceneIsBoss = isBossStage(enemySceneEncounter.stage);
   const stageRole = getStageRole(stage);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
   const bossPhases = getStageBandForStage(stage).boss.phases;
@@ -458,7 +480,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
             {isBoss && <Crown size={16} aria-hidden="true" />}
             <strong>{stage}</strong>
           </span>
-          <span>{isBoss ? 'Boss' : `Rift ${String(riftIndex).padStart(2, '0')}`}</span>
+          <span>{isBoss ? 'Boss' : `Wave ${enemyIndex + 1}/${enemiesInStage}`}</span>
         </div>
         <div className="stage-location">
           <span>{enemyVisual.zone}</span>
@@ -476,7 +498,9 @@ export const TheRift: React.FC<TheRiftProps> = ({
           <div className={`encounter-rank ${isBoss ? 'boss' : ''} ${stageRole === 'mini-boss' ? 'elite' : ''}`}>
             {isBoss && <Crown size={14} aria-hidden="true" />}
             {stageRole === 'mini-boss' && <em className="elite-tag">Elite</em>}
-            <span>{isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}</span>
+            <span>{isBoss
+              ? `Phase ${bossPhaseIndex} · ${bossPhase.label}`
+              : `Rift ${String(riftIndex).padStart(2, '0')} · ${enemyVisual.title}`}</span>
           </div>
           <div className="combat-status-right">
             {isBoss && (
@@ -561,9 +585,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
                 enrageSignal={bossEnrageSignal}
                 impactSignal={impactState}
                 bossPhase={bossPhaseIndex}
+                enemyIndex={enemySceneEncounter.enemyIndex}
                 isBoss={enemySceneIsBoss}
                 isBossDefeat={defeatTransition?.wasBoss ?? false}
-                stage={enemySceneStage}
+                stage={enemySceneEncounter.stage}
               />
             </Suspense>
           </motion.span>
@@ -625,7 +650,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
           {defeatTransition && (
             <motion.div
               key={defeatTransition.id}
-              className={`rift-clear-banner ${defeatTransition.wasBoss ? 'boss' : 'normal'}`}
+              className={`rift-clear-banner ${defeatTransition.wasBoss ? 'boss' : 'normal'} ${defeatTransition.stageCleared ? '' : 'encounter'}`}
               initial={{ opacity: 0, x: '-50%', y: 20, scale: 0.86 }}
               animate={{ opacity: 1, x: '-50%', y: 0, scale: 1 }}
               exit={{ opacity: 0, x: '-50%', y: -22, scale: 0.94 }}
@@ -638,8 +663,12 @@ export const TheRift: React.FC<TheRiftProps> = ({
                 <span className="reward-chest-shine" />
               </div>
               <div className="rift-clear-copy">
-                <span>{defeatTransition.wasBoss ? 'Boss Rift Cleared' : 'Rift Cleared'}</span>
-                <strong>Stage {defeatTransition.nextStage}</strong>
+                <span>{defeatTransition.wasBoss
+                  ? 'Boss Rift Cleared'
+                  : defeatTransition.stageCleared ? 'Stage Cleared' : 'Enemy Defeated'}</span>
+                <strong>{defeatTransition.stageCleared
+                  ? `Stage ${defeatTransition.nextStage}`
+                  : `Wave ${defeatTransition.nextEnemyIndex + 1}/${defeatTransition.enemiesInStage}`}</strong>
               </div>
               <div className="rift-reward-row">
                 {defeatTransition.goldReward === null ? (

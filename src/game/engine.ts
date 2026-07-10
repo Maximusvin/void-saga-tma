@@ -8,9 +8,11 @@ import {
   getDuplicateShardReward,
   getHeroLevelCap,
   getHeroUpgradeQuote,
-  getMonsterMaxHealth,
+  getEncounterMaxHealth,
+  getEnemiesInStage,
   getPassivePower,
   getStageBandForStage,
+  getSummonsUntilLegendaryPity,
   isHeroAtLevelCap,
   isBossStage,
   rollSummonTemplate,
@@ -22,6 +24,7 @@ import {
   floorGameNumber,
   gameNumber,
   isPositiveGameNumber,
+  minGameNumbers,
   multiplyGameNumbers,
   subtractGameNumbers,
   type GameNumber,
@@ -102,7 +105,8 @@ const prepareBossAttempt = (snapshot: GameSnapshot, nowMs: number): GameActionRe
 
 export const createInitialGameSnapshot = (): GameSnapshot => {
   const stage = GAME_BALANCE.initialStage;
-  const monsterMaxHealth = getMonsterMaxHealth(stage);
+  const enemyIndex = 0;
+  const monsterMaxHealth = getEncounterMaxHealth(stage, enemyIndex);
 
   const now = nowIso();
   return {
@@ -111,6 +115,7 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
     bossEncounterEndsAt: null,
     comboCount: 0,
     comboExpiresAt: null,
+    enemyIndex,
     gold: gameNumber(GAME_BALANCE.initialGold),
     gems: GAME_BALANCE.initialGems,
     heroes: [],
@@ -119,6 +124,7 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
     monsterHealth: monsterMaxHealth,
     lastPassiveTickAt: null,
     lastSeenAt: now,
+    summonPity: 0,
     updatedAt: now,
   };
 };
@@ -188,11 +194,12 @@ export const applyDamageAction = (
 
   const actionNow = options.now ?? nowIso();
 
-  const nextMonsterHealth = subtractGameNumbers(snapshot.monsterHealth, damage);
+  const appliedDamage = minGameNumbers(snapshot.monsterHealth, damage);
+  const nextMonsterHealth = subtractGameNumbers(snapshot.monsterHealth, appliedDamage);
   const hitEvent = {
     type: 'monster_hit' as const,
     comboCount: options.comboCount ?? snapshot.comboCount,
-    damage,
+    damage: appliedDamage,
     heroContributions: source === 'passive'
       ? [...(options.heroContributions ?? [])]
       : [],
@@ -205,7 +212,7 @@ export const applyDamageAction = (
     const updatedSnapshot = touchSnapshot({
       ...snapshot,
       gold: source === 'tap'
-        ? addGameNumbers(snapshot.gold, multiplyGameNumbers(damage, GAME_BALANCE.clickGoldMultiplier))
+        ? addGameNumbers(snapshot.gold, multiplyGameNumbers(appliedDamage, GAME_BALANCE.clickGoldMultiplier))
         : snapshot.gold,
       monsterHealth: nextMonsterHealth,
     }, actionNow);
@@ -217,8 +224,12 @@ export const applyDamageAction = (
   }
 
   const defeatedStage = snapshot.stage;
-  const nextStage = defeatedStage + 1;
-  const nextMonsterMaxHealth = getMonsterMaxHealth(nextStage);
+  const defeatedEnemyIndex = snapshot.enemyIndex;
+  const enemiesInStage = getEnemiesInStage(defeatedStage);
+  const stageCleared = defeatedEnemyIndex + 1 >= enemiesInStage;
+  const nextStage = stageCleared ? defeatedStage + 1 : defeatedStage;
+  const nextEnemyIndex = stageCleared ? 0 : defeatedEnemyIndex + 1;
+  const nextMonsterMaxHealth = getEncounterMaxHealth(nextStage, nextEnemyIndex);
   const defeatedStageBand = getStageBandForStage(defeatedStage);
   const defeatedBoss = isBossStage(defeatedStage);
   const goldReward = defeatedBoss
@@ -235,9 +246,10 @@ export const applyDamageAction = (
     gold: addGameNumbers(
       snapshot.gold,
       goldReward,
-      source === 'tap' ? multiplyGameNumbers(damage, GAME_BALANCE.clickGoldMultiplier) : ZERO_GAME_NUMBER,
+      source === 'tap' ? multiplyGameNumbers(appliedDamage, GAME_BALANCE.clickGoldMultiplier) : ZERO_GAME_NUMBER,
     ),
     gems: snapshot.gems + gemReward,
+    enemyIndex: nextEnemyIndex,
     stage: nextStage,
     monsterMaxHealth: nextMonsterMaxHealth,
     monsterHealth: nextMonsterMaxHealth,
@@ -249,8 +261,12 @@ export const applyDamageAction = (
       hitEvent,
       {
         type: 'monster_defeated',
+        enemiesInStage,
+        enemyIndex: defeatedEnemyIndex,
+        nextEnemyIndex,
         stage: defeatedStage,
         nextStage,
+        stageCleared,
         goldReward,
         gemReward,
       },
@@ -356,7 +372,13 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
     };
   }
 
-  const template = rollSummonTemplate(randomValue);
+  const legendaryPityTriggered = snapshot.summonPity >= GAME_BALANCE.legendaryPityPulls - 1;
+  const template = rollSummonTemplate(
+    randomValue,
+    legendaryPityTriggered ? 'Legendary' : undefined,
+  );
+  const summonPity = template.rarity === 'Legendary' ? 0 : snapshot.summonPity + 1;
+  const summonsUntilLegendaryPity = getSummonsUntilLegendaryPity(summonPity);
   const existingHero = snapshot.heroes.find(hero => hero.templateId === template.id);
   if (existingHero) {
     const shardsGranted = getDuplicateShardReward(existingHero.rarity);
@@ -368,6 +390,7 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
       ...snapshot,
       gems: snapshot.gems - GAME_BALANCE.summonCostGems,
       heroes: snapshot.heroes.map(current => current.id === hero.id ? hero : current),
+      summonPity,
     });
 
     return {
@@ -377,7 +400,9 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
         hero,
         costGems: GAME_BALANCE.summonCostGems,
         isDuplicate: true,
+        legendaryPityTriggered,
         shardsGranted,
+        summonsUntilLegendaryPity,
       }],
     };
   }
@@ -400,6 +425,7 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
       : snapshot.activeHeroIds,
     gems: snapshot.gems - GAME_BALANCE.summonCostGems,
     heroes: [...snapshot.heroes, hero],
+    summonPity,
   });
 
   return {
@@ -409,7 +435,9 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
       hero,
       costGems: GAME_BALANCE.summonCostGems,
       isDuplicate: false,
+      legendaryPityTriggered,
       shardsGranted: 0,
+      summonsUntilLegendaryPity,
     }],
   };
 };

@@ -26,6 +26,7 @@ import {
   RARITY_ORDER,
   SUMMON_POOL,
   getSummonDropPercent,
+  getSummonsUntilLegendaryPity,
 } from '../game/balance';
 import type { GameEvent, Hero, HeroRarity } from '../game/types';
 import { formatNumber } from '../utils/formatNumber';
@@ -34,6 +35,7 @@ import './SummonCircle.css';
 
 interface SummonCircleProps {
   gems: number;
+  summonPity: number;
   summonHero: () => Promise<Extract<GameEvent, { type: 'hero_summoned' }> | null>;
 }
 
@@ -51,7 +53,7 @@ const SummonHeroGlyph = ({ rarity, size = 56 }: { rarity: HeroRarity; size?: num
   return <Icon aria-hidden="true" size={size} strokeWidth={1.65} />;
 };
 
-export const SummonCircle = ({ gems, summonHero }: SummonCircleProps) => {
+export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps) => {
   const [phase, setPhase] = useState<SummonPhase>('idle');
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
   const [duplicateShards, setDuplicateShards] = useState(0);
@@ -169,6 +171,7 @@ export const SummonCircle = ({ gems, summonHero }: SummonCircleProps) => {
   };
 
   const canSummon = phase === 'idle' && gems >= GAME_BALANCE.summonCostGems;
+  const summonsUntilLegendaryPity = getSummonsUntilLegendaryPity(summonPity);
   const resultStyle = summonedHero
     ? { '--summon-rarity': RARITY_COLORS[summonedHero.rarity] } as CSSProperties
     : undefined;
@@ -228,7 +231,9 @@ export const SummonCircle = ({ gems, summonHero }: SummonCircleProps) => {
           <span className="summon-action-icon" aria-hidden="true"><Sparkles size={21} /></span>
           <span className="summon-action-copy">
             <strong>{phase === 'charging' ? 'Opening...' : 'Open the rift'}</strong>
-            <small>{canSummon ? 'Guaranteed champion' : phase !== 'idle' ? 'Rift in motion' : 'Not enough gems'}</small>
+            <small>{canSummon
+              ? `Legendary guaranteed in ${summonsUntilLegendaryPity}`
+              : phase !== 'idle' ? 'Rift in motion' : 'Not enough gems'}</small>
           </span>
           <span className="summon-cost"><Gem aria-hidden="true" size={17} />{GAME_BALANCE.summonCostGems}</span>
         </motion.button>
