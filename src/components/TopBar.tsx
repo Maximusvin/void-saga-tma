@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { ChevronDown, Coins, Gem } from 'lucide-react';
 import './TopBar.css';
 import { formatNumber } from '../utils/formatNumber';
@@ -60,7 +60,7 @@ const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ backendStatus, level, playe
   );
 };
 
-export const TopBar: React.FC<TopBarProps> = ({
+export const TopBar = memo(function TopBar({
   backendStatus,
   gold,
   gems,
@@ -68,7 +68,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenRealmSwitcher,
   playerProfile,
   realmCode,
-}) => {
+}: TopBarProps) {
   const profileSourceLabel = playerProfile.source === 'telegram' ? 'Telegram linked' : 'Riftbound';
 
   return (
@@ -107,4 +107,4 @@ export const TopBar: React.FC<TopBarProps> = ({
       <span className="sr-only" aria-live="polite">{STATUS_LABELS[backendStatus]}</span>
     </header>
   );
-};
+});

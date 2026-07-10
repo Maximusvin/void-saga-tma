@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Activity, Crown, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
@@ -17,6 +17,7 @@ import {
   type GameNumber,
 } from '../game/gameNumber';
 import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
+import { getGameRenderProfile } from '../utils/renderQuality';
 import { getRiftEnemyVisual } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
 import { RiftWarband } from './RiftWarband';
@@ -78,6 +79,33 @@ interface DefeatTransition {
 type MonsterDefeatedEvent = Extract<GameEvent, { type: 'monster_defeated' }>;
 type MonsterHitEvent = Extract<GameEvent, { type: 'monster_hit' }>;
 
+const RiftAmbientSparks = memo(function RiftAmbientSparks({ count }: { count: number }) {
+  const prefersReducedMotion = useReducedMotion();
+  const sparks = useMemo(() => {
+    return Array.from({ length: count }, (_, id) => ({
+      id,
+      left: 8 + ((id * 37) % 84),
+      delay: (id % 6) * 0.42,
+      duration: 4.6 + (id % 5) * 0.32,
+      scale: 0.65 + (id % 4) * 0.18,
+    }));
+  }, [count]);
+
+  if (prefersReducedMotion) {
+    return null;
+  }
+
+  return sparks.map(spark => (
+    <motion.span
+      key={spark.id}
+      className="rift-spark"
+      style={{ left: `${spark.left}%`, scale: spark.scale }}
+      animate={{ y: ['18vh', '-76vh'], opacity: [0, 0.78, 0] }}
+      transition={{ duration: spark.duration, delay: spark.delay, repeat: Infinity, ease: 'linear' }}
+    />
+  ));
+});
+
 const getMonsterDefeatedEvent = (events: GameEvent[]) => {
   return events.find((event): event is MonsterDefeatedEvent => event.type === 'monster_defeated') ?? null;
 };
@@ -116,6 +144,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
   const [visibleBossEnrageSignal, setVisibleBossEnrageSignal] = useState<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
+  const renderProfile = useMemo(getGameRenderProfile, []);
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
   const lastHandledBossEnrageSignalRef = useRef(bossEnrageSignal);
@@ -165,16 +194,6 @@ export const TheRift: React.FC<TheRiftProps> = ({
       setVisibleBossEnrageSignal(current => current === bossEnrageSignal ? null : current);
     }, 1_250);
   }, [bossEnrageSignal, scheduleTimeout]);
-
-  const sparks = useMemo(() => {
-    return Array.from({ length: 18 }, (_, id) => ({
-      id,
-      left: 8 + ((id * 37) % 84),
-      delay: (id % 6) * 0.42,
-      duration: 4.6 + (id % 5) * 0.32,
-      scale: 0.65 + (id % 4) * 0.18,
-    }));
-  }, []);
 
   useEffect(() => {
     if (
@@ -359,21 +378,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
   return (
     <motion.section
       className={`rift-view ${combatTone} ${isBoss ? `boss-phase-${bossPhaseIndex}` : ''}`}
+      data-render-quality={renderProfile.quality}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
       <div className="rift-skyline" />
-      {!prefersReducedMotion && sparks.map(spark => (
-        <motion.span
-          key={spark.id}
-          className="rift-spark"
-          style={{ left: `${spark.left}%`, scale: spark.scale }}
-          animate={{ y: ['18vh', '-76vh'], opacity: [0, 0.78, 0] }}
-          transition={{ duration: spark.duration, delay: spark.delay, repeat: Infinity, ease: 'linear' }}
-        />
-      ))}
+      <RiftAmbientSparks count={renderProfile.ambientSparkCount} />
 
       <header className="rift-stage-hud">
         <div className="stage-mark" aria-label={`Stage ${stage}`}>
@@ -469,10 +481,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
             className="rift-beast-shell"
             animate={isHit
               ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] }
-              : (prefersReducedMotion ? { scale: 1 } : { scale: [1, 1.035, 1] })}
+              : { scale: 1, rotate: 0 }}
             transition={{
-              duration: isHit ? 0.18 : 2.2,
-              repeat: isHit || prefersReducedMotion ? 0 : Infinity,
+              duration: isHit && !prefersReducedMotion ? 0.18 : 0,
+              repeat: 0,
               ease: 'easeInOut',
             }}
           >
