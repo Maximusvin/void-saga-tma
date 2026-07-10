@@ -82,3 +82,8 @@ jobs:
       - run: npm run build
       - name: Validate production Compose isolation
         run: npm run prod:compose:check
+      - name: Build production images
+        env:
+          TELEGRAM_BOT_TOKEN: ci-build-placeholder
+          VOID_SAGA_HOST: game.riy.contact
+        run: docker compose -f docker-compose.prod.yml build api web
