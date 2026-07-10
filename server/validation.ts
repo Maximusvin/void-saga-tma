@@ -1,9 +1,20 @@
 import type { GameAction } from '../src/game/types';
 
 interface GameActionRequest {
+  characterId?: unknown;
   commandId?: unknown;
   playerId?: unknown;
   action?: unknown;
+}
+
+interface RealmJoinRequest {
+  playerId?: unknown;
+  realmId?: unknown;
+}
+
+interface RealmSelectRequest {
+  characterId?: unknown;
+  playerId?: unknown;
 }
 
 const MAX_COMBAT_TAPS_PER_BATCH = 20;
@@ -39,17 +50,64 @@ export const normalizeCommandId = (value: unknown) => {
   return COMMAND_ID_PATTERN.test(trimmed) ? trimmed : null;
 };
 
+export const normalizeRealmEntityId = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return /^[A-Za-z0-9:_-]{8,96}$/.test(trimmed) ? trimmed : null;
+};
+
+export const parseRealmJoinRequest = (
+  value: unknown,
+): { realmId: string; requestedPlayerId: string | null } | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const request = value as RealmJoinRequest;
+  const realmId = normalizeRealmEntityId(request.realmId);
+  const requestedPlayerId = request.playerId === undefined ? null : normalizePlayerId(request.playerId);
+  if (!realmId || (request.playerId !== undefined && !requestedPlayerId)) {
+    return null;
+  }
+
+  return { realmId, requestedPlayerId };
+};
+
+export const parseRealmSelectRequest = (
+  value: unknown,
+): { characterId: string; requestedPlayerId: string | null } | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const request = value as RealmSelectRequest;
+  const characterId = normalizeRealmEntityId(request.characterId);
+  const requestedPlayerId = request.playerId === undefined ? null : normalizePlayerId(request.playerId);
+  if (!characterId || (request.playerId !== undefined && !requestedPlayerId)) {
+    return null;
+  }
+
+  return { characterId, requestedPlayerId };
+};
+
 export const parseGameActionRequest = (
   value: unknown,
-): { commandId: string; requestedPlayerId: string | null; action: GameAction } | null => {
+): { characterId: string | null; commandId: string; requestedPlayerId: string | null; action: GameAction } | null => {
   if (!isRecord(value)) {
     return null;
   }
 
   const request = value as GameActionRequest;
+  const characterId = request.characterId === undefined ? null : normalizeRealmEntityId(request.characterId);
   const commandId = normalizeCommandId(request.commandId);
   const requestedPlayerId = request.playerId === undefined ? null : normalizePlayerId(request.playerId);
-  if (!commandId || (request.playerId !== undefined && !requestedPlayerId) || !isRecord(request.action)) {
+  if (
+    !commandId ||
+    (request.characterId !== undefined && !characterId) ||
+    (request.playerId !== undefined && !requestedPlayerId) ||
+    !isRecord(request.action)
+  ) {
     return null;
   }
 
@@ -69,6 +127,7 @@ export const parseGameActionRequest = (
     }
 
     return {
+      characterId,
       commandId,
       requestedPlayerId,
       action: {
@@ -85,6 +144,7 @@ export const parseGameActionRequest = (
     }
 
     return {
+      characterId,
       commandId,
       requestedPlayerId,
       action: {
@@ -103,6 +163,7 @@ export const parseGameActionRequest = (
     }
 
     return {
+      characterId,
       commandId,
       requestedPlayerId,
       action: {
@@ -119,6 +180,7 @@ export const parseGameActionRequest = (
     }
 
     return {
+      characterId,
       commandId,
       requestedPlayerId,
       action: {
@@ -130,6 +192,7 @@ export const parseGameActionRequest = (
 
   if (request.action.type === 'claim_offline_rewards') {
     return {
+      characterId,
       commandId,
       requestedPlayerId,
       action: {

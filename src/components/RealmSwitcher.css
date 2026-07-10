@@ -1,0 +1,252 @@
+.realm-switcher-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(1, 8, 11, 0.66);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+.realm-switcher-sheet {
+  width: 100%;
+  max-height: min(78%, 620px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px var(--screen-gutter) max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(218, 255, 245, 0.42);
+  background:
+    linear-gradient(180deg, rgba(74, 145, 132, 0.18), transparent 24%),
+    rgba(4, 18, 22, 0.97);
+  box-shadow: 0 -24px 54px rgba(0, 5, 8, 0.56), inset 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.realm-switcher-sheet::before {
+  content: '';
+  width: 42px;
+  height: 3px;
+  margin: 0 auto 7px;
+  border-radius: 2px;
+  background: rgba(218, 255, 245, 0.3);
+}
+
+.realm-switcher-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 2px 10px;
+}
+
+.realm-switcher-mark {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 222, 142, 0.44);
+  border-radius: 8px;
+  color: #ffe094;
+  background: linear-gradient(145deg, rgba(255, 215, 124, 0.17), rgba(87, 224, 199, 0.12));
+}
+
+.realm-switcher-header > div {
+  min-width: 0;
+}
+
+.realm-switcher-header span,
+.active-realm-strip span {
+  color: rgba(206, 240, 232, 0.6);
+  font-size: 0.57rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.realm-switcher-header h2 {
+  font-size: 1.2rem;
+  line-height: 1.05;
+}
+
+.realm-switcher-header button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(214, 255, 244, 0.2);
+  border-radius: 8px;
+  color: #d9eee9;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.realm-switcher-header button:focus-visible,
+.realm-row > button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.active-realm-strip {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 10px;
+  border-block: 1px solid rgba(203, 255, 242, 0.14);
+  background: linear-gradient(90deg, rgba(91, 226, 202, 0.08), transparent);
+}
+
+.active-realm-strip strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: #8dffe8;
+  font-size: 1.04rem;
+}
+
+.active-realm-strip small {
+  color: #ffe094;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.realm-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+  padding-top: 9px;
+}
+
+.realm-row {
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid rgba(207, 247, 237, 0.17);
+  border-radius: 8px;
+  background: rgba(9, 31, 34, 0.74);
+}
+
+.realm-row.recommended {
+  border-color: rgba(255, 222, 145, 0.4);
+  background:
+    linear-gradient(105deg, rgba(255, 214, 120, 0.12), transparent 44%),
+    rgba(9, 31, 34, 0.8);
+}
+
+.realm-row-emblem {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(128, 255, 229, 0.26);
+  border-radius: 8px;
+  color: #79f4dd;
+  background: rgba(59, 183, 158, 0.08);
+}
+
+.realm-row-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 7px;
+}
+
+.realm-row-copy > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.realm-row-copy strong {
+  font-size: 0.88rem;
+}
+
+.realm-row-copy > div span {
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 224, 151, 0.32);
+  border-radius: 4px;
+  color: #ffe094;
+  font-size: 0.48rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.realm-row-copy small {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: rgba(211, 239, 233, 0.62);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.realm-population-track {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.realm-population-track::after {
+  content: '';
+  display: block;
+  width: var(--realm-fill);
+  height: 100%;
+  background: linear-gradient(90deg, #52d9bf, #ffe18f);
+  box-shadow: 0 0 8px rgba(89, 237, 208, 0.46);
+}
+
+.realm-row > button {
+  min-width: 82px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid rgba(127, 255, 229, 0.35);
+  border-radius: 7px;
+  color: #06201e;
+  background: linear-gradient(145deg, #a7ffec, #53d7bf);
+  font-size: 0.65rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.realm-row > button.realm-action-disabled {
+  color: rgba(216, 239, 234, 0.54);
+  border-color: rgba(210, 244, 237, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: default;
+}
+
+@media (max-width: 340px) {
+  .realm-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .realm-row-emblem {
+    width: 36px;
+    height: 36px;
+  }
+
+  .realm-row > button {
+    min-width: 70px;
+    padding-inline: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .realm-switcher-backdrop,
+  .realm-switcher-sheet {
+    transition: none;
+  }
+}

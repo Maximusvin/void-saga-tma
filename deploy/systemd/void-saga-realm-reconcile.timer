@@ -1,0 +1,11 @@
+[Unit]
+Description=Evaluate Void Saga realm launch and merge policy every ten minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+Unit=void-saga-realm-reconcile.service
+
+[Install]
+WantedBy=timers.target

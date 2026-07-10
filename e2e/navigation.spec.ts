@@ -143,6 +143,35 @@ test('player HUD falls back to initials when Telegram has no usable photo', asyn
   await expect(page.locator('.player-avatar-image')).toHaveCount(0);
 });
 
+test('player HUD opens a bounded logical realm switcher', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/');
+
+  const profileButton = page.getByRole('button', { name: /server S-1.*Open server selection/ });
+  await profileButton.click();
+  const dialog = page.getByRole('dialog', { name: 'World Servers' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Active realm', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('S-1', { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Active', exact: true })).toBeDisabled();
+
+  const bounds = await dialog.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return { bottom: box.bottom, left: box.left, right: box.right, viewportHeight: innerHeight, viewportWidth: innerWidth };
+  });
+  expect(bounds.left).toBe(0);
+  expect(bounds.right).toBe(bounds.viewportWidth);
+  expect(Math.abs(bounds.bottom - bounds.viewportHeight)).toBeLessThan(1);
+  const realmAction = await dialog.locator('.realm-row > button').first().boundingBox();
+  const closeAction = await dialog.getByRole('button', { name: 'Close server selection' }).boundingBox();
+  expect(realmAction?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(closeAction?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+  await dialog.getByRole('button', { name: 'Close server selection' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(profileButton).toBeFocused();
+});
+
 test('bottom navigation exposes campaign and leagues while surviving Pixi remount cycles', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));

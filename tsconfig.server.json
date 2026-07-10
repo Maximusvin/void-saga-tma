@@ -15,5 +15,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server/**/*.ts", "src/game/**/*.ts"]
+  "include": ["server/**/*.ts", "scripts/realm-admin.ts", "src/game/**/*.ts", "src/shared/**/*.ts"]
 }

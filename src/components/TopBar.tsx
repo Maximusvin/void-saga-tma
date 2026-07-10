@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Coins, Gem } from 'lucide-react';
+import { ChevronDown, Coins, Gem } from 'lucide-react';
 import './TopBar.css';
 import { formatNumber } from '../utils/formatNumber';
 import type { BackendStatus } from '../store/useGameState';
@@ -11,7 +11,9 @@ interface TopBarProps {
   gold: GameNumber;
   gems: number;
   level: number;
+  onOpenRealmSwitcher: () => void;
   playerProfile: PlayerProfile;
+  realmCode: string;
 }
 
 const STATUS_LABELS: Record<BackendStatus, string> = {
@@ -63,18 +65,21 @@ export const TopBar: React.FC<TopBarProps> = ({
   gold,
   gems,
   level,
+  onOpenRealmSwitcher,
   playerProfile,
+  realmCode,
 }) => {
   const profileSourceLabel = playerProfile.source === 'telegram' ? 'Telegram linked' : 'Riftbound';
 
   return (
     <header className="topbar">
-      <div
-        aria-label={`${playerProfile.displayName}, level ${Math.max(1, Math.floor(level))}. ${STATUS_LABELS[backendStatus]}`}
+      <button
+        aria-label={`${playerProfile.displayName}, level ${Math.max(1, Math.floor(level))}, server ${realmCode}. Open server selection.`}
         className="player-hud"
         data-profile-source={playerProfile.source}
-        role="group"
+        onClick={onOpenRealmSwitcher}
         title={STATUS_LABELS[backendStatus]}
+        type="button"
       >
         <PlayerAvatar
           backendStatus={backendStatus}
@@ -82,10 +87,11 @@ export const TopBar: React.FC<TopBarProps> = ({
           playerProfile={playerProfile}
         />
         <span className="player-identity-copy">
-          <span className="player-kicker">{profileSourceLabel}</span>
+          <span className="player-kicker">{realmCode} · {profileSourceLabel}</span>
           <strong className="player-name">{playerProfile.displayName}</strong>
         </span>
-      </div>
+        <ChevronDown className="realm-chevron" size={15} aria-hidden="true" />
+      </button>
       <div className="resource-cluster" aria-label="Player resources" role="group">
         <div className="resource-item gold">
           <Coins size={17} className="icon" aria-hidden="true" />

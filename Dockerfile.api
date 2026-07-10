@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY tsconfig.server.json ./
 COPY server ./server
+COPY scripts/realm-admin.ts ./scripts/realm-admin.ts
 COPY src/game ./src/game
 COPY src/observability ./src/observability
 COPY src/shared ./src/shared
@@ -24,6 +25,7 @@ ENV VOID_SAGA_DB_PATH=/data/void-saga.sqlite
 RUN mkdir -p /data && chown node:node /data
 
 COPY --from=build --chown=node:node /app/dist-server/index.mjs ./index.mjs
+COPY --from=build --chown=node:node /app/dist-server/realm-admin.mjs ./realm-admin.mjs
 COPY --chown=node:node deploy/backup-sqlite.mjs ./backup-sqlite.mjs
 
 USER node
