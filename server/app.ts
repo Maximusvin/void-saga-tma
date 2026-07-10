@@ -4,6 +4,7 @@ import { applyGameAction } from '../src/game/engine';
 import type { GameRepository } from './gameRepository';
 import { ActionRateLimiter } from './actionRateLimiter';
 import { HttpRequestError, getRequestUrl, readJsonBody, sendJson, sendNoContent } from './http';
+import type { LeaderboardRepository } from './leaderboardRepository';
 import { resolvePlayerIdentity } from './playerIdentity';
 import { runPlayerMutation } from './playerLocks';
 import { RealmDomainError, type RealmRepository } from './realmRepository';
@@ -12,8 +13,16 @@ import { parseGameActionRequest, parseRealmJoinRequest, parseRealmSelectRequest 
 export const createGameRequestHandler = (
   gameRepository: GameRepository,
   realmRepository: RealmRepository,
+  leaderboardRepository: LeaderboardRepository,
 ): RequestListener => {
   const actionRateLimiter = new ActionRateLimiter();
+  const resolveTrackedPlayerIdentity = (request: IncomingMessage, requestedPlayerId?: unknown) => {
+    const identity = resolvePlayerIdentity(request, requestedPlayerId);
+    if (identity.ok) {
+      leaderboardRepository.upsertProfile(identity.playerId, identity.playerProfile);
+    }
+    return identity;
+  };
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
@@ -40,7 +49,7 @@ export const createGameRequestHandler = (
       }
 
       if (request.method === 'GET' && url.pathname === '/api/game/realms') {
-        const identity = resolvePlayerIdentity(request, url.searchParams.get('playerId'));
+        const identity = resolveTrackedPlayerIdentity(request, url.searchParams.get('playerId'));
         if (!identity.ok) {
           sendJson(response, identity.statusCode, { error: identity.error });
           return;
@@ -56,7 +65,7 @@ export const createGameRequestHandler = (
           sendJson(response, 400, { error: 'invalid_realm_join_request' });
           return;
         }
-        const identity = resolvePlayerIdentity(request, parsedRequest.requestedPlayerId);
+        const identity = resolveTrackedPlayerIdentity(request, parsedRequest.requestedPlayerId);
         if (!identity.ok) {
           sendJson(response, identity.statusCode, { error: identity.error });
           return;
@@ -74,7 +83,7 @@ export const createGameRequestHandler = (
           sendJson(response, 400, { error: 'invalid_realm_select_request' });
           return;
         }
-        const identity = resolvePlayerIdentity(request, parsedRequest.requestedPlayerId);
+        const identity = resolveTrackedPlayerIdentity(request, parsedRequest.requestedPlayerId);
         if (!identity.ok) {
           sendJson(response, identity.statusCode, { error: identity.error });
           return;
@@ -86,8 +95,32 @@ export const createGameRequestHandler = (
         return;
       }
 
+      if (request.method === 'GET' && url.pathname === '/api/game/leaderboard') {
+        const identity = resolveTrackedPlayerIdentity(request, url.searchParams.get('playerId'));
+        if (!identity.ok) {
+          sendJson(response, identity.statusCode, { error: identity.error });
+          return;
+        }
+
+        const requestedCharacterId = url.searchParams.get('characterId');
+        const realm = requestedCharacterId
+          ? realmRepository.getOwnedCharacter(identity.playerId, requestedCharacterId)
+          : realmRepository.resolveActiveCharacter(identity.playerId);
+        gameRepository.getOrCreatePlayer(realm.characterId);
+        response.setHeader('cache-control', 'private, no-store');
+        sendJson(
+          response,
+          200,
+          leaderboardRepository.getRealmLeaderboard(
+            realm.canonicalRealmId,
+            realm.characterId,
+          ),
+        );
+        return;
+      }
+
       if (request.method === 'GET' && url.pathname === '/api/game/state') {
-        const identity = resolvePlayerIdentity(request, url.searchParams.get('playerId'));
+        const identity = resolveTrackedPlayerIdentity(request, url.searchParams.get('playerId'));
         if (!identity.ok) {
           sendJson(response, identity.statusCode, { error: identity.error });
           return;

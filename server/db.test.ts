@@ -34,11 +34,22 @@ describe('game database migrations', () => {
         'realm_merge_sources',
         'realm_operations',
         'realm_entitlements',
+        'account_profiles',
       ]) {
         assert.ok(database.prepare(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
         ).get(table));
       }
+      const playerColumns = database.prepare('PRAGMA table_info(players)').all() as Array<{ name: string }>;
+      assert.deepEqual(
+        ['stage', 'enemy_index', 'progress_updated_at'].every(column => (
+          playerColumns.some(({ name }) => name === column)
+        )),
+        true,
+      );
+      assert.ok(database.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'players_progress_idx'",
+      ).get());
       database.close();
       database = null;
 

@@ -25,7 +25,7 @@ export interface GameCommandResult extends PlayerState {
   events: GameEvent[];
 }
 
-const parseSnapshot = (snapshotJson: string): GameSnapshot => {
+export const parseStoredSnapshot = (snapshotJson: string): GameSnapshot => {
   const snapshot = normalizeGameSnapshot(JSON.parse(snapshotJson) as unknown);
   if (!snapshot) {
     throw new Error('Stored game snapshot is invalid');
@@ -43,12 +43,16 @@ export class GameRepository {
       .get(playerId) as PlayerRow | undefined;
 
     if (existing) {
-      const snapshot = parseSnapshot(existing.snapshot_json);
+      const snapshot = parseStoredSnapshot(existing.snapshot_json);
       const normalizedSnapshotJson = JSON.stringify(snapshot);
       if (normalizedSnapshotJson !== existing.snapshot_json) {
         this.database
-          .prepare('UPDATE players SET snapshot_json = ? WHERE id = ?')
-          .run(normalizedSnapshotJson, existing.id);
+          .prepare(`
+            UPDATE players
+            SET snapshot_json = ?, stage = ?, enemy_index = ?
+            WHERE id = ?
+          `)
+          .run(normalizedSnapshotJson, snapshot.stage, snapshot.enemyIndex, existing.id);
       }
 
       return {
@@ -61,16 +65,41 @@ export class GameRepository {
     const now = new Date().toISOString();
 
     this.database
-      .prepare('INSERT INTO players (id, created_at, updated_at, snapshot_json) VALUES (?, ?, ?, ?)')
-      .run(playerId, now, now, JSON.stringify(snapshot));
+      .prepare(`
+        INSERT INTO players (
+          id, created_at, updated_at, snapshot_json, stage, enemy_index, progress_updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(playerId, now, now, JSON.stringify(snapshot), snapshot.stage, snapshot.enemyIndex, now);
 
     return { playerId, snapshot };
   }
 
   savePlayer(playerId: string, snapshot: GameSnapshot) {
+    const now = new Date().toISOString();
     this.database
-      .prepare('UPDATE players SET updated_at = ?, snapshot_json = ? WHERE id = ?')
-      .run(new Date().toISOString(), JSON.stringify(snapshot), playerId);
+      .prepare(`
+        UPDATE players
+        SET updated_at = ?,
+            snapshot_json = ?,
+            progress_updated_at = CASE
+              WHEN stage <> ? OR enemy_index <> ? THEN ?
+              ELSE progress_updated_at
+            END,
+            stage = ?,
+            enemy_index = ?
+        WHERE id = ?
+      `)
+      .run(
+        now,
+        JSON.stringify(snapshot),
+        snapshot.stage,
+        snapshot.enemyIndex,
+        now,
+        snapshot.stage,
+        snapshot.enemyIndex,
+        playerId,
+      );
 
     return { playerId, snapshot };
   }

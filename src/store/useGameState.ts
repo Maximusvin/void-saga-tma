@@ -12,6 +12,7 @@ import {
 import {
   createGameCommandId,
   fetchGameState,
+  fetchRealmLeaderboard,
   fetchRealmDirectory,
   isGameApiEnabled,
   joinRealm,
@@ -44,6 +45,11 @@ import type {
 } from '../game/types';
 import { MAX_ACTIVE_WARBAND_HEROES, getActiveWarbandHeroes } from '../game/warband';
 import {
+  getLeagueDivision,
+  normalizeRealmLeaderboard,
+  type RealmLeaderboard,
+} from '../shared/leaderboard';
+import {
   DEFAULT_PLAYER_PROFILE,
   normalizePlayerProfile,
   type PlayerProfile,
@@ -60,6 +66,7 @@ import { getLocalPlayerProfilePreview, getTelegramPlayerId } from '../utils/tele
 export type { Hero } from '../game/types';
 
 export type BackendStatus = AutomaticActionBackendStatus;
+export type LeaderboardStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
@@ -99,6 +106,32 @@ const LOCAL_REALM_DIRECTORY: RealmDirectory = {
     status: 'open',
   }],
   recommendedRealmId: LOCAL_REALM_CONTEXT.originRealmId,
+};
+
+const createLocalLeaderboard = (
+  snapshot: GameSnapshot,
+  playerProfile: PlayerProfile,
+  realm: RealmContext,
+): RealmLeaderboard => {
+  const passivePower = getPassivePower(getActiveWarbandHeroes(snapshot));
+  const currentPlayer = {
+    displayName: playerProfile.displayName,
+    division: getLeagueDivision(snapshot.stage),
+    enemyIndex: snapshot.enemyIndex,
+    isCurrentPlayer: true,
+    passivePower,
+    photoUrl: playerProfile.photoUrl,
+    rank: 1,
+    stage: snapshot.stage,
+  } as const;
+
+  return {
+    currentPlayer,
+    generatedAt: new Date().toISOString(),
+    realmCode: realm.canonicalRealmCode,
+    top: [currentPlayer],
+    totalPlayers: 1,
+  };
 };
 
 interface PendingTap {
@@ -249,6 +282,8 @@ export const useGameState = () => {
   const [realmContext, setRealmContext] = useState<RealmContext>(LOCAL_REALM_CONTEXT);
   const [realmDirectory, setRealmDirectory] = useState<RealmDirectory>(LOCAL_REALM_DIRECTORY);
   const [realmSwitching, setRealmSwitching] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<RealmLeaderboard | null>(null);
+  const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>('idle');
   const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
   const [offlineReward, setOfflineReward] = useState<OfflineRewardSummary | null>(null);
   const [passiveVolleyFeedback, setPassiveVolleyFeedback] = useState<PassiveVolleyFeedback>({
@@ -509,6 +544,51 @@ export const useGameState = () => {
     }
   }, [apiEnabled, playerId]);
 
+  const refreshLeaderboard = useCallback(async () => {
+    if (!apiEnabled) {
+      const localLeaderboard = createLocalLeaderboard(
+        snapshotRef.current,
+        playerProfile,
+        realmContextRef.current,
+      );
+      setLeaderboard(localLeaderboard);
+      setLeaderboardStatus('ready');
+      return localLeaderboard;
+    }
+    if (backendStatus !== 'synced' || realmSwitching) {
+      return null;
+    }
+
+    const requestedCharacterId = realmContextRef.current.characterId;
+    setLeaderboardStatus('loading');
+    try {
+      const response = normalizeRealmLeaderboard(
+        await fetchRealmLeaderboard(playerId, requestedCharacterId),
+      );
+      if (!response) {
+        throw new Error('Game API returned an invalid leaderboard');
+      }
+      if (realmContextRef.current.characterId !== requestedCharacterId) {
+        return null;
+      }
+      setLeaderboard(response);
+      setLeaderboardStatus('ready');
+      return response;
+    } catch (error) {
+      console.error(error);
+      if (realmContextRef.current.characterId === requestedCharacterId) {
+        setLeaderboardStatus('error');
+      }
+      return null;
+    }
+  }, [apiEnabled, backendStatus, playerId, playerProfile, realmSwitching]);
+
+  useEffect(() => {
+    if (activeView === 'leagues') {
+      void refreshLeaderboard();
+    }
+  }, [activeView, refreshLeaderboard]);
+
   const switchRealm = useCallback(async (targetRealm: RealmSummary) => {
     if (!apiEnabled || backendStatus !== 'synced' || realmSwitching) {
       return false;
@@ -526,6 +606,8 @@ export const useGameState = () => {
           ? await selectRealmCharacter(playerId, targetRealm.characterId)
           : await joinRealm(playerId, targetRealm.id);
         const selectedRealm = requireRealmContext(mutation.realm);
+        setLeaderboard(null);
+        setLeaderboardStatus('idle');
         const response = await fetchGameState(playerId, selectedRealm.characterId);
         applyServerState(response);
         await replayActionOutbox(selectedRealm.characterId);
@@ -861,11 +943,14 @@ export const useGameState = () => {
     passiveVolleyHeroContributions: passiveVolleyFeedback.heroContributions,
     passiveVolleySignal: passiveVolleyFeedback.signal,
     backendStatus,
+    leaderboard,
+    leaderboardStatus,
     playerProfile,
     playerId,
     realmContext,
     realmDirectory,
     realmSwitching,
+    refreshLeaderboard,
     refreshRealmDirectory,
     switchRealm,
   };

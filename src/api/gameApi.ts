@@ -1,5 +1,6 @@
 import type { GameAction, GameEvent, GameSnapshot } from '../game/types';
 import type { PlayerProfile } from '../shared/playerProfile';
+import type { RealmLeaderboard } from '../shared/leaderboard';
 import type { RealmContext, RealmDirectory } from '../shared/realm';
 import { getTelegramInitData } from '../utils/telegram';
 
@@ -68,6 +69,13 @@ export const fetchRealmDirectory = (playerId: string) => {
   const url = new URL(`${GAME_API_BASE_URL}/api/game/realms`);
   url.searchParams.set('playerId', playerId);
   return requestJson<RealmDirectory>(url.toString());
+};
+
+export const fetchRealmLeaderboard = (playerId: string, characterId: string) => {
+  const url = new URL(`${GAME_API_BASE_URL}/api/game/leaderboard`);
+  url.searchParams.set('playerId', playerId);
+  url.searchParams.set('characterId', characterId);
+  return requestJson<RealmLeaderboard>(url.toString());
 };
 
 export const joinRealm = (playerId: string, realmId: string) => {
