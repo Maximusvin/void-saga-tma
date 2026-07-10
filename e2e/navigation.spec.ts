@@ -67,6 +67,33 @@ test('requests Telegram fullscreen on mobile and configures immersive host color
   ]);
 });
 
+test('reloads once when an active client references a stale deployment chunk', async ({ page }) => {
+  await page.addInitScript(() => {
+    const navigationCount = Number(sessionStorage.getItem('__test_navigation_count') ?? '0');
+    sessionStorage.setItem('__test_navigation_count', String(navigationCount + 1));
+  });
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__test_navigation_count'))).toBe('1');
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.evaluate(() => {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
+      }, 0);
+    }),
+  ]);
+
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__test_navigation_count'))).toBe('2');
+  const secondEventWasNotPrevented = await page.evaluate(() => (
+    window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }))
+  ));
+  await page.waitForTimeout(250);
+
+  expect(secondEventWasNotPrevented).toBe(true);
+  expect(await page.evaluate(() => sessionStorage.getItem('__test_navigation_count'))).toBe('2');
+});
+
 test('keeps Telegram Desktop inside a centered phone viewport', async ({ page }, testInfo) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
