@@ -26,3 +26,6 @@ test-results/
 *.njsproj
 *.sln
 *.sw?
+
+# Agent runtime workspace (worktrees, launch configs)
+.claude/
