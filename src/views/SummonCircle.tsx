@@ -60,6 +60,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
   const prefersReducedMotion = useReducedMotion();
   const renderProfile = useMemo(getGameRenderProfile, []);
   const claimButtonRef = useRef<HTMLButtonElement | null>(null);
+  const resultActionsRef = useRef<HTMLDivElement | null>(null);
   const timeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   const isMountedRef = useRef(true);
 
@@ -85,6 +86,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
       isMountedRef.current = false;
       activeTimeouts.forEach(clearTimeout);
       activeTimeouts.clear();
+      confetti.reset();
     };
   }, []);
 
@@ -122,7 +124,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
   }, [celebrationParticleCount, prefersReducedMotion, renderProfile.quality]);
 
   const handleSummon = () => {
-    if (phase !== 'idle') {
+    if (phase !== 'idle' && phase !== 'result') {
       return;
     }
     if (gems < GAME_BALANCE.summonCostGems) {
@@ -133,6 +135,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
     setPhase('charging');
     setSummonedHero(null);
     setDuplicateShards(0);
+    confetti.reset();
     triggerHaptic('medium');
 
     scheduleTimeout(() => {
@@ -167,10 +170,12 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
     setSummonedHero(null);
     setDuplicateShards(0);
     setPhase('idle');
+    confetti.reset();
     triggerHaptic('light');
   };
 
   const canSummon = phase === 'idle' && gems >= GAME_BALANCE.summonCostGems;
+  const canSummonAgain = phase === 'result' && gems >= GAME_BALANCE.summonCostGems;
   const summonsUntilLegendaryPity = getSummonsUntilLegendaryPity(summonPity);
   const resultStyle = summonedHero
     ? { '--summon-rarity': RARITY_COLORS[summonedHero.rarity] } as CSSProperties
@@ -211,11 +216,16 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
       </div>
 
       <div className="summon-dock">
-        <div className="summon-rates" aria-label="Summon drop rates">
+        <div className="summon-rates" aria-label="Summon drop rates" role="list">
           {sortedSummonPool.map(template => (
-            <div className={`summon-rate rarity-${template.rarity.toLowerCase()}`} key={template.rarity}>
+            <div
+              aria-label={`${template.rarity} ${getSummonDropPercent(template)}%`}
+              className={`summon-rate rarity-${template.rarity.toLowerCase()}`}
+              key={template.rarity}
+              role="listitem"
+            >
               <SummonHeroGlyph rarity={template.rarity} size={17} />
-              <span>{template.rarity}</span>
+              <span aria-hidden="true">{template.rarity}</span>
               <strong>{getSummonDropPercent(template)}%</strong>
             </div>
           ))}
@@ -273,9 +283,23 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
             initial={{ opacity: 0 }}
             key="summon-result"
             onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                claimHero();
+                return;
+              }
               if (event.key === 'Tab') {
                 event.preventDefault();
-                claimButtonRef.current?.focus();
+                const actions = Array.from(
+                  resultActionsRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [],
+                );
+                if (actions.length === 0) {
+                  return;
+                }
+                const currentIndex = actions.indexOf(document.activeElement as HTMLButtonElement);
+                const direction = event.shiftKey ? -1 : 1;
+                const nextIndex = (currentIndex + direction + actions.length) % actions.length;
+                actions[nextIndex]?.focus();
               }
             }}
             role="dialog"
@@ -303,16 +327,28 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
                 <span>{duplicateShards > 0 ? 'Ascension shards' : 'Starting power'}</span>
                 <strong>{duplicateShards > 0 ? `+${duplicateShards}` : formatNumber(summonedHero.power)}</strong>
               </div>
-              <motion.button
-                className="summon-claim"
-                onClick={claimHero}
-                ref={claimButtonRef}
-                type="button"
-                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-              >
-                <span>Claim champion</span>
-                <Sparkles aria-hidden="true" size={18} />
-              </motion.button>
+              <div className="summon-result-actions" ref={resultActionsRef}>
+                <motion.button
+                  className="summon-claim"
+                  onClick={claimHero}
+                  ref={claimButtonRef}
+                  type="button"
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                >
+                  <span>Claim champion</span>
+                </motion.button>
+                <motion.button
+                  aria-label={`Summon again for ${GAME_BALANCE.summonCostGems} gems`}
+                  className="summon-repeat"
+                  disabled={!canSummonAgain}
+                  onClick={handleSummon}
+                  type="button"
+                  whileTap={canSummonAgain && !prefersReducedMotion ? { scale: 0.97 } : undefined}
+                >
+                  <span>Summon again</span>
+                  <strong><Gem aria-hidden="true" size={15} />{GAME_BALANCE.summonCostGems}</strong>
+                </motion.button>
+              </div>
             </motion.article>
           </motion.div>
         )}

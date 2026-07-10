@@ -119,6 +119,25 @@ test('reloads once when an active client references a stale deployment chunk', a
   expect(await page.evaluate(() => sessionStorage.getItem('__test_navigation_count'))).toBe('2');
 });
 
+test('preloads a lazy view on the first navigation press', async ({ page }) => {
+  await page.addInitScript(() => {
+    Reflect.set(window, 'requestIdleCallback', () => 1);
+    Reflect.set(window, 'cancelIdleCallback', () => undefined);
+  });
+  await page.goto('/');
+
+  const summonChunkWasRequested = () => page.evaluate(() => (
+    performance.getEntriesByType('resource')
+      .some(entry => entry.name.includes('/SummonCircle-'))
+  ));
+
+  expect(await summonChunkWasRequested()).toBe(false);
+  await page.getByRole('button', { name: 'Summon', exact: true }).dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+  });
+  await expect.poll(summonChunkWasRequested).toBe(true);
+});
+
 test('keeps Telegram Desktop inside a centered phone viewport', async ({ page }, testInfo) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
@@ -1130,10 +1149,10 @@ test.describe('average Telegram Android performance profile', () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test('keeps the summon sanctuary and legendary reveal inside a short mobile viewport', async ({ page }) => {
+  test('keeps the summon loop inside the narrowest supported mobile viewport', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(error.message));
-    await page.setViewportSize({ width: 360, height: 640 });
+    await page.setViewportSize({ width: 320, height: 568 });
     await page.addInitScript(() => {
       Math.random = () => 0;
       const now = new Date().toISOString();
@@ -1163,6 +1182,7 @@ test.describe('average Telegram Android performance profile', () => {
     await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
     await expect(summonAction).toContainText('Legendary guaranteed in 1');
     await expect(summonView.getByText('2%', { exact: true })).toBeVisible();
+    await expect(summonView.getByLabel('Legendary 2%')).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       getComputedStyle(document.querySelector('.app-shell')!).backgroundImage
     ))).toContain('/assets/summon/rift-sanctuary.webp');
@@ -1195,9 +1215,17 @@ test.describe('average Telegram Android performance profile', () => {
     await expect(resultDialog.getByText('Legendary champion', { exact: true })).toBeVisible();
     await expect(resultDialog.getByText('Starting power', { exact: true })).toBeVisible();
     const claimButton = resultDialog.getByRole('button', { name: 'Claim champion' });
+    const repeatButton = resultDialog.getByRole('button', { name: 'Summon again for 10 gems' });
     await expect(claimButton).toBeVisible();
     await expect(claimButton).toBeFocused();
+    await expect(repeatButton).toBeEnabled();
     await expect(page.locator('.resource-item.gem .amount')).toHaveText('490');
+    await page.keyboard.press('Tab');
+    await expect(repeatButton).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(claimButton).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(repeatButton).toBeFocused();
 
     const resultLayout = await resultDialog.locator('.summon-result-card').evaluate(element => {
       const bounds = element.getBoundingClientRect();
@@ -1220,6 +1248,16 @@ test.describe('average Telegram Android performance profile', () => {
       const hitTarget = document.elementFromPoint(navigation.left + 20, navigation.top + 20);
       return hitTarget?.closest('.summon-result-backdrop') !== null;
     })).toBe(true);
+
+    await repeatButton.click();
+    await expect(summonView).toHaveAttribute('data-summon-phase', 'charging');
+    await expect(summonView).toHaveAttribute('data-summon-phase', 'result', { timeout: 5_000 });
+    const repeatResultDialog = page.getByRole('dialog');
+    await expect(repeatResultDialog).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.resource-item.gem .amount')).toHaveText('480');
+    await page.keyboard.press('Escape');
+    await expect(repeatResultDialog).toHaveCount(0);
+    await expect(summonView).toHaveAttribute('data-summon-phase', 'idle');
     expect(pageErrors).toEqual([]);
   });
 });
