@@ -30,6 +30,7 @@ export interface SummonHeroTemplate {
   portrait: string;
   portraitMotion: HeroPortraitMotion;
   showcase?: HeroShowcaseSpec;
+  videoShowcase?: HeroVideoShowcaseSpec;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
@@ -44,6 +45,13 @@ export interface HeroShowcaseSpec {
   leftWingAssetLow: string;
   rightWingAsset: string;
   rightWingAssetLow: string;
+}
+
+export interface HeroVideoShowcaseSpec {
+  id: string;
+  video: string;
+  poster: string;
+  tagline: string;
 }
 
 export interface HeroDamageContribution {
