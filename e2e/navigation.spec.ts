@@ -770,7 +770,12 @@ test.describe('average Telegram Android performance profile', () => {
       const now = new Date().toISOString();
       localStorage.setItem('rift_heroes_save', JSON.stringify({
         schemaVersion: 5,
-        activeHeroIds: ['grunt-150', 'mage-150', 'knight-150', 'lord-150'],
+        // No active warband on purpose: a passive tick would otherwise kill the
+        // one-health enemy within a second, racing the async art load, so the
+        // pre-boss scene sometimes never rendered and the transition below could
+        // not be observed. With no idle damage the enemy waits for an explicit
+        // tap, making the 149 -> 150 handoff deterministic.
+        activeHeroIds: [],
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
@@ -798,6 +803,12 @@ test.describe('average Telegram Android performance profile', () => {
     await expect(page.locator('.rift-spark')).toHaveCount(8);
 
     const initialSceneBuilds = Number(await scene.getAttribute('data-scene-build-count'));
+
+    // Drive the boss transition with an explicit tap. The one-health enemy dies
+    // to a single hit, advancing to the stage 150 sovereign, so the rebuild is
+    // caused by a test-controlled event rather than a timer racing asset loads.
+    await page.locator('.monster-button').click();
+
     await expect(page.locator('.stage-mark strong')).toHaveText('150', { timeout: 4_000 });
     await expect(scene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
     await expect(scene).toHaveAttribute('data-art-loaded', 'true');
