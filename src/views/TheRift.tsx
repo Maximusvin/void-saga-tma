@@ -17,11 +17,11 @@ import {
   gameNumberToPercent,
   type GameNumber,
 } from '../game/gameNumber';
-import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyRigMotion';
+import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyImpactSignals';
 import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
 import { getBiomeForStage, getBiomeIndexForStage, getStageRole } from '../game/biome';
 import { getGameRenderProfile } from '../utils/renderQuality';
-import { getRiftEnemyVisual } from '../game/riftVisuals';
+import { getRiftEnemyVisual, hasSkinnedThreeRig } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
 import { RiftWarband } from './RiftWarband';
 import './TheRift.css';
@@ -29,6 +29,11 @@ import './TheRift.css';
 const RiftPixiScene = lazy(async () => {
   const module = await import('./RiftPixiScene');
   return { default: module.RiftPixiScene };
+});
+
+const RiftThreeEnemyScene = lazy(async () => {
+  const module = await import('./RiftThreeEnemyScene');
+  return { default: module.RiftThreeEnemyScene };
 });
 
 interface TheRiftProps {
@@ -227,7 +232,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
     );
     const progressed = stage > enemySceneEncounter.stage
       || (stage === enemySceneEncounter.stage && enemyIndex > enemySceneEncounter.enemyIndex);
-    if (progressed && defeatedVisual.rig?.kind === 'layered-pixi') {
+    if (progressed && hasSkinnedThreeRig(defeatedVisual)) {
       const activeTimeouts = timeoutsRef.current;
       const timeout = scheduleTimeout(() => setEnemySceneEncounter({ enemyIndex, stage }), 700);
       return () => {
@@ -454,8 +459,12 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const combatTone = isBoss ? 'boss' : 'normal';
   const enemiesInStage = getEnemiesInStage(stage);
   const enemyVisual = getRiftEnemyVisual(stage + enemyIndex, isBoss);
-  const usesLayeredRig = enemyVisual.rig?.kind === 'layered-pixi';
   const enemySceneIsBoss = isBossStage(enemySceneEncounter.stage);
+  const sceneEnemyVisual = getRiftEnemyVisual(
+    enemySceneEncounter.stage + enemySceneEncounter.enemyIndex,
+    enemySceneIsBoss,
+  );
+  const usesSkinnedRig = hasSkinnedThreeRig(sceneEnemyVisual);
   const stageRole = getStageRole(stage);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
   const bossPhases = getStageBandForStage(stage).boss.phases;
@@ -561,7 +570,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
         <motion.button
           type="button"
           aria-label={`Attack ${enemyVisual.name}`}
-          className={`monster-button ${isHit && !usesLayeredRig ? 'hit' : ''}`}
+          className={`monster-button ${isHit && !usesSkinnedRig ? 'hit' : ''}`}
           onPointerDown={handleAttack}
           onKeyDown={handleAttackKeyDown}
         >
@@ -569,7 +578,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
           <span className="monster-ring inner" />
           <motion.span
             className="rift-beast-shell"
-            animate={isHit && !usesLayeredRig
+            animate={isHit && !usesSkinnedRig
               ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] }
               : { scale: 1, rotate: 0 }}
             transition={{
@@ -579,17 +588,27 @@ export const TheRift: React.FC<TheRiftProps> = ({
             }}
           >
             <Suspense fallback={<span className="rift-pixi-loading" />}>
-              <RiftPixiScene
-                critSignal={critState}
-                defeatSignal={defeatTransition?.id ?? 0}
-                enrageSignal={bossEnrageSignal}
-                impactSignal={impactState}
-                bossPhase={bossPhaseIndex}
-                enemyIndex={enemySceneEncounter.enemyIndex}
-                isBoss={enemySceneIsBoss}
-                isBossDefeat={defeatTransition?.wasBoss ?? false}
-                stage={enemySceneEncounter.stage}
-              />
+              {usesSkinnedRig ? (
+                <RiftThreeEnemyScene
+                  critSignal={critState}
+                  defeatSignal={defeatTransition?.id ?? 0}
+                  impactSignal={impactState}
+                  reduceMotion={prefersReducedMotion ?? false}
+                  visual={sceneEnemyVisual}
+                />
+              ) : (
+                <RiftPixiScene
+                  critSignal={critState}
+                  defeatSignal={defeatTransition?.id ?? 0}
+                  enrageSignal={bossEnrageSignal}
+                  impactSignal={impactState}
+                  bossPhase={bossPhaseIndex}
+                  enemyIndex={enemySceneEncounter.enemyIndex}
+                  isBoss={enemySceneIsBoss}
+                  isBossDefeat={defeatTransition?.wasBoss ?? false}
+                  stage={enemySceneEncounter.stage}
+                />
+              )}
             </Suspense>
           </motion.span>
         </motion.button>

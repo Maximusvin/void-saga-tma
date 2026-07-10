@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, type Texture, type Ticker } from 'pixi.js';
 import { getEnemiesInStage, isBossStage } from '../game/balance';
-import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyRigMotion';
-import { parseEnemyAtlasManifest } from '../game/enemyRigManifest';
+import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyImpactSignals';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import {
   getRiftEnemyVisual,
@@ -14,10 +13,8 @@ import { createShardPool, type ShardPool } from './shardPool';
 import { createRiftWorld, type RiftWorld } from './riftWorld';
 import { getBiomeForStage, type BiomeSpec } from '../game/biome';
 import {
-  createIronrootEnemyRig,
   createStaticEnemyRig,
   type EnemyRig,
-  type LoadedEnemyRigAsset,
 } from './enemyRig';
 
 interface RiftPixiSceneProps {
@@ -62,18 +59,9 @@ interface Shockwave {
 }
 
 interface RenderedEnemy {
-  rigAsset: LoadedEnemyRigAsset | null;
   texture: Texture | null;
   visual: RiftEnemyVisualSpec;
 }
-
-const loadManifest = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Enemy rig manifest request failed with ${response.status}.`);
-  }
-  return parseEnemyAtlasManifest(await response.json() as unknown);
-};
 
 const clampResolution = (resolutionCap: number) => (
   Math.min(window.devicePixelRatio || 1, resolutionCap)
@@ -271,30 +259,14 @@ export const RiftPixiScene = ({
   useEffect(() => {
     let active = true;
     const loadVisual = async () => {
-      if (visual.rig?.kind === 'layered-pixi') {
-        const variant = renderProfileRef.current.quality === 'low' ? visual.rig.low : visual.rig.high;
-        try {
-          const [atlas, manifest] = await Promise.all([
-            Assets.load<Texture>(variant.atlas),
-            loadManifest(variant.manifest),
-          ]);
-          if (active) {
-            setRenderedEnemy({ rigAsset: { atlas, manifest }, texture: null, visual });
-          }
-          return;
-        } catch {
-          // A static production asset is always retained as the recoverable path.
-        }
-      }
-
       try {
         const texture = await Assets.load<Texture>(visual.asset);
         if (active) {
-          setRenderedEnemy({ rigAsset: null, texture, visual });
+          setRenderedEnemy({ texture, visual });
         }
       } catch {
         if (active) {
-          setRenderedEnemy({ rigAsset: null, texture: null, visual });
+          setRenderedEnemy({ texture: null, visual });
         }
       }
     };
@@ -304,18 +276,10 @@ export const RiftPixiScene = ({
     const hasNextEnemy = !isBoss && enemyIndex + 1 < getEnemiesInStage(stage);
     const nextVisualStage = hasNextEnemy ? stage + enemyIndex + 1 : stage + 1;
     const nextVisual = getRiftEnemyVisual(nextVisualStage, hasNextEnemy ? false : isBossStage(nextVisualStage));
-    const nextRigVariant = nextVisual.rig?.kind === 'layered-pixi'
-      ? renderProfileRef.current.quality === 'low' ? nextVisual.rig.low : nextVisual.rig.high
-      : null;
-    const nextPrimaryAsset = nextRigVariant?.atlas ?? nextVisual.asset;
-    const currentPrimaryAsset = visual.rig?.kind === 'layered-pixi'
-      ? (renderProfileRef.current.quality === 'low' ? visual.rig.low : visual.rig.high).atlas
-      : visual.asset;
+    const nextPrimaryAsset = nextVisual.asset;
+    const currentPrimaryAsset = visual.asset;
     if (nextPrimaryAsset !== currentPrimaryAsset) {
       void Assets.load<Texture>(nextPrimaryAsset).catch(() => undefined);
-      if (nextRigVariant) {
-        void loadManifest(nextRigVariant.manifest).catch(() => undefined);
-      }
     }
 
     return () => {
@@ -459,9 +423,7 @@ export const RiftPixiScene = ({
     const scene = new Container();
     const resolvedTexture = renderedEnemy.texture;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const runtimeAssetUrl = renderedEnemy.rigAsset && sceneVisual.rig?.kind === 'layered-pixi'
-      ? (renderProfile.quality === 'low' ? sceneVisual.rig.low : sceneVisual.rig.high).atlas
-      : resolvedTexture ? sceneVisual.asset : null;
+    const runtimeAssetUrl = resolvedTexture ? sceneVisual.asset : null;
 
       const ringBack = new Graphics()
         .circle(0, 0, 122)
@@ -483,7 +445,7 @@ export const RiftPixiScene = ({
 
       beast.addChild(shadow);
 
-      if (!resolvedTexture && !renderedEnemy.rigAsset) {
+      if (!resolvedTexture) {
         const proceduralArt = new Container();
         leftWing = buildWing(-1, palette.wing, palette.glow, sceneVisual.wingSpread);
         rightWing = buildWing(1, palette.wing, palette.glow, sceneVisual.wingSpread);
@@ -536,10 +498,7 @@ export const RiftPixiScene = ({
         beast.addChild(proceduralArt);
       }
 
-      if (renderedEnemy.rigAsset && sceneVisual.rig?.kind === 'layered-pixi') {
-        enemyRig = createIronrootEnemyRig(renderedEnemy.rigAsset, sceneVisual, reduceMotion);
-        beast.addChild(enemyRig.container);
-      } else if (resolvedTexture) {
+      if (resolvedTexture) {
         enemyRig = createStaticEnemyRig(resolvedTexture, sceneVisual);
         beast.addChild(enemyRig.container);
       }
@@ -670,12 +629,9 @@ export const RiftPixiScene = ({
         ringFront.scale.set(1 + ringFrontWave + deathPulse * 0.1);
 
         if (enemyRig) {
-          const rigLayoutScale = enemyRig.kind === 'layered-pixi'
-            ? Math.min(1, Math.max(0.76, (app.screen.height - 24) / sceneVisual.artHeight))
-            : 1;
           beast.position.set(0, 0);
           beast.rotation = 0;
-          beast.scale.set(rigLayoutScale);
+          beast.scale.set(1);
           beast.alpha = 1;
           enemyRig.update({
             deltaSeconds: Math.min(0.05, ticker.deltaMS / 1000),
@@ -783,7 +739,7 @@ export const RiftPixiScene = ({
       ref={hostRef}
       className="rift-pixi-scene"
       data-art-loaded={
-        renderedEnemy?.visual.id === visual.id && (renderedEnemy.texture || renderedEnemy.rigAsset) ? 'true' : 'false'
+        renderedEnemy?.visual.id === visual.id && renderedEnemy.texture ? 'true' : 'false'
       }
       data-enemy-id={visual.id}
       data-render-quality={renderProfileRef.current.quality}
