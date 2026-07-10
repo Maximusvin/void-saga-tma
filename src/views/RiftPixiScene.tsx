@@ -8,6 +8,7 @@ import {
   type RiftEnemyVisualSpec,
 } from '../game/riftVisuals';
 import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
+import { createShardPool, type ShardPool } from './shardPool';
 
 interface RiftPixiSceneProps {
   bossPhase: number;
@@ -33,6 +34,10 @@ interface ImpactParticle {
   graphic: Graphics;
   life: number;
   maxLife: number;
+  // Colour and size live on the pooled graphic via tint/scale, so the particle
+  // carries the base size and peak alpha the animation fades from.
+  baseSize: number;
+  peakAlpha: number;
   rotationSpeed: number;
   velocityX: number;
   velocityY: number;
@@ -75,15 +80,13 @@ const buildSpike = (width: number, height: number, color: number, alpha = 1) => 
     .fill({ color, alpha });
 };
 
-const buildShard = (size: number, color: number, alpha: number) => {
+// A unit diamond filled white so the pool can recolour each shard with `tint`
+// and resize it with `scale`, reproducing the old per-shard geometry with no
+// per-tap allocation.
+const buildUnitShard = () => {
   return new Graphics()
-    .poly([
-      0, -size,
-      size * 0.58, 0,
-      0, size,
-      -size * 0.58, 0,
-    ])
-    .fill({ color, alpha });
+    .poly([0, -1, 0.58, 0, 0, 1, -0.58, 0])
+    .fill({ color: 0xffffff, alpha: 1 });
 };
 
 const buildWing = (side: -1 | 1, color: number, glow: number, spread: number) => {
@@ -102,51 +105,77 @@ const buildWing = (side: -1 | 1, color: number, glow: number, spread: number) =>
   return wing;
 };
 
-const createImpactBurst = (
+const spawnShard = (
+  pool: ShardPool<Graphics>,
+  particles: ImpactParticle[],
+  baseSize: number,
+  color: number,
+  peakAlpha: number,
+  maxLife: number,
+  rotationSpeed: number,
+  velocityX: number,
+  velocityY: number,
+) => {
+  const graphic = pool.acquire();
+  graphic.tint = color;
+  graphic.alpha = peakAlpha;
+  graphic.rotation = 0;
+  graphic.position.set(0, 0);
+  graphic.scale.set(baseSize);
+  particles.push({ graphic, life: 0, maxLife, baseSize, peakAlpha, rotationSpeed, velocityX, velocityY });
+};
+
+const spawnImpactBurst = (
+  pool: ShardPool<Graphics>,
+  particles: ImpactParticle[],
   palette: RiftEnemyPalette,
   isCrit: boolean,
   effectScale: number,
-): ImpactParticle[] => {
+) => {
   const count = scaleEffectCount(isCrit ? 18 : 10, effectScale, isCrit ? 8 : 5);
 
-  return Array.from({ length: count }, (_, index) => {
+  for (let index = 0; index < count; index += 1) {
     const angle = (index / count) * Math.PI * 2 + (isCrit ? 0.14 : 0);
     const speed = (isCrit ? 3.7 : 2.5) + (index % 4) * 0.32;
-    const graphic = buildShard(isCrit ? 9 + (index % 3) * 2 : 6 + (index % 3), isCrit ? 0xffd36a : palette.glow, isCrit ? 0.92 : 0.74);
-
-    return {
-      graphic,
-      life: 0,
-      maxLife: isCrit ? 0.48 : 0.34,
-      rotationSpeed: (index % 2 === 0 ? 1 : -1) * (0.08 + (index % 5) * 0.02),
-      velocityX: Math.cos(angle) * speed,
-      velocityY: Math.sin(angle) * speed * 0.78,
-    };
-  });
+    spawnShard(
+      pool,
+      particles,
+      isCrit ? 9 + (index % 3) * 2 : 6 + (index % 3),
+      isCrit ? 0xffd36a : palette.glow,
+      isCrit ? 0.92 : 0.74,
+      isCrit ? 0.48 : 0.34,
+      (index % 2 === 0 ? 1 : -1) * (0.08 + (index % 5) * 0.02),
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed * 0.78,
+    );
+  }
 };
 
-const createDeathBurst = (
+const spawnDeathBurst = (
+  pool: ShardPool<Graphics>,
+  particles: ImpactParticle[],
   palette: RiftEnemyPalette,
   isBossDefeat: boolean,
   effectScale: number,
-): ImpactParticle[] => {
+) => {
   const count = scaleEffectCount(isBossDefeat ? 54 : 32, effectScale, isBossDefeat ? 20 : 14);
 
-  return Array.from({ length: count }, (_, index) => {
+  for (let index = 0; index < count; index += 1) {
     const angle = (index / count) * Math.PI * 2;
     const speed = (isBossDefeat ? 5.8 : 4.1) + (index % 6) * 0.34;
     const color = index % 4 === 0 ? 0xffffff : (index % 3 === 0 ? palette.core : palette.glow);
-    const graphic = buildShard(isBossDefeat ? 10 + (index % 4) * 2 : 7 + (index % 4), color, isBossDefeat ? 0.96 : 0.82);
-
-    return {
-      graphic,
-      life: 0,
-      maxLife: isBossDefeat ? 0.9 : 0.64,
-      rotationSpeed: (index % 2 === 0 ? 1 : -1) * (0.14 + (index % 5) * 0.025),
-      velocityX: Math.cos(angle) * speed,
-      velocityY: Math.sin(angle) * speed * 0.82,
-    };
-  });
+    spawnShard(
+      pool,
+      particles,
+      isBossDefeat ? 10 + (index % 4) * 2 : 7 + (index % 4),
+      color,
+      isBossDefeat ? 0.96 : 0.82,
+      isBossDefeat ? 0.9 : 0.64,
+      (index % 2 === 0 ? 1 : -1) * (0.14 + (index % 5) * 0.025),
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed * 0.82,
+    );
+  }
 };
 
 const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index: number): Shockwave => {
@@ -420,6 +449,15 @@ export const RiftPixiScene = ({
       });
     const impacts = new Container();
     const impactParticles: ImpactParticle[] = [];
+    const shardPool = createShardPool<Graphics>(impacts, buildUnitShard, shard => shard.destroy());
+    let reportedShardCount = 0;
+    const reportShardPool = () => {
+      const created = shardPool.createdCount();
+      if (created > reportedShardCount && hostRef.current) {
+        reportedShardCount = created;
+        hostRef.current.dataset.shardPoolCreated = String(created);
+      }
+    };
     const shockwaves = new Container();
     const activeShockwaves: Shockwave[] = [];
     let deathEnergy = 0;
@@ -449,37 +487,34 @@ export const RiftPixiScene = ({
         const hasNewEnrage = enrageSignalRef.current !== lastHandledEnrageSignalRef.current;
 
         if (hasNewHit) {
-          const burst = createImpactBurst(palette, critRef.current, renderProfile.burstScale);
+          spawnImpactBurst(shardPool, impactParticles, palette, critRef.current, renderProfile.burstScale);
           lastHandledHitSignalRef.current = hitSignalRef.current;
-          impactParticles.push(...burst);
-          impacts.addChild(...burst.map(particle => particle.graphic));
+          reportShardPool();
         }
 
         if (hasNewDefeat) {
           const isBossDeath = bossDefeatRef.current;
-          const burst = createDeathBurst(palette, isBossDeath, renderProfile.burstScale);
+          spawnDeathBurst(shardPool, impactParticles, palette, isBossDeath, renderProfile.burstScale);
           const waveCount = scaleEffectCount(isBossDeath ? 3 : 2, renderProfile.burstScale, 1);
           const waves = Array.from({ length: waveCount }, (_, index) => createShockwave(palette, isBossDeath, index));
 
           lastHandledDefeatSignalRef.current = defeatSignalRef.current;
           deathEnergy = isBossDeath ? 1.35 : 1;
-          impactParticles.push(...burst);
           activeShockwaves.push(...waves);
-          impacts.addChild(...burst.map(particle => particle.graphic));
           shockwaves.addChild(...waves.map(wave => wave.graphic));
+          reportShardPool();
         }
 
         if (hasNewEnrage) {
-          const burst = createImpactBurst(palette, true, renderProfile.burstScale);
+          spawnImpactBurst(shardPool, impactParticles, palette, true, renderProfile.burstScale);
           const waveCount = scaleEffectCount(3, renderProfile.burstScale, 1);
           const waves = Array.from({ length: waveCount }, (_, index) => createShockwave(palette, true, index));
 
           lastHandledEnrageSignalRef.current = enrageSignalRef.current;
           enrageEnergy = 1;
-          impactParticles.push(...burst);
           activeShockwaves.push(...waves);
-          impacts.addChild(...burst.map(particle => particle.graphic));
           shockwaves.addChild(...waves.map(wave => wave.graphic));
+          reportShardPool();
         }
 
         const bossPulse = (sceneIsBoss ? 1.12 : 1) * phaseIntensity;
@@ -538,12 +573,11 @@ export const RiftPixiScene = ({
           particle.graphic.rotation += particle.rotationSpeed * ticker.deltaTime;
 
           const progress = Math.min(1, particle.life / particle.maxLife);
-          particle.graphic.alpha = 1 - progress;
-          particle.graphic.scale.set(1 + progress * 0.7);
+          particle.graphic.alpha = particle.peakAlpha * (1 - progress);
+          particle.graphic.scale.set(particle.baseSize * (1 + progress * 0.7));
 
           if (progress >= 1) {
-            impacts.removeChild(particle.graphic);
-            particle.graphic.destroy();
+            shardPool.release(particle.graphic);
             impactParticles.splice(index, 1);
           }
         }
@@ -573,6 +607,10 @@ export const RiftPixiScene = ({
     app.ticker.add(animateScene);
 
     return () => {
+      // Live shards are children of the scene and die with it; the free list is
+      // detached, so it needs an explicit sweep to avoid leaking GPU buffers
+      // across every stage rebuild.
+      shardPool.destroy();
       cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
     };
   }, [renderedEnemy, rendererReady]);
