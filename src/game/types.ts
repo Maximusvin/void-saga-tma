@@ -29,10 +29,21 @@ export interface SummonHeroTemplate {
   name: string;
   portrait: string;
   portraitMotion: HeroPortraitMotion;
+  showcase?: HeroShowcaseSpec;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
   icon: string;
+}
+
+export interface HeroShowcaseSpec {
+  bodyAsset: string;
+  bodyAssetLow: string;
+  id: string;
+  leftWingAsset: string;
+  leftWingAssetLow: string;
+  rightWingAsset: string;
+  rightWingAssetLow: string;
 }
 
 export interface HeroDamageContribution {
