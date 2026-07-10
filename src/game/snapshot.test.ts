@@ -108,6 +108,19 @@ describe('game snapshot normalization', () => {
         source: 'tap',
         stage: 1,
       },
+      {
+        type: 'monster_hit',
+        comboCount: 0,
+        damage: 15,
+        heroContributions: [
+          { damage: 5, heroId: 'hero-5' },
+          { damage: 10, heroId: 'hero-10' },
+        ],
+        isCrit: false,
+        monsterHealth: 85,
+        source: 'passive',
+        stage: 1,
+      },
       { type: 'monster_defeated', stage: 1, nextStage: 2, goldReward: 50, gemReward: 0 },
       {
         type: 'hero_summoned',
@@ -139,12 +152,17 @@ describe('game snapshot normalization', () => {
 
     assert.equal(events[0]?.type, 'monster_hit');
     assert.equal(events[0]?.type === 'monster_hit' ? events[0].damage : null, '1.2');
-    assert.equal(events[1]?.type === 'monster_defeated' ? events[1].goldReward : null, '50');
-    assert.equal(events[2]?.type === 'hero_summoned' ? events[2].isDuplicate : null, false);
-    assert.equal(events[2]?.type === 'hero_summoned' ? events[2].hero.templateId : null, 'void-grunt');
-    assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].fromLevel : null, 1);
-    assert.equal(events[3]?.type === 'hero_upgraded' ? events[3].levelsGained : null, 1);
-    assert.equal(events[4]?.type === 'hero_ascended' ? events[4].levelCap : null, 100);
-    assert.equal(events[5]?.type === 'boss_enraged' ? events[5].monsterHealth : null, '1035');
+    assert.deepEqual(events[0]?.type === 'monster_hit' ? events[0].heroContributions : null, []);
+    assert.deepEqual(events[1]?.type === 'monster_hit' ? events[1].heroContributions : null, [
+      { damage: '5', heroId: 'hero-5' },
+      { damage: '10', heroId: 'hero-10' },
+    ]);
+    assert.equal(events[2]?.type === 'monster_defeated' ? events[2].goldReward : null, '50');
+    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].isDuplicate : null, false);
+    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].hero.templateId : null, 'void-grunt');
+    assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].fromLevel : null, 1);
+    assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].levelsGained : null, 1);
+    assert.equal(events[5]?.type === 'hero_ascended' ? events[5].levelCap : null, 100);
+    assert.equal(events[6]?.type === 'boss_enraged' ? events[6].monsterHealth : null, '1035');
   });
 });

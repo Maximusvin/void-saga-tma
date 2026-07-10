@@ -50,6 +50,28 @@ const normalizeIsoTimestamp = (value: unknown) => {
   return value;
 };
 
+const normalizeHeroDamageContributions = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.slice(0, 16).flatMap(contribution => {
+    if (
+      !isRecord(contribution) ||
+      typeof contribution.heroId !== 'string' ||
+      contribution.heroId.length === 0 ||
+      contribution.heroId.length > 128
+    ) {
+      return [];
+    }
+
+    return [{
+      damage: parseGameNumber(contribution.damage),
+      heroId: contribution.heroId,
+    }];
+  });
+};
+
 export const normalizeHero = (value: unknown): Hero | null => {
   if (
     !isRecord(value) ||
@@ -168,6 +190,9 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         type: 'monster_hit',
         comboCount: normalizeInteger(value.comboCount, 0, 0),
         damage: parseGameNumber(value.damage),
+        heroContributions: value.source === 'passive'
+          ? normalizeHeroDamageContributions(value.heroContributions)
+          : [],
         isCrit: value.isCrit,
         monsterHealth: parseGameNumber(value.monsterHealth),
         source: value.source,

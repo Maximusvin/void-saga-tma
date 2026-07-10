@@ -86,3 +86,54 @@ test('boss attempt exposes phases and resets through the shared engine after enr
   })).toBe('1034');
   await expect(page.getByRole('timer')).toContainText(/3[45]s/);
 });
+
+test('authoritative passive volleys animate every hero without overflowing the combat footer', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 4,
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000',
+      heroes: [
+        { ascension: 0, id: 'grunt-1', name: 'Void Grunt', rarity: 'Common', level: 3, power: '1', shards: 0, templateId: 'void-grunt' },
+        { ascension: 0, id: 'mage-1', name: 'Void Mage', rarity: 'Rare', level: 4, power: '2', shards: 0, templateId: 'void-mage' },
+        { ascension: 0, id: 'knight-1', name: 'Void Knight', rarity: 'Epic', level: 5, power: '3', shards: 0, templateId: 'void-knight' },
+        { ascension: 0, id: 'lord-1', name: 'Void Lord', rarity: 'Legendary', level: 6, power: '4', shards: 0, templateId: 'void-lord' },
+      ],
+      stage: 1,
+      monsterMaxHealth: '100',
+      monsterHealth: '100',
+      lastSeenAt: now,
+      updatedAt: now,
+    }));
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/');
+
+  await expect(page.locator('.warband-slot')).toHaveCount(4);
+  await expect(page.getByRole('img', { name: 'Void Lord, level 6, Sovereign' })).toBeVisible();
+  await expect.poll(() => page.locator(
+    '.warband-slot:not([data-last-volley="0"])',
+  ).count()).toBe(4);
+  await expect(page.locator('.warband-damage-pop')).toContainText('-10');
+  await expect.poll(() => page.evaluate(() => {
+    const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
+    return Number(snapshot.monsterHealth);
+  })).toBeLessThan(100);
+
+  const layout = await page.evaluate(() => {
+    const footer = document.querySelector('.rift-combat-footer')?.getBoundingClientRect();
+    return {
+      bodyWidth: document.body.scrollWidth,
+      footerLeft: footer?.left ?? -1,
+      footerRight: footer?.right ?? Number.POSITIVE_INFINITY,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.footerLeft).toBeGreaterThanOrEqual(0);
+  expect(layout.footerRight).toBeLessThanOrEqual(layout.viewportWidth);
+});

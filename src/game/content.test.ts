@@ -6,6 +6,7 @@ import {
   HERO_RARITIES,
   STAGE_BANDS,
   SUMMON_POOL,
+  getHeroTemplateById,
   getStageBandForStage,
 } from './content';
 import {
@@ -38,7 +39,14 @@ describe('game content invariants', () => {
       assert.ok(hero.power > 0);
       assert.ok(hero.dropRate > 0);
       assert.ok(hero.icon.length > 0);
+      assert.match(hero.accentColor, /^#[0-9a-f]{6}$/i);
+      assert.ok(hero.attackStyle.length > 0);
+      assert.ok(hero.combatRole.length > 0);
     }
+
+    assert.equal(new Set(SUMMON_POOL.map(hero => hero.accentColor)).size, SUMMON_POOL.length);
+    assert.equal(getHeroTemplateById('void-lord')?.attackStyle, 'nova');
+    assert.equal(getHeroTemplateById('unknown'), null);
   });
 
   it('keeps stage bands ordered and boss rules playable', () => {

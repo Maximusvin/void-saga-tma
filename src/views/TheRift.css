@@ -393,17 +393,70 @@
   display: block;
 }
 
-.auto-projectile {
+.warband-projectile {
   position: absolute;
   top: 47%;
   left: 50%;
   z-index: 9;
-  width: 44px;
+  width: 48px;
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, #ffffff, #5ffce9);
-  box-shadow: 0 0 16px #66fcf1;
+  background: linear-gradient(90deg, transparent, #ffffff, var(--projectile-color));
+  box-shadow: 0 0 16px var(--projectile-color);
   pointer-events: none;
+}
+
+.warband-projectile.slash {
+  height: 3px;
+  clip-path: polygon(0 42%, 84% 0, 100% 50%, 84% 100%, 0 58%);
+}
+
+.warband-projectile.bolt {
+  width: 42px;
+  height: 6px;
+  background: linear-gradient(90deg, transparent, var(--projectile-color) 46%, #ffffff 72%, var(--projectile-color));
+}
+
+.warband-projectile.hex {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--projectile-color);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 18px var(--projectile-color), inset 0 0 10px var(--projectile-color);
+}
+
+.warband-projectile.nova {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 18%, var(--projectile-color) 38%, transparent 72%);
+  box-shadow: 0 0 24px var(--projectile-color);
+}
+
+.warband-damage-pop {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  z-index: 15;
+  width: 112px;
+  margin-left: -56px;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(102, 252, 241, 0.82), 0 2px 4px rgba(0, 0, 0, 0.88);
+  pointer-events: none;
+}
+
+.warband-damage-pop span {
+  display: block;
+  margin-bottom: 3px;
+  color: #9dfff0;
+  font-size: 0.53rem;
+  text-transform: uppercase;
 }
 
 .enemy-panel {
@@ -705,12 +758,111 @@
   border-color: rgba(207, 100, 255, 0.38);
 }
 
+.rift-combat-footer {
+  position: relative;
+  z-index: 14;
+  width: calc(100% - 8px);
+  min-height: 36px;
+  margin: 4px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rift-warband {
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 3px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), transparent),
+    rgba(5, 13, 18, 0.76);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.rift-warband.empty {
+  min-width: 94px;
+  justify-content: center;
+  color: rgba(230, 250, 246, 0.68);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.warband-mark {
+  width: 22px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: #66fce6;
+}
+
+.warband-slots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.warband-slot {
+  --hero-accent: #9eb8b5;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 66%, transparent);
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--hero-accent) 22%, transparent), transparent 54%),
+    rgba(2, 8, 12, 0.8);
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--hero-accent) 12%, transparent);
+}
+
+.warband-slot.attacking {
+  border-color: var(--hero-accent);
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--hero-accent) 62%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--hero-accent) 22%, transparent);
+}
+
+.warband-portrait {
+  display: block;
+  font-size: 1rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--hero-accent) 72%, transparent));
+}
+
+.warband-level {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 11px;
+  height: 11px;
+  padding-inline: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: rgba(1, 5, 8, 0.88);
+  color: #ffffff;
+  font-size: 0.46rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .rift-footer {
   position: relative;
   z-index: 14;
   width: fit-content;
   min-height: 34px;
-  margin: 4px auto 0;
+  margin: 0;
   gap: 6px;
   padding: 0 12px;
   border-radius: 999px;
@@ -802,6 +954,25 @@
   .boss .combo-chip {
     padding-inline: 6px;
   }
+
+  .rift-combat-footer {
+    gap: 4px;
+  }
+
+  .warband-mark {
+    width: 19px;
+  }
+
+  .warband-slot {
+    width: 28px;
+    height: 28px;
+  }
+
+  .rift-footer {
+    gap: 4px;
+    padding-inline: 8px;
+    font-size: 0.62rem;
+  }
 }
 
 @media (max-height: 680px) {
@@ -831,9 +1002,16 @@
     padding-block: 6px;
   }
 
+  .rift-combat-footer,
+  .rift-warband,
   .rift-footer {
     min-height: 30px;
     margin-top: 0;
+  }
+
+  .warband-slot {
+    width: 27px;
+    height: 27px;
   }
 }
 

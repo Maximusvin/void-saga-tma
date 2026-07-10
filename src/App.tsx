@@ -49,6 +49,10 @@ function App() {
               comboMultiplier={gameState.comboMultiplier}
               registerHit={gameState.registerHit}
               passivePower={gameState.passivePower}
+              heroes={gameState.heroes}
+              passiveVolleyDamage={gameState.passiveVolleyDamage}
+              passiveVolleyHeroContributions={gameState.passiveVolleyHeroContributions}
+              passiveVolleySignal={gameState.passiveVolleySignal}
             />
           )}
           {gameState.activeView === 'summon' && (
