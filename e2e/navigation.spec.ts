@@ -517,94 +517,102 @@ test('Heroes keeps a 120-item collection contained and activates only visible po
   await expect(page.getByTestId('game-crash-fallback')).toHaveCount(0);
 });
 
-test('legendary angel showcase is lazy, animated, full-screen, and releases its canvas', async ({ page }, testInfo) => {
-  const pageErrors: string[] = [];
-  const showcaseRequests: string[] = [];
-  page.on('pageerror', error => pageErrors.push(error.message));
-  page.on('request', request => {
-    if (request.url().includes('/assets/heroes/showcase/')) {
-      showcaseRequests.push(request.url());
-    }
+test.describe('high-end Telegram Android angel showcase', () => {
+  test.use({
+    deviceScaleFactor: 2,
+    userAgent: 'Mozilla/5.0 (Linux; Android 15; K) AppleWebKit/537.36 Mobile '
+      + 'Telegram-Android/11.3.3 (Flagship Phone; Android 15; SDK 35; HIGH)',
   });
-  await seedVoidLordCollection(page);
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Heroes', exact: true }).click();
 
-  const previewAction = page.getByRole('button', { name: 'Preview Void Lord animation' });
-  await expect(previewAction).toBeVisible();
-  expect(showcaseRequests).toEqual([]);
-
-  await previewAction.click();
-  const dialog = page.getByRole('dialog', { name: 'Void Lord' });
-  const scene = dialog.locator('.angel-showcase-scene');
-  await expect(dialog).toBeVisible();
-  await expect(scene).toHaveAttribute('data-art-loaded', 'true', { timeout: 8_000 });
-  await expect(scene).toHaveAttribute('data-render-quality', 'high');
-  await expect(scene).toHaveAttribute('data-asset-variant', 'high');
-  await expect(scene).toHaveAttribute('data-particle-count', '14');
-  await expect(scene).toHaveAttribute('data-ticker-max-fps', '60');
-  await expect(scene).toHaveAttribute('data-scene-build-count', '1');
-  await expect(page.locator('.angel-showcase-canvas')).toHaveCount(1);
-  await expect.poll(() => showcaseRequests.length).toBe(3);
-  expect(showcaseRequests.every(url => !url.endsWith('-low.webp'))).toBe(true);
-
-  const canvasScreenshot = await page.locator('.angel-showcase-canvas').screenshot();
-  const renderedPixels = await page.evaluate(async screenshotUrl => {
-    const image = new Image();
-    image.src = screenshotUrl;
-    await image.decode();
-    const sample = document.createElement('canvas');
-    sample.width = 64;
-    sample.height = 96;
-    const context = sample.getContext('2d', { willReadFrequently: true });
-    context?.drawImage(image, 0, 0, sample.width, sample.height);
-    const pixels = context?.getImageData(0, 0, sample.width, sample.height).data ?? [];
-    let colored = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index + 3] > 12 && pixels[index] + pixels[index + 1] + pixels[index + 2] > 45) {
-        colored += 1;
+  test('is lazy, animated, full-screen, and releases its canvas', async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    const showcaseRequests: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    page.on('request', request => {
+      if (request.url().includes('/assets/heroes/showcase/')) {
+        showcaseRequests.push(request.url());
       }
-    }
-    return colored;
-  }, `data:image/png;base64,${canvasScreenshot.toString('base64')}`);
-  expect(renderedPixels).toBeGreaterThan(180);
-
-  const initialSurge = Number(await dialog.getAttribute('data-surge-signal'));
-  await dialog.getByRole('button', { name: 'Unleash Celestial Surge' }).click();
-  await expect(dialog).toHaveAttribute('data-surge-signal', String(initialSurge + 1));
-
-  for (const viewport of [{ width: 390, height: 720 }, { width: 320, height: 568 }]) {
-    await page.setViewportSize(viewport);
-    const layout = await dialog.evaluate(element => {
-      const close = element.querySelector('.angel-showcase-close')!.getBoundingClientRect();
-      const footer = element.querySelector('.angel-showcase-footer')!.getBoundingClientRect();
-      return {
-        bodyWidth: document.body.scrollWidth,
-        closeRight: close.right,
-        closeTop: close.top,
-        dialogHeight: element.getBoundingClientRect().height,
-        footerBottom: footer.bottom,
-        footerLeft: footer.left,
-        footerRight: footer.right,
-        viewportHeight: innerHeight,
-        viewportWidth: innerWidth,
-      };
     });
-    expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
-    expect(layout.dialogHeight).toBe(layout.viewportHeight);
-    expect(layout.closeTop).toBeGreaterThanOrEqual(0);
-    expect(layout.closeRight).toBeLessThanOrEqual(layout.viewportWidth);
-    expect(layout.footerLeft).toBeGreaterThanOrEqual(0);
-    expect(layout.footerRight).toBeLessThanOrEqual(layout.viewportWidth);
-    expect(layout.footerBottom).toBeLessThanOrEqual(layout.viewportHeight);
-  }
+    await seedVoidLordCollection(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Heroes', exact: true }).click();
 
-  await page.screenshot({ path: testInfo.outputPath('void-lord-showcase-320x568.png') });
-  await dialog.getByRole('button', { name: 'Close hero showcase' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.locator('.angel-showcase-canvas')).toHaveCount(0);
-  await expect(previewAction).toBeFocused();
-  expect(pageErrors).toEqual([]);
+    const previewAction = page.getByRole('button', { name: 'Preview Void Lord animation' });
+    await expect(previewAction).toBeVisible();
+    expect(showcaseRequests).toEqual([]);
+
+    await previewAction.click();
+    const dialog = page.getByRole('dialog', { name: 'Void Lord' });
+    const scene = dialog.locator('.angel-showcase-scene');
+    await expect(dialog).toBeVisible();
+    await expect(scene).toHaveAttribute('data-art-loaded', 'true', { timeout: 8_000 });
+    await expect(scene).toHaveAttribute('data-render-quality', 'high');
+    await expect(scene).toHaveAttribute('data-asset-variant', 'high');
+    await expect(scene).toHaveAttribute('data-particle-count', '14');
+    await expect(scene).toHaveAttribute('data-ticker-max-fps', '60');
+    await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+    await expect(page.locator('.angel-showcase-canvas')).toHaveCount(1);
+    await expect.poll(() => showcaseRequests.length).toBe(3);
+    expect(showcaseRequests.every(url => !url.endsWith('-low.webp'))).toBe(true);
+
+    const canvasScreenshot = await page.locator('.angel-showcase-canvas').screenshot();
+    const renderedPixels = await page.evaluate(async screenshotUrl => {
+      const image = new Image();
+      image.src = screenshotUrl;
+      await image.decode();
+      const sample = document.createElement('canvas');
+      sample.width = 64;
+      sample.height = 96;
+      const context = sample.getContext('2d', { willReadFrequently: true });
+      context?.drawImage(image, 0, 0, sample.width, sample.height);
+      const pixels = context?.getImageData(0, 0, sample.width, sample.height).data ?? [];
+      let colored = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index + 3] > 12 && pixels[index] + pixels[index + 1] + pixels[index + 2] > 45) {
+          colored += 1;
+        }
+      }
+      return colored;
+    }, `data:image/png;base64,${canvasScreenshot.toString('base64')}`);
+    expect(renderedPixels).toBeGreaterThan(180);
+
+    const initialSurge = Number(await dialog.getAttribute('data-surge-signal'));
+    await dialog.getByRole('button', { name: 'Unleash Celestial Surge' }).click();
+    await expect(dialog).toHaveAttribute('data-surge-signal', String(initialSurge + 1));
+
+    for (const viewport of [{ width: 390, height: 720 }, { width: 320, height: 568 }]) {
+      await page.setViewportSize(viewport);
+      const layout = await dialog.evaluate(element => {
+        const close = element.querySelector('.angel-showcase-close')!.getBoundingClientRect();
+        const footer = element.querySelector('.angel-showcase-footer')!.getBoundingClientRect();
+        return {
+          bodyWidth: document.body.scrollWidth,
+          closeRight: close.right,
+          closeTop: close.top,
+          dialogHeight: element.getBoundingClientRect().height,
+          footerBottom: footer.bottom,
+          footerLeft: footer.left,
+          footerRight: footer.right,
+          viewportHeight: innerHeight,
+          viewportWidth: innerWidth,
+        };
+      });
+      expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
+      expect(layout.dialogHeight).toBe(layout.viewportHeight);
+      expect(layout.closeTop).toBeGreaterThanOrEqual(0);
+      expect(layout.closeRight).toBeLessThanOrEqual(layout.viewportWidth);
+      expect(layout.footerLeft).toBeGreaterThanOrEqual(0);
+      expect(layout.footerRight).toBeLessThanOrEqual(layout.viewportWidth);
+      expect(layout.footerBottom).toBeLessThanOrEqual(layout.viewportHeight);
+    }
+
+    await page.screenshot({ path: testInfo.outputPath('void-lord-showcase-320x568.png') });
+    await dialog.getByRole('button', { name: 'Close hero showcase' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.angel-showcase-canvas')).toHaveCount(0);
+    await expect(previewAction).toBeFocused();
+    expect(pageErrors).toEqual([]);
+  });
 });
 
 test('closing the angel during asset loading does not resurrect a WebGL canvas', async ({ page }) => {
