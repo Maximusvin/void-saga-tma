@@ -61,6 +61,11 @@ export const GAME_BALANCE = {
   bossGemReward: STAGE_BANDS[0].boss.gemReward,
   clickGoldMultiplier: 0.5,
   passiveTickMs: 1000,
+  // The client batches idle ticks instead of posting one request per second.
+  maxPassiveTicksPerBatch: 10,
+  // How far a batch may reach back for unclaimed ticks. Longer absences are
+  // paid out by claim_offline_rewards, not by passive combat.
+  passiveTickCatchUpMs: 15_000,
   offlineRewardMinSeconds: 60,
   offlineRewardMaxSeconds: 8 * 60 * 60,
   offlineGoldPerPowerSecond: 0.05,

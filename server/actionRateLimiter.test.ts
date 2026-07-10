@@ -23,4 +23,16 @@ describe('game action rate limiter', () => {
     assert.equal(limiter.getRejection('player-b', passive, 1_500), null);
     assert.equal(limiter.getRejection('player-a', passive, 1_900), null);
   });
+
+  it('lets idle ticks ride along with a tap batch inside the passive interval', () => {
+    const limiter = new ActionRateLimiter();
+    const idleOnly = { type: 'combat_batch', tapCount: 0, passiveTicks: 1 } as const;
+    const tapsWithIdle = { type: 'combat_batch', tapCount: 3, passiveTicks: 1 } as const;
+
+    assert.equal(limiter.getRejection('player', idleOnly, 1_000), null);
+    // Rejecting this would silently throw away the player's taps.
+    assert.equal(limiter.getRejection('player', tapsWithIdle, 1_080), null);
+    // A pure idle batch inside the interval is still rate limited.
+    assert.equal(limiter.getRejection('player', idleOnly, 1_120), 'action_rate_limited');
+  });
 });

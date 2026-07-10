@@ -117,8 +117,47 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
     stage,
     monsterMaxHealth,
     monsterHealth: monsterMaxHealth,
+    lastPassiveTickAt: null,
     lastSeenAt: now,
     updatedAt: now,
+  };
+};
+
+interface PassiveTickGrant {
+  granted: number;
+  lastPassiveTickAt: string | null;
+}
+
+/**
+ * Idle income is paid per elapsed second, never per request. The watermark only
+ * moves forward by the ticks actually granted, so a client that posts a batch
+ * ten times in a row still earns exactly one second of damage per second.
+ *
+ * Reaching further back than `passiveTickCatchUpMs` is refused on purpose:
+ * long absences belong to claim_offline_rewards, and an uncapped backlog would
+ * let a returning player drain hours of idle income in a few requests.
+ */
+const grantPassiveTicks = (
+  snapshot: GameSnapshot,
+  requestedTicks: number,
+  nowMs: number,
+): PassiveTickGrant => {
+  if (requestedTicks <= 0) {
+    return { granted: 0, lastPassiveTickAt: snapshot.lastPassiveTickAt };
+  }
+
+  const watermarkMs = snapshot.lastPassiveTickAt ? Date.parse(snapshot.lastPassiveTickAt) : Number.NaN;
+  const baselineMs = Number.isFinite(watermarkMs)
+    ? Math.max(watermarkMs, nowMs - GAME_BALANCE.passiveTickCatchUpMs)
+    : nowMs - GAME_BALANCE.passiveTickMs;
+  const earnedTicks = Math.max(0, Math.floor((nowMs - baselineMs) / GAME_BALANCE.passiveTickMs));
+  const granted = Math.min(requestedTicks, earnedTicks, GAME_BALANCE.maxPassiveTicksPerBatch);
+
+  return {
+    granted,
+    lastPassiveTickAt: granted > 0
+      ? new Date(baselineMs + granted * GAME_BALANCE.passiveTickMs).toISOString()
+      : snapshot.lastPassiveTickAt,
   };
 };
 
@@ -272,11 +311,19 @@ export const applyCombatBatchAction = (
     events.push(...result.events);
   }
 
+  const passiveGrant = grantPassiveTicks(currentSnapshot, normalizedPassiveTicks, nowMs);
+  if (normalizedTapCount === 0 && passiveGrant.granted === 0) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'passive_ticks_not_earned' }],
+    };
+  }
+
   const passiveContributions = activeHeroes
     .filter(hero => isPositiveGameNumber(hero.power))
     .map(hero => ({ damage: hero.power, heroId: hero.id }));
   const passivePower = addGameNumbers(...passiveContributions.map(contribution => contribution.damage));
-  for (let index = 0; index < normalizedPassiveTicks && isPositiveGameNumber(passivePower); index += 1) {
+  for (let index = 0; index < passiveGrant.granted && isPositiveGameNumber(passivePower); index += 1) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
       comboCount,
       heroContributions: passiveContributions,
@@ -295,6 +342,7 @@ export const applyCombatBatchAction = (
       ...currentSnapshot,
       comboCount,
       comboExpiresAt,
+      lastPassiveTickAt: passiveGrant.lastPassiveTickAt,
     }, now),
     events,
   };

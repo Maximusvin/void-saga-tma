@@ -1,3 +1,4 @@
+import { GAME_BALANCE } from '../src/game/balance';
 import type { GameAction } from '../src/game/types';
 
 interface GameActionRequest {
@@ -121,7 +122,7 @@ export const parseGameActionRequest = (
       tapCount > MAX_COMBAT_TAPS_PER_BATCH ||
       !isSafeInteger(passiveTicks) ||
       passiveTicks < 0 ||
-      passiveTicks > 1 ||
+      passiveTicks > GAME_BALANCE.maxPassiveTicksPerBatch ||
       (tapCount === 0 && passiveTicks === 0)
     ) {
       return null;

@@ -5,7 +5,7 @@ import { normalizeGameSnapshot, normalizeStoredGameEvents } from './snapshot';
 const timestamp = '2026-07-09T12:00:00.000Z';
 
 describe('game snapshot normalization', () => {
-  it('migrates legacy numeric economy fields and progression to schema v5', () => {
+  it('migrates legacy numeric economy fields and progression to schema v6', () => {
     const snapshot = normalizeGameSnapshot({
       comboCount: 3,
       comboExpiresAt: null,
@@ -20,9 +20,12 @@ describe('game snapshot normalization', () => {
     });
 
     assert.ok(snapshot);
-    assert.equal(snapshot.schemaVersion, 5);
+    assert.equal(snapshot.schemaVersion, 6);
     assert.deepEqual(snapshot.activeHeroIds, ['legacy']);
     assert.equal(snapshot.bossEncounterEndsAt, null);
+    // A pre-v6 save carries no idle watermark, so the next tick is granted at once
+    // instead of back-paying every second since the save was written.
+    assert.equal(snapshot.lastPassiveTickAt, null);
     assert.equal(snapshot.gold, '1002.6');
     assert.equal(snapshot.heroes[0]?.power, '10.5');
     assert.equal(snapshot.heroes[0]?.ascension, 0);
