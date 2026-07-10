@@ -44,10 +44,20 @@ describe('game content invariants', () => {
       assert.ok(hero.combatRole.length > 0);
       assert.match(hero.portrait, /^\/assets\/heroes\/[a-z-]+\.webp$/);
       assert.ok(['still', 'aura', 'embers', 'mythic'].includes(hero.portraitMotion));
+      if (hero.showcase) {
+        assert.match(hero.showcase.id, /^[a-z0-9-]+$/);
+        assert.match(hero.showcase.bodyAsset, /^\/assets\/heroes\/showcase\/[a-z-]+\.webp$/);
+        assert.match(hero.showcase.bodyAssetLow, /^\/assets\/heroes\/showcase\/[a-z-]+-low\.webp$/);
+        assert.match(hero.showcase.leftWingAsset, /^\/assets\/heroes\/showcase\/[a-z-]+\.webp$/);
+        assert.match(hero.showcase.leftWingAssetLow, /^\/assets\/heroes\/showcase\/[a-z-]+-low\.webp$/);
+        assert.match(hero.showcase.rightWingAsset, /^\/assets\/heroes\/showcase\/[a-z-]+\.webp$/);
+        assert.match(hero.showcase.rightWingAssetLow, /^\/assets\/heroes\/showcase\/[a-z-]+-low\.webp$/);
+      }
     }
 
     assert.equal(new Set(SUMMON_POOL.map(hero => hero.accentColor)).size, SUMMON_POOL.length);
     assert.equal(getHeroTemplateById('void-lord')?.attackStyle, 'nova');
+    assert.equal(SUMMON_POOL.filter(hero => hero.showcase).length, 1);
     assert.equal(getHeroTemplateById('unknown'), null);
   });
 

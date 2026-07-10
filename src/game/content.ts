@@ -1,10 +1,10 @@
 import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-005';
+export const GAME_CONTENT_VERSION = 'void-saga-content-006';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
-export const SUMMON_POOL = [
+export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
   {
     accentColor: '#79d9c4',
     attackStyle: 'slash',
@@ -52,12 +52,21 @@ export const SUMMON_POOL = [
     name: 'Void Lord',
     portrait: '/assets/heroes/void-lord.webp',
     portraitMotion: 'mythic',
+    showcase: {
+      bodyAsset: '/assets/heroes/showcase/void-lord-body.webp',
+      bodyAssetLow: '/assets/heroes/showcase/void-lord-body-low.webp',
+      id: 'celestial-dragon-sovereign',
+      leftWingAsset: '/assets/heroes/showcase/void-lord-wing-left.webp',
+      leftWingAssetLow: '/assets/heroes/showcase/void-lord-wing-left-low.webp',
+      rightWingAsset: '/assets/heroes/showcase/void-lord-wing-right.webp',
+      rightWingAssetLow: '/assets/heroes/showcase/void-lord-wing-right-low.webp',
+    },
     rarity: 'Legendary',
     power: 50,
     dropRate: 0.1,
     icon: '👑',
   },
-] as const satisfies readonly SummonHeroTemplate[];
+] as const;
 
 export const RARITY_ORDER: Record<HeroRarity, number> = {
   Legendary: 4,
@@ -123,6 +132,6 @@ export const getStageBandForStage = (stage: number) => {
     .find(stageBand => normalizedStage >= stageBand.fromStage) ?? STAGE_BANDS[0];
 };
 
-export const getHeroTemplateById = (templateId: string) => {
+export const getHeroTemplateById = (templateId: string): SummonHeroTemplate | null => {
   return SUMMON_POOL.find(template => template.id === templateId) ?? null;
 };

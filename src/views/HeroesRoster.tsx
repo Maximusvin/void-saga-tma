@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDownWideNarrow,
   Check,
   Coins,
   Crown,
+  Maximize2,
   Plus,
   ShieldMinus,
   Sparkles,
@@ -29,6 +30,10 @@ import { formatNumber } from '../utils/formatNumber';
 import { triggerHaptic } from '../utils/haptics';
 import './HeroesRoster.css';
 
+const AngelShowcase = lazy(() => import('./AngelShowcase').then(module => ({
+  default: module.AngelShowcase,
+})));
+
 type HeroFilter = 'all' | 'warband';
 type HeroSort = 'rarity' | 'power' | 'level';
 
@@ -46,6 +51,7 @@ interface HeroCardProps {
   eager: boolean;
   gold: GameNumber;
   hero: Hero;
+  onPreview: (hero: Hero) => void;
   onProgress: (hero: Hero) => void;
   onToggle: (hero: Hero) => void;
   progress: 'ascend' | 'upgrade' | null;
@@ -57,6 +63,7 @@ const HeroCard = memo(function HeroCard({
   eager,
   gold,
   hero,
+  onPreview,
   onProgress,
   onToggle,
   progress,
@@ -84,6 +91,18 @@ const HeroCard = memo(function HeroCard({
     >
       <div className="hero-card-visual">
         <HeroPortrait eager={eager} hero={hero} />
+        {template?.showcase && (
+          <button
+            aria-label={`Preview ${hero.name} animation`}
+            className="hero-preview-action"
+            data-preview-hero-id={hero.id}
+            onClick={() => onPreview(hero)}
+            title="View animated hero"
+            type="button"
+          >
+            <Maximize2 aria-hidden="true" size={16} />
+          </button>
+        )}
         <span className="hero-rarity">{hero.rarity}</span>
         <span className="hero-level">Lv.{hero.level}</span>
         {active && <span className="hero-active-mark"><Check size={12} /> Active</span>}
@@ -152,6 +171,7 @@ export function HeroesRoster({
   const [filter, setFilter] = useState<HeroFilter>('all');
   const [progress, setProgress] = useState<{ heroId: string; type: 'ascend' | 'upgrade' } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState(0);
+  const [showcaseHero, setShowcaseHero] = useState<Hero | null>(null);
   const [sort, setSort] = useState<HeroSort>('rarity');
   const [teamPending, setTeamPending] = useState(false);
   const [upgradeAmount, setUpgradeAmount] = useState<HeroUpgradeAmount>(1);
@@ -237,6 +257,20 @@ export function HeroesRoster({
       triggerHaptic('medium');
     }
   }, [activeHeroIdSet, activeHeroIds, selectedSlot, setActiveWarband, teamPending]);
+
+  const handleShowcaseClose = useCallback(() => {
+    const previewHeroId = showcaseHero?.id;
+    setShowcaseHero(null);
+    if (previewHeroId) {
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>(
+          `[data-preview-hero-id="${previewHeroId}"]`,
+        )?.focus({ preventScroll: true });
+      });
+    }
+  }, [showcaseHero]);
+
+  const showcaseTemplate = showcaseHero ? getHeroTemplateById(showcaseHero.templateId) : null;
 
   return (
     <div className="view-container roster-view">
@@ -330,6 +364,7 @@ export function HeroesRoster({
                 gold={gold}
                 hero={hero}
                 key={hero.id}
+                onPreview={setShowcaseHero}
                 onProgress={handleProgress}
                 onToggle={handleTeamToggle}
                 progress={progress?.heroId === hero.id ? progress.type : null}
@@ -342,6 +377,16 @@ export function HeroesRoster({
           {teamPending ? 'Updating Warband' : `${activeHeroes.length} active heroes`}
         </span>
       </section>
+      {showcaseHero && showcaseTemplate?.showcase && (
+        <Suspense fallback={null}>
+          <AngelShowcase
+            hero={showcaseHero}
+            onClose={handleShowcaseClose}
+            portrait={showcaseTemplate.portrait}
+            showcase={showcaseTemplate.showcase}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
