@@ -12,6 +12,7 @@
     "test:e2e": "npm run build && playwright test",
     "preview": "vite preview",
     "prod:compose:check": "node scripts/assert-production-compose.mjs",
+    "prod:nginx:check": "node scripts/assert-production-nginx.mjs",
     "realm:admin": "tsx scripts/realm-admin.ts",
     "server:check": "tsc -p tsconfig.server.json",
     "server:bundle": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/index.mjs && esbuild scripts/realm-admin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/realm-admin.mjs",
