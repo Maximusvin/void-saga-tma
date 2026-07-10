@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, type Texture, type Ticker } from 'pixi.js';
 import { getEnemiesInStage, isBossStage } from '../game/balance';
 import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyRigMotion';
+import { parseEnemyAtlasManifest } from '../game/enemyRigManifest';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import {
   getRiftEnemyVisual,
@@ -15,7 +16,6 @@ import { getBiomeForStage, type BiomeSpec } from '../game/biome';
 import {
   createIronrootEnemyRig,
   createStaticEnemyRig,
-  parseEnemyAtlasManifest,
   type EnemyRig,
   type LoadedEnemyRigAsset,
 } from './enemyRig';

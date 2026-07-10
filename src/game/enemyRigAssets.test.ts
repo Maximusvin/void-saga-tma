@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEnemyAtlasManifest } from '../views/enemyRig';
+import { parseEnemyAtlasManifest } from './enemyRigManifest';
 import { getRiftEnemyVisual } from './riftVisuals';
 
 const REQUIRED_FRAMES = [
