@@ -38,8 +38,94 @@ const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot =
   stage: 1,
   monsterMaxHealth: gameNumber(100),
   monsterHealth: gameNumber(100),
+  lastPassiveTickAt: null,
   lastSeenAt,
   updatedAt: lastSeenAt,
+});
+
+const NEVER_CRIT = () => 0.99;
+
+const countPassiveHits = (events: ReturnType<typeof applyCombatBatchAction>['events']) => {
+  return events.filter(event => event.type === 'monster_hit' && event.source === 'passive').length;
+};
+
+const atOffsetMs = (offsetMs: number) => new Date(NOW_MS + offsetMs).toISOString();
+
+describe('passive tick accrual', () => {
+  it('grants one tick per elapsed second and drops the unearned remainder', () => {
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(-3_000), [hero(10)]),
+      lastPassiveTickAt: atOffsetMs(-3_000),
+    };
+
+    const result = applyCombatBatchAction(snapshot, 0, 10, { nowMs: NOW_MS, random: NEVER_CRIT });
+
+    assert.equal(countPassiveHits(result.events), 3);
+    assert.equal(result.snapshot.lastPassiveTickAt, atOffsetMs(0));
+    assert.equal(compareGameNumbers(result.snapshot.monsterHealth, gameNumber(70)), 0);
+  });
+
+  it('rejects an idle batch when no whole tick has elapsed', () => {
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(0), [hero(10)]),
+      lastPassiveTickAt: atOffsetMs(-500),
+    };
+
+    const result = applyCombatBatchAction(snapshot, 0, 5, { nowMs: NOW_MS, random: NEVER_CRIT });
+
+    assert.equal(result.events[0].type, 'action_rejected');
+    assert.equal(result.snapshot, snapshot);
+    assert.equal(result.snapshot.lastPassiveTickAt, atOffsetMs(-500));
+  });
+
+  it('cannot be outpaced by spamming batches at the same instant', () => {
+    let snapshot: GameSnapshot = {
+      ...createSnapshot(atOffsetMs(-1_000), [hero(10)]),
+      lastPassiveTickAt: atOffsetMs(-1_000),
+    };
+    let totalPassiveHits = 0;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const result = applyCombatBatchAction(snapshot, 0, 10, { nowMs: NOW_MS, random: NEVER_CRIT });
+      totalPassiveHits += countPassiveHits(result.events);
+      snapshot = result.snapshot;
+    }
+
+    // One second of wall clock had elapsed, so exactly one second may be paid.
+    assert.equal(totalPassiveHits, 1);
+  });
+
+  it('does not back-pay a long absence beyond the catch-up window', () => {
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(-3_600_000), [hero(10)]),
+      lastPassiveTickAt: atOffsetMs(-3_600_000),
+    };
+
+    const result = applyCombatBatchAction(snapshot, 0, GAME_BALANCE.maxPassiveTicksPerBatch, {
+      nowMs: NOW_MS,
+      random: NEVER_CRIT,
+    });
+
+    assert.equal(countPassiveHits(result.events), GAME_BALANCE.maxPassiveTicksPerBatch);
+    // The watermark restarts inside the catch-up window, never an hour back.
+    assert.equal(
+      result.snapshot.lastPassiveTickAt,
+      atOffsetMs(-GAME_BALANCE.passiveTickCatchUpMs + GAME_BALANCE.maxPassiveTicksPerBatch * GAME_BALANCE.passiveTickMs),
+    );
+  });
+
+  it('still applies taps when the idle ticks riding along are unearned', () => {
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(0), [hero(10)]),
+      lastPassiveTickAt: atOffsetMs(0),
+    };
+
+    const result = applyCombatBatchAction(snapshot, 2, 5, { nowMs: NOW_MS, random: NEVER_CRIT });
+
+    assert.equal(countPassiveHits(result.events), 0);
+    assert.equal(result.events.filter(event => event.type === 'monster_hit').length, 2);
+    assert.equal(result.snapshot.lastPassiveTickAt, atOffsetMs(0));
+  });
 });
 
 describe('offline rewards', () => {

@@ -165,6 +165,9 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
     gems: normalizeInteger(value.gems, GAME_BALANCE.initialGems, 0),
     gold: parseGameNumber(value.gold, gameNumber(GAME_BALANCE.initialGold)),
     heroes,
+    // Saves written before schema 6 carry no watermark. A null one grants the
+    // next tick immediately instead of back-paying an unbounded absence.
+    lastPassiveTickAt: normalizeIsoTimestamp(value.lastPassiveTickAt),
     lastSeenAt: typeof value.lastSeenAt === 'string' ? value.lastSeenAt : updatedAt,
     monsterHealth,
     monsterMaxHealth,
