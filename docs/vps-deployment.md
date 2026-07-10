@@ -150,6 +150,7 @@ systemctl list-timers void-saga-realm-reconcile.timer
 ```bash
 curl -fsS https://game.riy.contact/api/health
 curl -I https://game.riy.contact/
+curl -I https://game.riy.contact/index.html
 curl -i https://game.riy.contact/api/game/state
 ```
 
@@ -157,6 +158,7 @@ curl -i https://game.riy.contact/api/game/state
 
 - `/api/health` повертає `200` і `{ "ok": true }`;
 - `/` повертає frontend;
+- `/index.html` повертає `Cache-Control: no-cache`, щоб Telegram WebView перевалідовував актуальний hashed bundle після deploy;
 - game endpoint без `x-telegram-init-data` повертає `401`, а не frontend HTML;
 - після запуску через Telegram запити отримують валідний signed `initData`, а стан зберігається у SQLite volume.
 
