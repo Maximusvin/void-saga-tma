@@ -17,6 +17,7 @@
 5. Для майбутніх premium full-body Epic/Legendary анімацій цільовий runtime - `@esotericsoftware/spine-pixi-v8`, бо він працює всередині наявного PixiJS 8 renderer і дозволяє спільно використовувати skeleton data між instances. Runtime підключається лише разом із реальним `.skel`, `.atlas` і texture bundle, після перевірки Spine runtime license; порожню залежність наперед не додаємо.
 6. Перша full-body вертикаль для Void Lord реалізована як ліниво завантажуваний багатошаровий PixiJS 2.5D rig: окремі body, left wing і right wing sprites, ореол, chest core, ground sigil та обмежені light motes. Це не підміняє skeletal deformation, але дає незалежний рух великих форм без додаткового runtime.
 7. Showcase створює приватний ticker лише після відкриття, автоматично використовує `30/45/60 FPS` і low/high WebP відповідно до render profile, ставиться на паузу у прихованій вкладці та знищує Application і вивантажує texture assets після закриття. Filters, dynamic masks і покадрове перемальовування складних Graphics не використовуються.
+8. Живий `idle` першого героя лишається в наявному PixiJS runtime: body рендериться через `7x13 MeshPlane` із 91 вершиною, яка дає окрему мікродеформацію голови, волосся, шиї та грудної клітки без розрізання арту на дрібні спрайти. Поверх сітки синхронізовані процедурні повіки; нерегулярний 29-секундний blink loop містить один подвійний blink, а дихання, вітер і поворот голови працюють на різних частотах, щоб рух не читався як короткий повтор. `prefers-reduced-motion` залишає сітку нерухомою та очі відкритими.
 
 ## Authoring pipeline для Spine
 
@@ -30,13 +31,19 @@ Rive лишається придатним для vector/state-machine UI, а Li
 ## Наслідки
 
 - Поточна колекція має преміальний вигляд без збільшення основного JS bundle окремим animation runtime.
+- Живий `idle` додає лише малу ліниву PixiJS-логіку та не створює нових texture-запитів; одна showcase-сцена оновлює 91 вершину, а не запускає окремий face/skeleton runtime.
 - Рідкість читається через арт, frame treatment і обмежений motion, а не через важкі постійні particle systems.
 - Для справжньої skeletal deformation потрібна окрема authoring-робота; CSS motion не імітує повноцінний Spine rig.
 - Перший showcase є production-ready proof of pipeline: наступний перехід на Spine змінить внутрішню реалізацію rig, але не контракт hero content і не UX відкриття героя.
 
 ## Джерела
 
+- PixiJS Mesh: https://pixijs.com/8.x/guides/components/scene-objects/mesh
+- PixiJS MeshPlane example: https://pixijs.com/8.x/examples/basic/mesh-plane/
 - Spine Pixi runtime: https://esotericsoftware.com/spine-pixi
+- Spine meshes: https://eu.esotericsoftware.com/spine-meshes
 - PixiJS performance tips: https://pixijs.com/8.x/guides/concepts/performance-tips
 - Rive Web runtime: https://rive.app/docs/runtimes/web/web-js
 - Live2D Cubism SDK for Web: https://docs.live2d.com/en/cubism-sdk-manual/cubism-sdk-for-web/
+- Live2D automatic eye blinking: https://docs.live2d.com/en/cubism-sdk-tutorials/eyeblink/
+- Live2D physics: https://docs.live2d.com/en/cubism-editor-manual/physics-operation/

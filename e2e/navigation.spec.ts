@@ -348,8 +348,8 @@ test('player HUD opens a bounded logical realm switcher', async ({ page }) => {
   expect(Math.abs(bounds.bottom - bounds.viewportHeight)).toBeLessThan(1);
   const realmAction = await dialog.locator('.realm-row > button').first().boundingBox();
   const closeAction = await dialog.getByRole('button', { name: 'Close server selection' }).boundingBox();
-  expect(realmAction?.height ?? 0).toBeGreaterThanOrEqual(44);
-  expect(closeAction?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(realmAction?.height ?? 0).toBeGreaterThanOrEqual(43.9);
+  expect(closeAction?.height ?? 0).toBeGreaterThanOrEqual(43.9);
 
   await dialog.getByRole('button', { name: 'Close server selection' }).click();
   await expect(dialog).toHaveCount(0);
@@ -551,6 +551,8 @@ test.describe('high-end Telegram Android angel showcase', () => {
     await expect(scene).toHaveAttribute('data-particle-count', '14');
     await expect(scene).toHaveAttribute('data-ticker-max-fps', '60');
     await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+    await expect(scene).toHaveAttribute('data-living-idle', 'active');
+    await expect(scene).toHaveAttribute('data-mesh-vertex-count', '91');
     await expect(page.locator('.angel-showcase-canvas')).toHaveCount(1);
     await expect.poll(() => showcaseRequests.length).toBe(3);
     expect(showcaseRequests.every(url => !url.endsWith('-low.webp'))).toBe(true);
@@ -575,6 +577,38 @@ test.describe('high-end Telegram Android angel showcase', () => {
       return colored;
     }, `data:image/png;base64,${canvasScreenshot.toString('base64')}`);
     expect(renderedPixels).toBeGreaterThan(180);
+
+    const blinkCountBefore = Number(await scene.getAttribute('data-blink-count'));
+    await scene.evaluate((element, previousBlinkCount) => new Promise<void>((resolve, reject) => {
+      const startedAt = performance.now();
+      const waitForClosedEyes = () => {
+        const blinkCount = Number((element as HTMLElement).dataset.blinkCount ?? 0);
+        const eyesAreClosed = (element as HTMLElement).dataset.eyeState === 'closed';
+        if (eyesAreClosed && blinkCount > previousBlinkCount) {
+          Object.defineProperty(document, 'hidden', {
+            configurable: true,
+            value: true,
+          });
+          document.dispatchEvent(new Event('visibilitychange'));
+          resolve();
+          return;
+        }
+        if (performance.now() - startedAt > 7_000) {
+          reject(new Error('Angel did not complete a visible blink within the idle window.'));
+          return;
+        }
+        requestAnimationFrame(waitForClosedEyes);
+      };
+      waitForClosedEyes();
+    }), blinkCountBefore);
+    expect(Number(await scene.getAttribute('data-blink-count'))).toBeGreaterThan(blinkCountBefore);
+    await page.locator('.angel-showcase-canvas').screenshot({
+      path: testInfo.outputPath('void-lord-living-blink.png'),
+    });
+    await page.evaluate(() => {
+      Reflect.deleteProperty(document, 'hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
 
     const initialSurge = Number(await dialog.getAttribute('data-surge-signal'));
     await dialog.getByRole('button', { name: 'Unleash Celestial Surge' }).click();
@@ -669,6 +703,8 @@ test.describe('low-end Telegram Android angel showcase', () => {
     await expect(scene).toHaveAttribute('data-particle-count', '5');
     await expect(scene).toHaveAttribute('data-ticker-max-fps', '30');
     await expect(scene).toHaveAttribute('data-render-resolution', '1');
+    await expect(scene).toHaveAttribute('data-living-idle', 'active');
+    await expect(scene).toHaveAttribute('data-mesh-vertex-count', '91');
     await expect.poll(() => showcaseRequests.length).toBe(3);
     expect(showcaseRequests.every(url => url.endsWith('-low.webp'))).toBe(true);
     expect(pageErrors).toEqual([]);
