@@ -63,7 +63,7 @@ function App() {
               comboMultiplier={gameState.comboMultiplier}
               registerHit={gameState.registerHit}
               passivePower={gameState.passivePower}
-              heroes={gameState.heroes}
+              heroes={gameState.activeHeroes}
               passiveVolleyDamage={gameState.passiveVolleyDamage}
               passiveVolleyHeroContributions={gameState.passiveVolleyHeroContributions}
               passiveVolleySignal={gameState.passiveVolleySignal}
@@ -80,7 +80,9 @@ function App() {
             <HeroesRoster 
               key="roster" 
               heroes={gameState.heroes} 
+              activeHeroIds={gameState.activeHeroIds}
               ascendHero={gameState.ascendHero}
+              setActiveWarband={gameState.setActiveWarband}
               upgradeHero={gameState.upgradeHero}
               gold={gameState.gold}
             />
@@ -88,7 +90,7 @@ function App() {
           {gameState.activeView === 'leagues' && (
             <LeaguesHall
               key="leagues"
-              heroCount={gameState.heroes.length}
+              heroCount={gameState.activeHeroes.length}
               passivePower={gameState.passivePower}
               stage={gameState.stage}
             />

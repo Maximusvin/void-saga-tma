@@ -72,6 +72,7 @@ describe('game repository persistence', () => {
         mutationCount += 1;
         return applyCombatBatchAction({
           ...snapshot,
+          activeHeroIds: ['persistent-hero'],
           heroes: [{
             ascension: 0,
             id: 'persistent-hero',

@@ -5,7 +5,7 @@ import { normalizeGameSnapshot, normalizeStoredGameEvents } from './snapshot';
 const timestamp = '2026-07-09T12:00:00.000Z';
 
 describe('game snapshot normalization', () => {
-  it('migrates legacy numeric economy fields and progression to schema v4', () => {
+  it('migrates legacy numeric economy fields and progression to schema v5', () => {
     const snapshot = normalizeGameSnapshot({
       comboCount: 3,
       comboExpiresAt: null,
@@ -20,7 +20,8 @@ describe('game snapshot normalization', () => {
     });
 
     assert.ok(snapshot);
-    assert.equal(snapshot.schemaVersion, 4);
+    assert.equal(snapshot.schemaVersion, 5);
+    assert.deepEqual(snapshot.activeHeroIds, ['legacy']);
     assert.equal(snapshot.bossEncounterEndsAt, null);
     assert.equal(snapshot.gold, '1002.6');
     assert.equal(snapshot.heroes[0]?.power, '10.5');
@@ -51,6 +52,24 @@ describe('game snapshot normalization', () => {
     assert.equal(snapshot.heroes[0]?.level, 2);
     assert.equal(snapshot.heroes[0]?.power, '12.5');
     assert.equal(snapshot.heroes[0]?.shards, 1);
+    assert.deepEqual(snapshot.activeHeroIds, ['copy-a']);
+  });
+
+  it('keeps only unique owned heroes in the four-slot Warband', () => {
+    const snapshot = normalizeGameSnapshot({
+      activeHeroIds: ['hero-5', 'missing', 'hero-5', 'hero-10', 'hero-15', 'hero-20', 'hero-25'],
+      heroes: [5, 10, 15, 20, 25].map(power => ({
+        id: `hero-${power}`,
+        level: 1,
+        name: `Hero ${power}`,
+        power,
+        rarity: 'Rare',
+      })),
+      stage: 1,
+    });
+
+    assert.ok(snapshot);
+    assert.deepEqual(snapshot.activeHeroIds, ['hero-5', 'hero-10', 'hero-15', 'hero-20']);
   });
 
   it('preserves high-level legacy heroes by deriving the required ascension', () => {
@@ -148,6 +167,7 @@ describe('game snapshot normalization', () => {
         monsterHealth: 1035,
         stage: 5,
       },
+      { type: 'active_warband_updated', heroIds: ['hero-5', 'hero-10', 'hero-5'] },
     ]);
 
     assert.equal(events[0]?.type, 'monster_hit');
@@ -164,5 +184,6 @@ describe('game snapshot normalization', () => {
     assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].levelsGained : null, 1);
     assert.equal(events[5]?.type === 'hero_ascended' ? events[5].levelCap : null, 100);
     assert.equal(events[6]?.type === 'boss_enraged' ? events[6].monsterHealth : null, '1035');
+    assert.deepEqual(events[7]?.type === 'active_warband_updated' ? events[7].heroIds : null, ['hero-5', 'hero-10']);
   });
 });

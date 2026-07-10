@@ -18,6 +18,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
+import { HeroPortrait } from '../components/HeroPortrait';
 import { triggerHaptic, triggerHapticNotification } from '../utils/haptics';
 import {
   GAME_BALANCE,
@@ -285,7 +286,7 @@ export const SummonCircle = ({ gems, summonHero }: SummonCircleProps) => {
             >
               <div className="summon-result-emblem">
                 <span aria-hidden="true" />
-                <SummonHeroGlyph rarity={summonedHero.rarity} size={72} />
+                <HeroPortrait animated eager hero={summonedHero} />
               </div>
               <div className="summon-result-copy">
                 <span>{duplicateShards > 0 ? 'Echo recovered' : `${summonedHero.rarity} champion`}</span>

@@ -6,8 +6,9 @@ export type ActiveView = 'rift' | 'summon' | 'leagues' | 'roster';
 export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
 export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
 export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';
+export type HeroPortraitMotion = 'still' | 'aura' | 'embers' | 'mythic';
 
-export const GAME_SNAPSHOT_SCHEMA_VERSION = 4;
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 5;
 
 export interface Hero {
   ascension: number;
@@ -26,6 +27,8 @@ export interface SummonHeroTemplate {
   combatRole: HeroCombatRole;
   id: string;
   name: string;
+  portrait: string;
+  portraitMotion: HeroPortraitMotion;
   rarity: HeroRarity;
   power: number;
   dropRate: number;
@@ -72,6 +75,7 @@ export interface GameContent {
 
 export interface GameSnapshot {
   schemaVersion: typeof GAME_SNAPSHOT_SCHEMA_VERSION;
+  activeHeroIds: string[];
   bossEncounterEndsAt: string | null;
   comboCount: number;
   comboExpiresAt: string | null;
@@ -87,6 +91,7 @@ export interface GameSnapshot {
 
 export type GameAction =
   | { type: 'combat_batch'; tapCount: number; passiveTicks: number }
+  | { type: 'set_active_warband'; heroIds: string[] }
   | { type: 'summon'; randomValue?: number }
   | { type: 'upgrade_hero'; heroId: string; amount?: HeroUpgradeAmount }
   | { type: 'ascend_hero'; heroId: string }
@@ -141,6 +146,7 @@ export type GameEvent =
       passivePower: GameNumber;
       goldReward: GameNumber;
     }
+  | { type: 'active_warband_updated'; heroIds: string[] }
   | { type: 'action_rejected'; reason: string };
 
 export interface GameActionResult {

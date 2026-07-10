@@ -388,6 +388,16 @@
   box-shadow: 0 0 38px color-mix(in srgb, var(--summon-rarity) 32%, transparent), inset 0 0 20px rgba(255, 255, 255, 0.08);
 }
 
+.summon-result-emblem .hero-portrait-art {
+  border: 2px solid color-mix(in srgb, var(--summon-rarity) 72%, #ffffff 14%);
+  border-radius: 14px;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--summon-rarity) 24%, transparent);
+}
+
+.summon-result-emblem .hero-portrait-art img {
+  object-position: 50% 34%;
+}
+
 .summon-result-emblem > span {
   position: absolute;
   inset: -13px;

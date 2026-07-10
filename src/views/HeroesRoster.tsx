@@ -1,283 +1,347 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { triggerHaptic } from '../utils/haptics';
-import { formatNumber } from '../utils/formatNumber';
-import type { GameNumber } from '../game/gameNumber';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
-  RARITY_COLORS,
-  RARITY_GRADIENTS,
+  ArrowDownWideNarrow,
+  Check,
+  Coins,
+  Crown,
+  Plus,
+  ShieldMinus,
+  Sparkles,
+  Swords,
+  Zap,
+} from 'lucide-react';
+import { HeroPortrait } from '../components/HeroPortrait';
+import {
   RARITY_ORDER,
   getAscensionShardCost,
-  getHeroIcon,
   getHeroLevelCap,
+  getHeroTemplateById,
   getHeroUpgradeQuote,
   getNextHeroPower,
+  getPassivePower,
   getUpgradeCost,
   isHeroAtLevelCap,
 } from '../game/balance';
+import { compareGameNumbers, type GameNumber } from '../game/gameNumber';
 import type { Hero, HeroUpgradeAmount } from '../game/types';
+import { MAX_ACTIVE_WARBAND_HEROES } from '../game/warband';
+import { formatNumber } from '../utils/formatNumber';
+import { triggerHaptic } from '../utils/haptics';
 import './HeroesRoster.css';
 
+type HeroFilter = 'all' | 'warband';
+type HeroSort = 'rarity' | 'power' | 'level';
+
 interface HeroesRosterProps {
+  activeHeroIds: string[];
   ascendHero: (id: string) => boolean;
-  heroes: Hero[];
-  upgradeHero: (id: string, amount: HeroUpgradeAmount) => boolean;
   gold: GameNumber;
+  heroes: Hero[];
+  setActiveWarband: (heroIds: string[]) => Promise<boolean>;
+  upgradeHero: (id: string, amount: HeroUpgradeAmount) => boolean;
 }
 
-export const HeroesRoster: React.FC<HeroesRosterProps> = ({ ascendHero, heroes, upgradeHero, gold }) => {
-  const [progressFeedback, setProgressFeedback] = useState<{
-    heroId: string;
-    levelsGained?: number;
-    type: 'ascend' | 'upgrade';
-  } | null>(null);
-  const [upgradeAmount, setUpgradeAmount] = useState<HeroUpgradeAmount>(1);
-  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+interface HeroCardProps {
+  active: boolean;
+  eager: boolean;
+  gold: GameNumber;
+  hero: Hero;
+  onProgress: (hero: Hero) => void;
+  onToggle: (hero: Hero) => void;
+  progress: 'ascend' | 'upgrade' | null;
+  upgradeAmount: HeroUpgradeAmount;
+}
 
-  const showProgressFeedback = (
-    heroId: string,
-    type: 'ascend' | 'upgrade',
-    durationMs: number,
-    levelsGained?: number,
-  ) => {
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current);
-    }
-    setProgressFeedback({ heroId, levelsGained, type });
-    feedbackTimeoutRef.current = setTimeout(() => {
-      feedbackTimeoutRef.current = null;
-      setProgressFeedback(null);
-    }, durationMs);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (feedbackTimeoutRef.current) {
-        clearTimeout(feedbackTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleUpgrade = (id: string, levelsGained: number) => {
-    const wasUpgraded = upgradeHero(id, upgradeAmount);
-    if (!wasUpgraded) {
-      return;
-    }
-
-    triggerHaptic('heavy');
-    showProgressFeedback(id, 'upgrade', 500, levelsGained);
-  };
-
-  const handleAscend = (id: string) => {
-    const wasAscended = ascendHero(id);
-    if (!wasAscended) {
-      return;
-    }
-
-    triggerHaptic('heavy');
-    showProgressFeedback(id, 'ascend', 700);
-  };
-
-  // Sort heroes: Legendary > Epic > Rare > Common, then by level desc
-  const sortedHeroes = [...heroes].sort((a, b) => {
-    if (RARITY_ORDER[b.rarity] !== RARITY_ORDER[a.rarity]) {
-      return RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity];
-    }
-    return b.level - a.level;
-  });
+const HeroCard = memo(function HeroCard({
+  active,
+  eager,
+  gold,
+  hero,
+  onProgress,
+  onToggle,
+  progress,
+  upgradeAmount,
+}: HeroCardProps) {
+  const template = getHeroTemplateById(hero.templateId);
+  const atLevelCap = isHeroAtLevelCap(hero);
+  const levelCap = getHeroLevelCap(hero);
+  const ascensionCost = getAscensionShardCost(hero);
+  const canAscend = atLevelCap && hero.shards >= ascensionCost;
+  const upgradeQuote = getHeroUpgradeQuote(hero, gold, upgradeAmount);
+  const canUpgrade = !atLevelCap && upgradeQuote.levelsGained > 0;
+  const displayedUpgradeCost = canUpgrade ? upgradeQuote.goldCost : getUpgradeCost(hero);
+  const nextPower = upgradeQuote.levelsGained > 0 ? upgradeQuote.power : getNextHeroPower(hero);
+  const style = {
+    '--hero-accent': template?.accentColor ?? '#9eb8b5',
+  } as CSSProperties;
 
   return (
-    <motion.div 
-      className="view-container roster-view"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        flex: 1,
-        padding: '2px 4px 12px',
-        overflowY: 'auto',
-        overflowX: 'hidden'
-      }}
+    <article
+      className={`hero-card rarity-${hero.rarity.toLowerCase()} ${active ? 'active' : ''}`}
+      data-active={active ? 'true' : 'false'}
+      data-progress={progress ?? 'idle'}
+      style={style}
     >
-      <div className="roster-header">
-        <span>Warband</span>
-        <h2 className="text-gradient">Your Heroes ({heroes.length})</h2>
-        {heroes.length > 0 && (
-          <div className="upgrade-mode" aria-label="Upgrade amount">
-            {([1, 10, 'max'] as const).map(amount => (
+      <div className="hero-card-visual">
+        <HeroPortrait eager={eager} hero={hero} />
+        <span className="hero-rarity">{hero.rarity}</span>
+        <span className="hero-level">Lv.{hero.level}</span>
+        {active && <span className="hero-active-mark"><Check size={12} /> Active</span>}
+      </div>
+
+      <div className="hero-card-copy">
+        <div className="hero-title-row">
+          <div>
+            <h3>{hero.name}</h3>
+            <p>{template?.combatRole ?? 'Riftbound'}</p>
+          </div>
+          <strong><Zap size={12} />{formatNumber(hero.power)}</strong>
+        </div>
+
+        <div className="hero-progress-copy">
+          <span>
+            {atLevelCap
+              ? `Ascension ${hero.ascension}`
+              : `${upgradeQuote.levelsGained > 0 ? `+${upgradeQuote.levelsGained}` : 'Next'} ${formatNumber(nextPower)}`}
+          </span>
+          <span>{atLevelCap ? `${hero.shards}/${ascensionCost}` : `${hero.level}/${levelCap}`}</span>
+        </div>
+
+        <div className="hero-card-actions">
+          <button
+            aria-label={active ? `Remove ${hero.name} from Warband` : `Add ${hero.name} to Warband`}
+            aria-pressed={active}
+            className="hero-team-action"
+            onClick={() => onToggle(hero)}
+            title={active ? 'Remove from Warband' : 'Add or swap into Warband'}
+            type="button"
+          >
+            {active ? <ShieldMinus size={17} /> : <Plus size={18} />}
+          </button>
+          <button
+            className="hero-upgrade-action"
+            disabled={atLevelCap ? !canAscend : !canUpgrade}
+            onClick={() => onProgress(hero)}
+            type="button"
+          >
+            {atLevelCap ? <Sparkles size={15} /> : <Coins size={15} />}
+            <span>
+              <b>{atLevelCap ? 'Ascend' : `Upgrade${upgradeQuote.levelsGained > 1 ? ` +${upgradeQuote.levelsGained}` : ''}`}</b>
+              <small>{atLevelCap ? `${hero.shards}/${ascensionCost} shards` : formatNumber(displayedUpgradeCost)}</small>
+            </span>
+          </button>
+        </div>
+      </div>
+      {progress && (
+        <span className="hero-progress-flash" role="status">
+          {progress === 'ascend' ? 'Ascended' : 'Power increased'}
+        </span>
+      )}
+    </article>
+  );
+});
+
+export function HeroesRoster({
+  activeHeroIds,
+  ascendHero,
+  gold,
+  heroes,
+  setActiveWarband,
+  upgradeHero,
+}: HeroesRosterProps) {
+  const [filter, setFilter] = useState<HeroFilter>('all');
+  const [progress, setProgress] = useState<{ heroId: string; type: 'ascend' | 'upgrade' } | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState(0);
+  const [sort, setSort] = useState<HeroSort>('rarity');
+  const [teamPending, setTeamPending] = useState(false);
+  const [upgradeAmount, setUpgradeAmount] = useState<HeroUpgradeAmount>(1);
+  const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeHeroIdSet = useMemo(() => new Set(activeHeroIds), [activeHeroIds]);
+  const heroesById = useMemo(() => new Map(heroes.map(hero => [hero.id, hero])), [heroes]);
+  const activeHeroes = useMemo(
+    () => activeHeroIds.flatMap(heroId => {
+      const activeHero = heroesById.get(heroId);
+      return activeHero ? [activeHero] : [];
+    }),
+    [activeHeroIds, heroesById],
+  );
+  const teamPower = useMemo(() => getPassivePower(activeHeroes), [activeHeroes]);
+  const visibleHeroes = useMemo(() => {
+    const filteredHeroes = filter === 'warband'
+      ? heroes.filter(hero => activeHeroIdSet.has(hero.id))
+      : heroes;
+
+    return [...filteredHeroes].sort((left, right) => {
+      if (sort === 'power') {
+        const powerOrder = compareGameNumbers(right.power, left.power);
+        return powerOrder !== 0 ? powerOrder : right.level - left.level;
+      }
+      if (sort === 'level') {
+        return right.level - left.level || RARITY_ORDER[right.rarity] - RARITY_ORDER[left.rarity];
+      }
+      return RARITY_ORDER[right.rarity] - RARITY_ORDER[left.rarity] || right.level - left.level;
+    });
+  }, [activeHeroIdSet, filter, heroes, sort]);
+
+  useEffect(() => {
+    if (selectedSlot >= Math.max(1, activeHeroIds.length)) {
+      setSelectedSlot(Math.max(0, activeHeroIds.length - 1));
+    }
+  }, [activeHeroIds.length, selectedSlot]);
+
+  useEffect(() => () => {
+    if (progressTimeoutRef.current) {
+      clearTimeout(progressTimeoutRef.current);
+    }
+  }, []);
+
+  const showProgress = useCallback((heroId: string, type: 'ascend' | 'upgrade') => {
+    if (progressTimeoutRef.current) {
+      clearTimeout(progressTimeoutRef.current);
+    }
+    setProgress({ heroId, type });
+    progressTimeoutRef.current = setTimeout(() => setProgress(null), 700);
+  }, []);
+
+  const handleProgress = useCallback((hero: Hero) => {
+    const atLevelCap = isHeroAtLevelCap(hero);
+    const changed = atLevelCap
+      ? ascendHero(hero.id)
+      : upgradeHero(hero.id, upgradeAmount);
+    if (!changed) {
+      return;
+    }
+    triggerHaptic('heavy');
+    showProgress(hero.id, atLevelCap ? 'ascend' : 'upgrade');
+  }, [ascendHero, showProgress, upgradeAmount, upgradeHero]);
+
+  const handleTeamToggle = useCallback(async (hero: Hero) => {
+    if (teamPending) {
+      return;
+    }
+
+    const isActive = activeHeroIdSet.has(hero.id);
+    let nextHeroIds: string[];
+    if (isActive) {
+      nextHeroIds = activeHeroIds.filter(heroId => heroId !== hero.id);
+    } else if (activeHeroIds.length < MAX_ACTIVE_WARBAND_HEROES) {
+      nextHeroIds = [...activeHeroIds, hero.id];
+    } else {
+      nextHeroIds = activeHeroIds.map((heroId, index) => index === selectedSlot ? hero.id : heroId);
+    }
+
+    setTeamPending(true);
+    const changed = await setActiveWarband(nextHeroIds);
+    setTeamPending(false);
+    if (changed) {
+      triggerHaptic('medium');
+    }
+  }, [activeHeroIdSet, activeHeroIds, selectedSlot, setActiveWarband, teamPending]);
+
+  return (
+    <div className="view-container roster-view">
+      <section className="warband-command" aria-labelledby="warband-title">
+        <div className="warband-heading">
+          <div>
+            <span className="warband-kicker"><Crown size={12} /> Active formation</span>
+            <h1 id="warband-title">Warband</h1>
+          </div>
+          <div className="warband-power">
+            <small>Team power</small>
+            <strong><Zap size={14} /> {formatNumber(teamPower)}</strong>
+          </div>
+        </div>
+
+        <div className="active-warband-slots" aria-label={`${activeHeroes.length} of 4 active heroes`}>
+          {Array.from({ length: MAX_ACTIVE_WARBAND_HEROES }, (_, index) => {
+            const activeHero = activeHeroes[index];
+            return activeHero ? (
               <button
-                key={amount}
+                aria-label={`Select slot ${index + 1}, ${activeHero.name}`}
+                aria-pressed={selectedSlot === index}
+                className={`active-hero-slot ${selectedSlot === index ? 'selected' : ''}`}
+                key={activeHero.id}
+                onClick={() => setSelectedSlot(index)}
                 type="button"
-                className={upgradeAmount === amount ? 'active' : ''}
-                aria-pressed={upgradeAmount === amount}
-                onClick={() => setUpgradeAmount(amount)}
               >
-                {amount === 'max' ? 'MAX' : `+${amount}`}
+                <HeroPortrait animated eager hero={activeHero} />
+                <span>{index + 1}</span>
+                <b>Lv.{activeHero.level}</b>
               </button>
+            ) : (
+              <span className="active-hero-slot empty" key={`empty-${index}`}>
+                <Plus size={20} />
+                <span>{index + 1}</span>
+              </span>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="roster-collection" aria-labelledby="collection-title">
+        <div className="roster-toolbar">
+          <div className="collection-heading">
+            <span>Collection</span>
+            <h2 id="collection-title">Heroes <b>{heroes.length}</b></h2>
+          </div>
+          <div className="roster-filters">
+            <div className="roster-filter-tabs" aria-label="Hero filter">
+              <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')} type="button">All</button>
+              <button aria-pressed={filter === 'warband'} onClick={() => setFilter('warband')} type="button">
+                <Swords size={13} /> Team
+              </button>
+            </div>
+            <label className="hero-sort">
+              <ArrowDownWideNarrow size={15} />
+              <span className="sr-only">Sort heroes</span>
+              <select onChange={event => setSort(event.target.value as HeroSort)} value={sort}>
+                <option value="rarity">Rarity</option>
+                <option value="power">Power</option>
+                <option value="level">Level</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="upgrade-mode" aria-label="Upgrade amount">
+          {([1, 10, 'max'] as const).map(amount => (
+            <button
+              aria-pressed={upgradeAmount === amount}
+              key={amount}
+              onClick={() => setUpgradeAmount(amount)}
+              type="button"
+            >
+              {amount === 'max' ? 'MAX' : `+${amount}`}
+            </button>
+          ))}
+        </div>
+
+        {visibleHeroes.length === 0 ? (
+          <div className="roster-empty">
+            <Sparkles size={24} />
+            <p>{heroes.length === 0 ? 'Your first riftbound hero awaits.' : 'No heroes in this formation.'}</p>
+          </div>
+        ) : (
+          <div className="roster-grid" data-hero-count={visibleHeroes.length}>
+            {visibleHeroes.map((hero, index) => (
+              <HeroCard
+                active={activeHeroIdSet.has(hero.id)}
+                eager={index < 4}
+                gold={gold}
+                hero={hero}
+                key={hero.id}
+                onProgress={handleProgress}
+                onToggle={handleTeamToggle}
+                progress={progress?.heroId === hero.id ? progress.type : null}
+                upgradeAmount={upgradeAmount}
+              />
             ))}
           </div>
         )}
-      </div>
-      
-      {sortedHeroes.length === 0 ? (
-        <div className="glass-panel roster-empty">
-          <p>The warband is waiting for its first riftbound hero.</p>
-        </div>
-      ) : (
-        <div className="roster-grid">
-          <AnimatePresence>
-            {sortedHeroes.map((hero) => {
-              const atLevelCap = isHeroAtLevelCap(hero);
-              const levelCap = getHeroLevelCap(hero);
-              const ascensionCost = getAscensionShardCost(hero);
-              const canAscend = atLevelCap && hero.shards >= ascensionCost;
-              const upgradeQuote = getHeroUpgradeQuote(hero, gold, upgradeAmount);
-              const canUpgrade = !atLevelCap && upgradeQuote.levelsGained > 0;
-              const displayedUpgradeCost = canUpgrade ? upgradeQuote.goldCost : getUpgradeCost(hero);
-              const color = RARITY_COLORS[hero.rarity];
-              const nextPower = upgradeQuote.levelsGained > 0
-                ? upgradeQuote.power
-                : getNextHeroPower(hero);
-              const isUpgrading = progressFeedback?.heroId === hero.id && progressFeedback.type === 'upgrade';
-              const isAscending = progressFeedback?.heroId === hero.id && progressFeedback.type === 'ascend';
-
-              return (
-                <motion.div 
-                  key={hero.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1, filter: (isUpgrading || isAscending) ? 'brightness(1.5)' : 'brightness(1)' }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  whileHover={{ scale: 1.02 }}
-                  className="glass-panel"
-                  style={{
-                    padding: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '6px',
-                    border: `1px solid ${color}40`,
-                    background: RARITY_GRADIENTS[hero.rarity],
-                    boxShadow: (isUpgrading || isAscending) ? `0 0 20px ${color}` : `0 4px 12px ${color}15`,
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {/* Level Up Flash Overlay */}
-                  <AnimatePresence>
-                    {(isUpgrading || isAscending) && (
-                      <motion.div
-                        initial={{ opacity: 0.8 }}
-                        animate={{ opacity: 0 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                          background: 'white', zIndex: 20, pointerEvents: 'none'
-                        }}
-                      />
-                    )}
-                  </AnimatePresence>
-
-                  {/* Level Up Text */}
-                  <AnimatePresence>
-                    {(isUpgrading || isAscending) && (
-                      <motion.div
-                        initial={{ opacity: 1, y: 0, scale: 0.5 }}
-                        animate={{ opacity: 0, y: -40, scale: 1.5 }}
-                        style={{
-                          position: 'absolute', top: '30%',
-                          color: '#fff', fontWeight: 'bold', textShadow: `0 0 5px ${color}`, zIndex: 21, pointerEvents: 'none'
-                        }}
-                      >
-                        {isAscending
-                          ? 'ASCENDED!'
-                          : `+${progressFeedback?.levelsGained ?? 1} LEVEL${progressFeedback?.levelsGained === 1 ? '' : 'S'}!`}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Rarity Badge */}
-                  <div style={{ 
-                    position: 'absolute', top: '6px', right: '6px', 
-                    fontSize: '0.6rem', fontWeight: 'bold', 
-                    padding: '2px 6px', borderRadius: '8px',
-                    backgroundColor: `${color}30`, color: color,
-                    border: `1px solid ${color}50`
-                  }}>
-                    {hero.rarity}
-                  </div>
-
-                  {/* Icon Placeholder */}
-                  <div style={{ 
-                    width: '64px', height: '64px', 
-                    background: `linear-gradient(135deg, ${color}40, rgba(0,0,0,0.5))`, 
-                    borderRadius: '16px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '2rem',
-                    border: `2px solid ${color}80`,
-                    boxShadow: `inset 0 0 10px ${color}40, 0 0 10px ${color}20`,
-                    marginTop: '10px'
-                  }}>
-                    {getHeroIcon(hero.rarity)}
-                  </div>
-                  
-                  {/* Info */}
-                  <div style={{ fontWeight: 'bold', fontSize: '0.9rem', textAlign: 'center', color: '#fff', marginTop: '4px' }}>
-                    {hero.name}
-                  </div>
-                  
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '4px', padding: '0 4px' }}>
-                    <span style={{ color: 'var(--text-main)' }}>Lv.{hero.level}/{levelCap}</span>
-                    <span style={{ color: color, fontWeight: 'bold' }}>⚡ {formatNumber(hero.power)}</span>
-                  </div>
-
-                  {/* Upgrade Power Preview */}
-                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
-                    {atLevelCap
-                      ? `Ascension ${hero.ascension} · ${hero.shards}/${ascensionCost} shards`
-                      : `${upgradeQuote.levelsGained > 0 ? `+${upgradeQuote.levelsGained}` : 'Next'} ⚡ ${formatNumber(nextPower)}`}
-                  </div>
-                  
-                  {/* Upgrade Button */}
-                  <button 
-                    className="btn-primary"
-                    onClick={() => atLevelCap
-                      ? handleAscend(hero.id)
-                      : handleUpgrade(hero.id, upgradeQuote.levelsGained)}
-                    disabled={atLevelCap ? !canAscend : !canUpgrade}
-                    style={{
-                      padding: '8px',
-                      fontSize: '0.75rem',
-                      width: '100%',
-                      background: (canUpgrade || canAscend) ? `linear-gradient(45deg, ${color}dd, ${color})` : 'rgba(255,255,255,0.1)',
-                      color: (canUpgrade || canAscend) ? '#000' : 'rgba(255,255,255,0.5)',
-                      border: (canUpgrade || canAscend) ? 'none' : '1px solid rgba(255,255,255,0.2)',
-                      boxShadow: (canUpgrade || canAscend) ? `0 0 10px ${color}60` : 'none',
-                      borderRadius: '8px',
-                      cursor: (canUpgrade || canAscend) ? 'pointer' : 'not-allowed',
-                      marginTop: 'auto'
-                    }}
-                  >
-                    {atLevelCap
-                      ? (canAscend ? 'ASCEND' : 'NEED SHARDS')
-                      : (canUpgrade
-                          ? `UPGRADE${upgradeQuote.levelsGained > 1 ? ` +${upgradeQuote.levelsGained}` : ''}`
-                          : 'NEED GOLD')}
-                    <div style={{ fontSize: '0.65rem', marginTop: '2px', fontWeight: 'normal' }}>
-                      {atLevelCap
-                        ? `${hero.shards}/${ascensionCost} shards`
-                        : <>{formatNumber(displayedUpgradeCost)} <span style={{ color: canUpgrade ? '#000' : 'var(--gold)' }}>g</span></>}
-                    </div>
-                  </button>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      )}
-    </motion.div>
+        <span className="sr-only" aria-live="polite">
+          {teamPending ? 'Updating Warband' : `${activeHeroes.length} active heroes`}
+        </span>
+      </section>
+    </div>
   );
-};
+}

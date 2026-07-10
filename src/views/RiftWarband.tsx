@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Swords, UsersRound } from 'lucide-react';
-import { getHeroIcon, getHeroTemplateById } from '../game/balance';
+import { HeroPortrait } from '../components/HeroPortrait';
+import { getHeroTemplateById } from '../game/balance';
 import type { Hero, HeroDamageContribution } from '../game/types';
 
 interface RiftWarbandProps {
@@ -79,7 +80,7 @@ export const RiftWarband = memo(function RiftWarband({
                   : { scale: 1, y: 0 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.36, ease: 'easeOut' }}
               >
-                {template?.icon ?? getHeroIcon(hero.rarity)}
+                <HeroPortrait animated={isAttacking} eager hero={hero} />
               </motion.span>
               <span className="warband-level">{hero.level}</span>
             </div>

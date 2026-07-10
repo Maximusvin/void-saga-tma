@@ -1,0 +1,131 @@
+.hero-portrait-art {
+  --portrait-accent: #9eb8b5;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--portrait-accent) 30%, transparent), transparent 62%),
+    #071114;
+  isolation: isolate;
+}
+
+.hero-portrait-art img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 42%;
+  transform: scale(1.015);
+}
+
+.hero-portrait-fallback {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+}
+
+.portrait-aura,
+.portrait-motes {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.portrait-aura {
+  background:
+    radial-gradient(circle at 52% 72%, color-mix(in srgb, var(--portrait-accent) 32%, transparent), transparent 34%),
+    linear-gradient(108deg, transparent 28%, rgba(255, 255, 255, 0.2) 48%, transparent 66%);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  transform: translate3d(-16%, 0, 0);
+  animation: portrait-aura-drift 5.8s ease-in-out infinite;
+}
+
+.motion-embers .portrait-aura {
+  background: radial-gradient(circle at 50% 76%, rgba(255, 82, 35, 0.42), transparent 44%);
+  animation: portrait-ember-breathe 3.6s ease-in-out infinite;
+}
+
+.motion-mythic img {
+  transform-origin: 50% 48%;
+  animation: portrait-mythic-breathe 5.2s ease-in-out infinite;
+}
+
+.motion-mythic .portrait-aura {
+  background:
+    radial-gradient(circle at 50% 72%, rgba(166, 121, 255, 0.38), transparent 30%),
+    conic-gradient(from 210deg at 50% 50%, transparent, rgba(255, 229, 154, 0.32), transparent 28%, rgba(126, 243, 255, 0.22), transparent 64%);
+  animation: portrait-mythic-light 6.4s ease-in-out infinite;
+}
+
+.portrait-motes i {
+  position: absolute;
+  left: 18%;
+  bottom: -8%;
+  width: 3px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--portrait-accent);
+  box-shadow: 0 0 7px var(--portrait-accent);
+  opacity: 0;
+  animation: portrait-mote-rise 3.8s linear infinite;
+}
+
+.portrait-motes i:nth-child(2) {
+  left: 58%;
+  animation-delay: -1.3s;
+  animation-duration: 4.6s;
+}
+
+@keyframes portrait-aura-drift {
+  0%, 100% { opacity: 0.34; transform: translate3d(-18%, 0, 0); }
+  50% { opacity: 0.68; transform: translate3d(18%, -2%, 0); }
+}
+
+@keyframes portrait-ember-breathe {
+  0%, 100% { opacity: 0.34; transform: scale(0.94); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+
+@keyframes portrait-mythic-breathe {
+  0%, 100% { transform: scale(1.015) translate3d(0, 0, 0); }
+  50% { transform: scale(1.045) translate3d(0, -0.8%, 0); }
+}
+
+@keyframes portrait-mythic-light {
+  0%, 100% { opacity: 0.38; transform: rotate(-3deg) scale(0.96); }
+  50% { opacity: 0.8; transform: rotate(3deg) scale(1.05); }
+}
+
+@keyframes portrait-mote-rise {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.6); }
+  20% { opacity: 0.8; }
+  100% { opacity: 0; transform: translate3d(7px, -72px, 0) scale(0.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-portrait-art img,
+  .portrait-aura,
+  .portrait-motes i {
+    animation: none;
+  }
+}
+
+:root[data-render-quality='low'] .hero-portrait-art .portrait-motes,
+:root[data-render-quality='low'] .hero-portrait-art .portrait-aura {
+  display: none;
+}
+
+:root[data-render-quality='low'] .hero-portrait-art img {
+  animation: none;
+}

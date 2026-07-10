@@ -193,6 +193,7 @@ describe('game API persistence', () => {
       const player = repository.getOrCreatePlayer(realm.characterId);
       repository.savePlayer(realm.characterId, {
         ...player.snapshot,
+        activeHeroIds: ['void-grunt'],
         gold: gameNumber('1e30'),
         heroes: [{
           ascension: 0,
@@ -257,12 +258,26 @@ describe('game API persistence', () => {
       assert.deepEqual(replay.body.snapshot, bulkUpgrade.body.snapshot);
       assert.deepEqual(replay.body.events, bulkUpgrade.body.events);
 
+      const warbandUpdate = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          playerId,
+          commandId: 'cmd:http-warband-0001',
+          action: { type: 'set_active_warband', heroIds: [] },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(warbandUpdate.response.status, 200);
+      assert.deepEqual(warbandUpdate.body.snapshot.activeHeroIds, []);
+      assert.deepEqual(warbandUpdate.body.events, [{ type: 'active_warband_updated', heroIds: [] }]);
+
       const restored = await requestJson<PlayerStateResponse>(
         `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
       );
       assert.equal(restored.body.snapshot.heroes[0]?.ascension, 1);
       assert.equal(restored.body.snapshot.heroes[0]?.shards, 0);
       assert.equal(restored.body.snapshot.heroes[0]?.level, 100);
+      assert.deepEqual(restored.body.snapshot.activeHeroIds, []);
     } finally {
       if (serverStarted) {
         await closeServer(server);

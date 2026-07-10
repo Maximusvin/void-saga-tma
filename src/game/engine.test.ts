@@ -6,6 +6,7 @@ import {
   applyGameAction,
   ascendHeroAction,
   claimOfflineRewardsAction,
+  setActiveWarbandAction,
   summonHeroAction,
   upgradeHeroAction,
 } from './engine';
@@ -27,6 +28,7 @@ const hero = (power: number): Hero => ({
 
 const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot => ({
   schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+  activeHeroIds: heroes.slice(0, 4).map(currentHero => currentHero.id),
   bossEncounterEndsAt: null,
   comboCount: 0,
   comboExpiresAt: null,
@@ -183,12 +185,54 @@ describe('hero summons', () => {
     assert.equal(unlockEvent.type, 'hero_summoned');
     assert.equal(unlockEvent.isDuplicate, false);
     assert.equal(unlocked.snapshot.heroes[0]?.templateId, 'void-grunt');
+    assert.deepEqual(unlocked.snapshot.activeHeroIds, ['void-grunt']);
     assert.equal(duplicateEvent.type, 'hero_summoned');
     assert.equal(duplicateEvent.isDuplicate, true);
     assert.equal(duplicateEvent.shardsGranted, 1);
     assert.equal(duplicate.snapshot.heroes.length, 1);
     assert.equal(duplicate.snapshot.heroes[0]?.shards, 1);
     assert.equal(duplicate.snapshot.gems, 30);
+  });
+});
+
+describe('active Warband', () => {
+  it('persists an ordered owned formation and rejects invalid members', () => {
+    const heroes = [hero(5), hero(10), hero(15), hero(20), hero(25)];
+    const snapshot = createSnapshot('2026-07-09T11:59:00.000Z', heroes);
+    const updated = setActiveWarbandAction(snapshot, ['hero-25', 'hero-10']);
+
+    assert.deepEqual(updated.snapshot.activeHeroIds, ['hero-25', 'hero-10']);
+    assert.deepEqual(updated.events, [{
+      type: 'active_warband_updated',
+      heroIds: ['hero-25', 'hero-10'],
+    }]);
+    assert.deepEqual(
+      setActiveWarbandAction(snapshot, ['hero-5', 'hero-5']).events,
+      [{ type: 'action_rejected', reason: 'invalid_warband' }],
+    );
+    assert.deepEqual(
+      setActiveWarbandAction(snapshot, ['not-owned']).events,
+      [{ type: 'action_rejected', reason: 'hero_not_owned' }],
+    );
+  });
+
+  it('uses only the active formation for tap and passive power', () => {
+    const heroes = [hero(10), hero(25), hero(50)];
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z', heroes),
+      activeHeroIds: ['hero-10', 'hero-50'],
+      monsterHealth: gameNumber(1_000),
+      monsterMaxHealth: gameNumber(1_000),
+    };
+    const tap = applyCombatBatchAction(snapshot, 1, 0, { nowMs: NOW_MS, random: () => 0.5 });
+    const passive = applyCombatBatchAction(snapshot, 0, 1, { nowMs: NOW_MS, random: () => 0.5 });
+
+    assert.equal(tap.events[0]?.type === 'monster_hit' ? tap.events[0].damage : null, '7');
+    assert.equal(passive.events[0]?.type === 'monster_hit' ? passive.events[0].damage : null, '60');
+    assert.deepEqual(passive.events[0]?.type === 'monster_hit' ? passive.events[0].heroContributions : null, [
+      { damage: '10', heroId: 'hero-10' },
+      { damage: '50', heroId: 'hero-50' },
+    ]);
   });
 });
 

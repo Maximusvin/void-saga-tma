@@ -1,85 +1,516 @@
 .roster-view {
-  padding-inline: var(--screen-gutter);
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
   color: var(--text-light);
+  background: linear-gradient(180deg, rgba(4, 17, 22, 0.1), rgba(3, 12, 16, 0.82) 38%, rgba(3, 10, 14, 0.96));
 }
 
-.roster-header {
-  position: sticky;
-  top: 0;
-  z-index: 12;
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  padding: 8px 0 12px;
-  background: linear-gradient(180deg, rgba(5, 8, 17, 0.82), rgba(5, 8, 17, 0));
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.warband-command {
+  position: relative;
+  padding: 8px max(var(--screen-gutter), var(--app-content-safe-area-right)) 14px max(var(--screen-gutter), var(--app-content-safe-area-left));
+  border-bottom: 1px solid rgba(194, 255, 239, 0.18);
+  background:
+    linear-gradient(180deg, rgba(12, 42, 46, 0.44), rgba(5, 20, 25, 0.8)),
+    radial-gradient(circle at 50% 0, rgba(106, 250, 226, 0.16), transparent 62%);
+  box-shadow: 0 14px 34px rgba(1, 10, 14, 0.24);
+  backdrop-filter: blur(13px);
+  -webkit-backdrop-filter: blur(13px);
 }
 
-.roster-header span {
-  color: rgba(225, 247, 248, 0.62);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.22em;
+.warband-heading,
+.roster-toolbar,
+.hero-title-row,
+.hero-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.warband-kicker,
+.collection-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(198, 240, 231, 0.66);
+  font-size: 0.58rem;
+  font-weight: 850;
+  line-height: 1;
   text-transform: uppercase;
 }
 
-.roster-header h2 {
-  margin: 0;
-  font-size: clamp(1.75rem, 8vw, 2.45rem);
+.warband-heading h1 {
+  margin-top: 3px;
+  font-size: 1.42rem;
   line-height: 1;
-  font-weight: 900;
-  text-align: center;
+  letter-spacing: 0;
 }
 
-.upgrade-mode {
+.warband-power {
   display: grid;
-  grid-template-columns: repeat(3, 58px);
+  justify-items: end;
   gap: 2px;
-  margin-top: 8px;
-  padding: 3px;
-  border: 1px solid rgba(151, 246, 236, 0.18);
-  border-radius: 8px;
-  background: rgba(5, 9, 18, 0.78);
 }
 
-.upgrade-mode button {
+.warband-power small {
+  color: rgba(203, 235, 229, 0.58);
+  font-size: 0.54rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.warband-power strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #83f9e3;
+  font-size: 0.86rem;
+  line-height: 1;
+}
+
+.active-warband-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.active-hero-slot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
   min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: rgba(225, 247, 248, 0.56);
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 900;
+  overflow: hidden;
+  border: 1px solid rgba(206, 255, 243, 0.24);
+  border-radius: 8px;
+  color: rgba(214, 242, 236, 0.54);
+  background: rgba(4, 15, 19, 0.72);
+  box-shadow: inset 0 0 18px rgba(91, 239, 215, 0.08), 0 5px 14px rgba(0, 7, 10, 0.3);
+}
+
+button.active-hero-slot {
+  padding: 0;
   cursor: pointer;
 }
 
-.upgrade-mode button.active {
-  background: rgba(77, 229, 218, 0.16);
-  color: #7df7ed;
-  box-shadow: inset 0 0 0 1px rgba(125, 247, 237, 0.32);
+.active-hero-slot.selected {
+  border-color: #88ffe9;
+  box-shadow: 0 0 0 2px rgba(2, 18, 21, 0.88), 0 0 16px rgba(105, 250, 225, 0.56);
 }
 
-.upgrade-mode button:focus-visible {
-  outline: 2px solid #7df7ed;
-  outline-offset: 1px;
+.active-hero-slot.empty {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
 }
 
-.roster-empty {
-  width: min(360px, 92%);
-  margin: 46px auto 0;
-  padding: 26px;
-  border-radius: 12px;
-  text-align: center;
-  color: rgba(229, 244, 246, 0.76);
+.active-hero-slot > span:not(.hero-portrait-art) {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 4;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: #dffdf6;
+  background: rgba(2, 10, 14, 0.78);
+  font-size: 0.56rem;
+  font-weight: 900;
+}
+
+.active-hero-slot > b {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 4;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #ffffff;
+  background: rgba(2, 9, 13, 0.84);
+  font-size: 0.52rem;
+  line-height: 1;
+}
+
+.roster-collection {
+  min-height: 48%;
+  padding: 12px max(var(--screen-gutter), var(--app-content-safe-area-right)) 22px max(var(--screen-gutter), var(--app-content-safe-area-left));
+}
+
+.collection-heading h2 {
+  margin-top: 3px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.collection-heading h2 b {
+  margin-left: 3px;
+  color: #83f9e3;
+  font-size: 0.72rem;
+}
+
+.roster-filters {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.roster-filter-tabs,
+.upgrade-mode {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(177, 245, 229, 0.16);
+  border-radius: 7px;
+  background: rgba(3, 14, 18, 0.72);
+}
+
+.roster-filter-tabs button,
+.upgrade-mode button {
+  min-width: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 4px;
+  color: rgba(218, 242, 237, 0.58);
+  background: transparent;
+  font-size: 0.64rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.roster-filter-tabs button[aria-pressed='true'],
+.upgrade-mode button[aria-pressed='true'] {
+  color: #8ffff0;
+  background: rgba(84, 222, 197, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(132, 255, 232, 0.22);
+}
+
+.hero-sort {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 7px 5px;
+  border: 1px solid rgba(177, 245, 229, 0.16);
+  border-radius: 7px;
+  color: rgba(218, 242, 237, 0.65);
+  background: rgba(3, 14, 18, 0.72);
+}
+
+.hero-sort select {
+  max-width: 62px;
+  border: 0;
+  outline: 0;
+  color: #eafcf8;
+  background: transparent;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.hero-sort option {
+  color: #eafcf8;
+  background: #07171b;
+}
+
+.upgrade-mode {
+  width: fit-content;
+  margin: 9px 0 4px auto;
+}
+
+.upgrade-mode button {
+  width: 47px;
 }
 
 .roster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
-  gap: 12px;
-  padding: 14px 0 26px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  padding-top: 6px;
+}
+
+.hero-card {
+  --hero-accent: #9eb8b5;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 262px;
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 40%, rgba(207, 255, 244, 0.16));
+  border-radius: 8px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--hero-accent) 11%, transparent), transparent 43%),
+    rgba(5, 18, 22, 0.91);
+  box-shadow: 0 9px 24px rgba(0, 7, 10, 0.3), inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.hero-card.active {
+  border-color: color-mix(in srgb, var(--hero-accent) 72%, #ffffff 8%);
+  box-shadow: 0 9px 26px rgba(0, 7, 10, 0.34), 0 0 16px color-mix(in srgb, var(--hero-accent) 18%, transparent);
+}
+
+.hero-card-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.36;
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, var(--hero-accent) 36%, transparent);
+  background: #061014;
+}
+
+.hero-card-visual .hero-portrait-art img {
+  object-position: 50% 34%;
+}
+
+.hero-rarity,
+.hero-level,
+.hero-active-mark {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  color: #ffffff;
+  background: rgba(2, 9, 13, 0.78);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(6px);
+}
+
+.hero-rarity {
+  top: 5px;
+  left: 5px;
+  padding: 3px 5px;
+  color: color-mix(in srgb, var(--hero-accent) 88%, white);
+  font-size: 0.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.hero-level {
+  right: 5px;
+  bottom: 5px;
+  padding: 3px 5px;
+  font-size: 0.54rem;
+  font-weight: 900;
+}
+
+.hero-active-mark {
+  left: 5px;
+  bottom: 5px;
+  gap: 2px;
+  padding: 3px 5px;
+  color: #8ffff0;
+  font-size: 0.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.hero-card-copy {
+  padding: 8px;
+}
+
+.hero-title-row {
+  align-items: flex-start;
+}
+
+.hero-title-row > div {
+  min-width: 0;
+}
+
+.hero-title-row h3 {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.74rem;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-title-row p {
+  margin-top: 3px;
+  color: rgba(207, 235, 229, 0.56);
+  font-size: 0.52rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.hero-title-row strong {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: color-mix(in srgb, var(--hero-accent) 82%, white);
+  font-size: 0.63rem;
+  line-height: 1;
+}
+
+.hero-progress-copy {
+  margin: 7px 0 6px;
+  color: rgba(217, 240, 235, 0.58);
+  font-size: 0.52rem;
+  font-weight: 700;
+}
+
+.hero-card-actions {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 5px;
+}
+
+.hero-card-actions button {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid rgba(216, 255, 246, 0.17);
+  border-radius: 6px;
+  color: #dffaf4;
+  background: rgba(12, 36, 39, 0.72);
+  cursor: pointer;
+}
+
+.hero-team-action {
+  display: grid;
+  place-items: center;
+  color: #8ffff0 !important;
+}
+
+.hero-card.active .hero-team-action {
+  color: #ffd884 !important;
+}
+
+.hero-upgrade-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-color: color-mix(in srgb, var(--hero-accent) 32%, transparent) !important;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--hero-accent) 24%, rgba(9, 35, 37, 0.88)), rgba(7, 24, 29, 0.94)) !important;
+}
+
+.hero-upgrade-action span {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+}
+
+.hero-upgrade-action b {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.58rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-upgrade-action small {
+  color: rgba(255, 234, 177, 0.72);
+  font-size: 0.49rem;
+  line-height: 1;
+}
+
+.hero-card-actions button:disabled {
+  color: rgba(212, 236, 231, 0.35) !important;
+  background: rgba(11, 23, 27, 0.62) !important;
+  cursor: not-allowed;
+}
+
+.hero-card-actions button:active:not(:disabled),
+.roster-filter-tabs button:active,
+.upgrade-mode button:active,
+.active-hero-slot:active {
+  transform: scale(0.96);
+}
+
+.hero-card-actions button:focus-visible,
+.roster-filter-tabs button:focus-visible,
+.upgrade-mode button:focus-visible,
+.active-hero-slot:focus-visible,
+.hero-sort:focus-within {
+  outline: 2px solid #8ffff0;
+  outline-offset: 1px;
+}
+
+.hero-progress-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: radial-gradient(circle, color-mix(in srgb, var(--hero-accent) 62%, white 10%), transparent 64%);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-shadow: 0 2px 8px #000000;
+  pointer-events: none;
+  animation: hero-progress-flash 0.7s ease-out forwards;
+}
+
+.roster-empty {
+  min-height: 170px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: rgba(221, 242, 238, 0.62);
+  text-align: center;
+}
+
+@keyframes hero-progress-flash {
+  0% { opacity: 0; transform: scale(0.88); }
+  26% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+@media (max-width: 350px) {
+  .roster-toolbar {
+    align-items: flex-end;
+  }
+
+  .roster-filter-tabs button {
+    padding-inline: 6px;
+  }
+
+  .hero-sort {
+    width: 35px;
+    padding-inline: 9px;
+  }
+
+  .hero-sort select {
+    position: absolute;
+    width: 31px;
+    height: 34px;
+    opacity: 0;
+  }
+
+  .hero-title-row strong {
+    max-width: 55px;
+    overflow: hidden;
+  }
+}
+
+@media (min-width: 600px) {
+  .active-warband-slots,
+  .roster-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .warband-command,
+  .roster-collection {
+    padding-inline: max(18px, var(--app-content-safe-area-left));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-progress-flash {
+    animation: none;
+  }
 }

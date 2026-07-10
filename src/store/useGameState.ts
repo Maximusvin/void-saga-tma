@@ -41,6 +41,7 @@ import type {
   HeroDamageContribution,
   HeroUpgradeAmount,
 } from '../game/types';
+import { MAX_ACTIVE_WARBAND_HEROES, getActiveWarbandHeroes } from '../game/warband';
 import {
   DEFAULT_PLAYER_PROFILE,
   normalizePlayerProfile,
@@ -558,8 +559,15 @@ export const useGameState = () => {
   }, [automaticActionsEnabled, runGameAction]);
 
   const isBoss = isBossStage(snapshot.stage);
-  const baseClickPower = useMemo(() => getBaseClickPower(snapshot.heroes), [snapshot.heroes]);
-  const passivePower = useMemo(() => getPassivePower(snapshot.heroes), [snapshot.heroes]);
+  const activeHeroes = useMemo(
+    () => getActiveWarbandHeroes({
+      activeHeroIds: snapshot.activeHeroIds,
+      heroes: snapshot.heroes,
+    }),
+    [snapshot.activeHeroIds, snapshot.heroes],
+  );
+  const baseClickPower = useMemo(() => getBaseClickPower(activeHeroes), [activeHeroes]);
+  const passivePower = useMemo(() => getPassivePower(activeHeroes), [activeHeroes]);
   const comboMultiplier = getComboMultiplier(comboCount);
   const clickPower = multiplyGameNumbers(baseClickPower, comboMultiplier);
 
@@ -638,13 +646,13 @@ export const useGameState = () => {
     }
 
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.heroes.length > 0) {
+      if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.activeHeroIds.length > 0) {
         void runGameAction({ type: 'combat_batch', tapCount: 0, passiveTicks: 1 });
       }
     }, GAME_BALANCE.passiveTickMs);
     
     return () => clearInterval(interval);
-  }, [activeView, automaticActionsEnabled, runGameAction, snapshot.heroes.length]);
+  }, [activeView, automaticActionsEnabled, runGameAction, snapshot.activeHeroIds.length]);
 
   const summonHero = useCallback(async () => {
     if (snapshotRef.current.gems < GAME_BALANCE.summonCostGems) {
@@ -684,13 +692,31 @@ export const useGameState = () => {
     return true;
   };
 
+  const setActiveWarband = useCallback(async (heroIds: string[]) => {
+    const currentSnapshot = snapshotRef.current;
+    const ownedHeroIds = new Set(currentSnapshot.heroes.map(hero => hero.id));
+    if (
+      heroIds.length > MAX_ACTIVE_WARBAND_HEROES ||
+      new Set(heroIds).size !== heroIds.length ||
+      heroIds.some(heroId => !ownedHeroIds.has(heroId))
+    ) {
+      return false;
+    }
+
+    const events = await runGameAction({ type: 'set_active_warband', heroIds });
+    return events.some(event => event.type === 'active_warband_updated');
+  }, [runGameAction]);
+
   return {
     gold: snapshot.gold,
     gems: snapshot.gems,
     heroes: snapshot.heroes,
+    activeHeroIds: snapshot.activeHeroIds,
+    activeHeroes,
     ascendHero,
     upgradeHero,
     summonHero,
+    setActiveWarband,
     activeView,
     setActiveView,
     stage: snapshot.stage,

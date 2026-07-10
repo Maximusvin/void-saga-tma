@@ -35,6 +35,7 @@ import {
   type HeroDamageContribution,
   type HeroUpgradeAmount,
 } from './types';
+import { MAX_ACTIVE_WARBAND_HEROES, getActiveWarbandHeroes } from './warband';
 
 const nowIso = () => new Date().toISOString();
 
@@ -42,8 +43,8 @@ const touchSnapshot = (snapshot: GameSnapshot, now = nowIso()): GameSnapshot => 
   return { ...snapshot, lastSeenAt: now, updatedAt: now };
 };
 
-const getHeroPassivePower = (snapshot: Pick<GameSnapshot, 'heroes'>) => {
-  return getPassivePower(snapshot.heroes);
+const getHeroPassivePower = (snapshot: Pick<GameSnapshot, 'activeHeroIds' | 'heroes'>) => {
+  return getPassivePower(getActiveWarbandHeroes(snapshot));
 };
 
 const getOfflineElapsedSeconds = (lastSeenAt: string, nowMs: number) => {
@@ -106,6 +107,7 @@ export const createInitialGameSnapshot = (): GameSnapshot => {
   const now = nowIso();
   return {
     schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+    activeHeroIds: [],
     bossEncounterEndsAt: null,
     comboCount: 0,
     comboExpiresAt: null,
@@ -249,7 +251,8 @@ export const applyCombatBatchAction = (
   let currentSnapshot = preparedBossAttempt.snapshot;
   const events: GameActionResult['events'] = [...preparedBossAttempt.events];
   const random = options.random ?? Math.random;
-  const baseClickPower = getBaseClickPower(currentSnapshot.heroes);
+  const activeHeroes = getActiveWarbandHeroes(currentSnapshot);
+  const baseClickPower = getBaseClickPower(activeHeroes);
 
   for (let index = 0; index < normalizedTapCount; index += 1) {
     const isCrit = random() < GAME_BALANCE.critChance;
@@ -269,7 +272,7 @@ export const applyCombatBatchAction = (
     events.push(...result.events);
   }
 
-  const passiveContributions = currentSnapshot.heroes
+  const passiveContributions = activeHeroes
     .filter(hero => isPositiveGameNumber(hero.power))
     .map(hero => ({ damage: hero.power, heroId: hero.id }));
   const passivePower = addGameNumbers(...passiveContributions.map(contribution => contribution.damage));
@@ -344,6 +347,9 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
 
   const updatedSnapshot = touchSnapshot({
     ...snapshot,
+    activeHeroIds: snapshot.activeHeroIds.length < MAX_ACTIVE_WARBAND_HEROES
+      ? [...snapshot.activeHeroIds, hero.id]
+      : snapshot.activeHeroIds,
     gems: snapshot.gems - GAME_BALANCE.summonCostGems,
     heroes: [...snapshot.heroes, hero],
   });
@@ -357,6 +363,32 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
       isDuplicate: false,
       shardsGranted: 0,
     }],
+  };
+};
+
+export const setActiveWarbandAction = (
+  snapshot: GameSnapshot,
+  heroIds: readonly string[],
+): GameActionResult => {
+  if (heroIds.length > MAX_ACTIVE_WARBAND_HEROES || new Set(heroIds).size !== heroIds.length) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'invalid_warband' }],
+    };
+  }
+
+  const ownedHeroIds = new Set(snapshot.heroes.map(hero => hero.id));
+  if (heroIds.some(heroId => !ownedHeroIds.has(heroId))) {
+    return {
+      snapshot,
+      events: [{ type: 'action_rejected', reason: 'hero_not_owned' }],
+    };
+  }
+
+  const nextHeroIds = [...heroIds];
+  return {
+    snapshot: touchSnapshot({ ...snapshot, activeHeroIds: nextHeroIds }),
+    events: [{ type: 'active_warband_updated', heroIds: nextHeroIds }],
   };
 };
 
@@ -496,6 +528,8 @@ export const applyGameAction = (snapshot: GameSnapshot, action: GameAction): Gam
   switch (action.type) {
     case 'combat_batch':
       return applyCombatBatchAction(snapshot, action.tapCount, action.passiveTicks);
+    case 'set_active_warband':
+      return setActiveWarbandAction(snapshot, action.heroIds);
     case 'summon':
       return summonHeroAction(snapshot, action.randomValue);
     case 'upgrade_hero':

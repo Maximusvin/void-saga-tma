@@ -42,6 +42,8 @@ describe('game content invariants', () => {
       assert.match(hero.accentColor, /^#[0-9a-f]{6}$/i);
       assert.ok(hero.attackStyle.length > 0);
       assert.ok(hero.combatRole.length > 0);
+      assert.match(hero.portrait, /^\/assets\/heroes\/[a-z-]+\.webp$/);
+      assert.ok(['still', 'aura', 'embers', 'mythic'].includes(hero.portraitMotion));
     }
 
     assert.equal(new Set(SUMMON_POOL.map(hero => hero.accentColor)).size, SUMMON_POOL.length);
