@@ -4,6 +4,7 @@ import {
   SUMMON_POOL,
   getDuplicateShardReward,
   getMonsterMaxHealth,
+  isBossStage,
 } from './balance';
 import {
   addGameNumbers,
@@ -39,6 +40,14 @@ const normalizeInteger = (value: unknown, fallback: number, minimum: number) => 
 
 const isHeroRarity = (value: unknown): value is HeroRarity => {
   return typeof value === 'string' && HERO_RARITIES.includes(value as HeroRarity);
+};
+
+const normalizeIsoTimestamp = (value: unknown) => {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) {
+    return null;
+  }
+
+  return value;
 };
 
 export const normalizeHero = (value: unknown): Hero | null => {
@@ -123,6 +132,7 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
 
   return {
     schemaVersion: GAME_SNAPSHOT_SCHEMA_VERSION,
+    bossEncounterEndsAt: isBossStage(stage) ? normalizeIsoTimestamp(value.bossEncounterEndsAt) : null,
     comboCount: normalizeInteger(value.comboCount, 0, 0),
     comboExpiresAt: typeof value.comboExpiresAt === 'string' ? value.comboExpiresAt : null,
     gems: normalizeInteger(value.gems, GAME_BALANCE.initialGems, 0),
@@ -175,6 +185,19 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         nextStage: normalizeInteger(value.nextStage, 1, 1),
         goldReward: parseGameNumber(value.goldReward),
         gemReward: normalizeInteger(value.gemReward, 0, 0),
+      };
+    }
+    case 'boss_enraged': {
+      const attemptEndsAt = normalizeIsoTimestamp(value.attemptEndsAt);
+      if (!attemptEndsAt || !isFiniteNumber(value.stage)) {
+        return null;
+      }
+
+      return {
+        type: 'boss_enraged',
+        attemptEndsAt,
+        monsterHealth: parseGameNumber(value.monsterHealth),
+        stage: normalizeInteger(value.stage, 1, 1),
       };
     }
     case 'hero_summoned': {

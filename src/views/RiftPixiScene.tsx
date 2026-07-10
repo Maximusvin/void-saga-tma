@@ -4,7 +4,9 @@ import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
 import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 
 interface RiftPixiSceneProps {
+  bossPhase: number;
   defeatSignal: number;
+  enrageSignal: number;
   isBossDefeat: boolean;
   isBoss: boolean;
   isHit: boolean;
@@ -136,15 +138,27 @@ const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index
   };
 };
 
-export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLastHitCrit, hitSignal, stage }: RiftPixiSceneProps) => {
+export const RiftPixiScene = ({
+  bossPhase,
+  defeatSignal,
+  enrageSignal,
+  isBossDefeat,
+  isBoss,
+  isHit,
+  isLastHitCrit,
+  hitSignal,
+  stage,
+}: RiftPixiSceneProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const defeatSignalRef = useRef(defeatSignal);
+  const enrageSignalRef = useRef(enrageSignal);
   const bossDefeatRef = useRef(isBossDefeat);
   const hitRef = useRef(isHit);
   const critRef = useRef(isLastHitCrit);
   const hitSignalRef = useRef(hitSignal);
   const lastHandledDefeatSignalRef = useRef(defeatSignal);
+  const lastHandledEnrageSignalRef = useRef(enrageSignal);
   const lastHandledHitSignalRef = useRef(hitSignal);
   const [rendererReady, setRendererReady] = useState(false);
   const [enemyTexture, setEnemyTexture] = useState<{ asset: string; texture: Texture } | null>(null);
@@ -154,6 +168,10 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     defeatSignalRef.current = defeatSignal;
     bossDefeatRef.current = isBossDefeat;
   }, [defeatSignal, isBossDefeat]);
+
+  useEffect(() => {
+    enrageSignalRef.current = enrageSignal;
+  }, [enrageSignal]);
 
   useEffect(() => {
     hitRef.current = isHit;
@@ -253,6 +271,8 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     const scene = new Container();
     const resolvedTexture = enemyTexture?.asset === visual.asset ? enemyTexture.texture : null;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const normalizedBossPhase = isBoss ? Math.max(1, Math.min(3, Math.floor(bossPhase))) : 1;
+    const phaseIntensity = 1 + (normalizedBossPhase - 1) * 0.14;
 
       const ringBack = new Graphics()
         .circle(0, 0, 122)
@@ -353,6 +373,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     const shockwaves = new Container();
     const activeShockwaves: Shockwave[] = [];
     let deathEnergy = 0;
+    let enrageEnergy = 0;
 
     scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
     app.stage.addChild(scene);
@@ -364,6 +385,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         const impact = hitRef.current ? 1 : 0;
         const hasNewHit = hitSignalRef.current !== lastHandledHitSignalRef.current;
         const hasNewDefeat = defeatSignalRef.current !== lastHandledDefeatSignalRef.current;
+        const hasNewEnrage = enrageSignalRef.current !== lastHandledEnrageSignalRef.current;
 
         if (hasNewHit) {
           const burst = createImpactBurst(palette, critRef.current);
@@ -385,19 +407,32 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
           shockwaves.addChild(...waves.map(wave => wave.graphic));
         }
 
-        const bossPulse = isBoss ? 1.12 : 1;
-        const breath = reduceMotion ? 1 : 1 + Math.sin(elapsed * 2.2) * 0.035;
+        if (hasNewEnrage) {
+          const burst = createImpactBurst(palette, true);
+          const waves = Array.from({ length: 3 }, (_, index) => createShockwave(palette, true, index));
+
+          lastHandledEnrageSignalRef.current = enrageSignalRef.current;
+          enrageEnergy = 1;
+          impactParticles.push(...burst);
+          activeShockwaves.push(...waves);
+          impacts.addChild(...burst.map(particle => particle.graphic));
+          shockwaves.addChild(...waves.map(wave => wave.graphic));
+        }
+
+        const bossPulse = (isBoss ? 1.12 : 1) * phaseIntensity;
+        const breath = reduceMotion ? 1 : 1 + Math.sin(elapsed * (2.2 * phaseIntensity)) * (0.035 * phaseIntensity);
         const hitSquash = impact ? 0.88 + Math.sin(elapsed * 36) * 0.035 : 1;
         const deathPulse = Math.max(0, deathEnergy);
+        const enragePulse = Math.max(0, enrageEnergy);
 
         const haloWave = reduceMotion ? 0 : Math.sin(elapsed * 1.4) * 0.08;
         const ringBackWave = reduceMotion ? 0 : Math.sin(elapsed * 1.2) * 0.035;
         const ringFrontWave = reduceMotion ? 0 : Math.cos(elapsed * 1.5) * 0.045;
-        halo.scale.set((1 + haloWave + deathPulse * 0.22) * bossPulse);
-        halo.alpha = Math.min(0.72, (impact ? 0.32 : 0.18 + haloWave * 0.6) + deathPulse * 0.28);
+        halo.scale.set((1 + haloWave + deathPulse * 0.22 + enragePulse * 0.16) * bossPulse);
+        halo.alpha = Math.min(0.82, (impact ? 0.32 : 0.18 + haloWave * 0.6) + deathPulse * 0.28 + enragePulse * 0.38);
         if (!reduceMotion) {
-          ringBack.rotation += 0.004 * ticker.deltaTime;
-          ringFront.rotation -= 0.006 * ticker.deltaTime;
+          ringBack.rotation += 0.004 * phaseIntensity * ticker.deltaTime;
+          ringFront.rotation -= 0.006 * phaseIntensity * ticker.deltaTime;
         }
         ringBack.scale.set(1 + ringBackWave + deathPulse * 0.16);
         ringFront.scale.set(1 + ringFrontWave + deathPulse * 0.1);
@@ -405,13 +440,13 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         beast.y = (reduceMotion ? 0 : Math.sin(elapsed * 2.4) * 7) - impact * 7;
         beast.x = impact ? Math.sin(elapsed * 42) * 9 : 0;
         beast.rotation = (reduceMotion ? 0 : Math.sin(elapsed * 1.7) * 0.018) + (impact ? Math.sin(elapsed * 44) * 0.05 : 0) + deathPulse * Math.sin(elapsed * 28) * 0.09;
-        beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14));
+        beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14 + enragePulse * 0.08));
         beast.alpha = Math.max(0.38, 1 - deathPulse * 0.28);
 
         if (enemyArt && enemyHitFlash) {
           enemyArt.skew.x = reduceMotion ? 0 : Math.sin(elapsed * 1.3) * 0.008;
           enemyHitFlash.skew.x = enemyArt.skew.x;
-          enemyHitFlash.alpha = Math.min(0.78, impact * (critRef.current ? 0.72 : 0.42) + deathPulse * 0.38);
+          enemyHitFlash.alpha = Math.min(0.84, impact * (critRef.current ? 0.72 : 0.42) + deathPulse * 0.38 + enragePulse * 0.56);
         }
 
         core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34 + deathPulse * 0.42);
@@ -420,7 +455,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         rightWing.rotation = 0.16 - Math.sin(elapsed * 2.6) * 0.055 + impact * 0.08;
 
         particles.forEach((particle, index) => {
-          const orbit = (reduceMotion ? 0 : elapsed * particle.speed) + particle.angle;
+          const orbit = (reduceMotion ? 0 : elapsed * particle.speed * phaseIntensity) + particle.angle;
           const wobble = reduceMotion ? 0 : Math.sin(elapsed * 1.7 + index) * 8;
 
           particle.graphic.x = Math.cos(orbit) * (particle.distance + wobble);
@@ -467,6 +502,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         }
 
         deathEnergy = Math.max(0, deathEnergy - ticker.deltaMS / (bossDefeatRef.current ? 920 : 680));
+        enrageEnergy = Math.max(0, enrageEnergy - ticker.deltaMS / 760);
     };
 
     app.ticker.add(animateScene);
@@ -474,7 +510,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     return () => {
       cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
     };
-  }, [enemyTexture, isBoss, rendererReady, stage, visual]);
+  }, [bossPhase, enemyTexture, isBoss, rendererReady, stage, visual]);
 
   return (
     <div

@@ -118,18 +118,29 @@ const getActiveComboCount = (snapshot: GameSnapshot) => {
 
 const splitTapEvents = (events: GameEvent[], tapCount: number) => {
   const groups = Array.from({ length: tapCount }, () => [] as GameEvent[]);
+  const leadingEvents: GameEvent[] = [];
   let tapIndex = -1;
 
   for (const event of events) {
     if (event.type === 'monster_hit' && event.source === 'tap') {
       tapIndex += 1;
+      if (tapIndex === 0 && leadingEvents.length > 0) {
+        groups[0].push(...leadingEvents);
+        leadingEvents.length = 0;
+      }
     }
 
     if (tapIndex >= 0 && tapIndex < groups.length) {
       groups[tapIndex].push(event);
     } else if (event.type === 'action_rejected') {
       groups.forEach(group => group.push(event));
+    } else {
+      leadingEvents.push(event);
     }
+  }
+
+  if (leadingEvents.length > 0 && groups.length > 0) {
+    groups[0].push(...leadingEvents);
   }
 
   return groups;
@@ -141,6 +152,7 @@ export const useGameState = () => {
   const [activeView, setActiveView] = useState<ActiveView>('rift');
   const [comboCount, setComboCount] = useState(() => getActiveComboCount(snapshot));
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
+  const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
   const playerIdRef = useRef<string | null>(null);
   const snapshotRef = useRef(snapshot);
   const actionQueueRef = useRef(Promise.resolve());
@@ -254,11 +266,19 @@ export const useGameState = () => {
     };
   }, [apiEnabled, applySnapshot, playerId, replayActionOutbox]);
 
+  const publishCombatFeedback = useCallback((events: GameEvent[]) => {
+    if (events.some(event => event.type === 'boss_enraged')) {
+      setBossEnrageSignal(current => current + 1);
+    }
+
+    return events;
+  }, []);
+
   const runGameAction = useCallback((action: GameAction) => {
     if (!apiEnabled) {
       const result = applyGameAction(snapshotRef.current, action);
       applySnapshot(result.snapshot);
-      return Promise.resolve(result.events);
+      return Promise.resolve(publishCombatFeedback(result.events));
     }
 
     const command: PendingGameCommand = {
@@ -279,7 +299,7 @@ export const useGameState = () => {
       .then(async () => {
         const events = await replayActionOutbox(command.commandId);
         setBackendStatus('synced');
-        return events;
+        return publishCombatFeedback(events);
       })
       .catch(error => {
         console.error(error);
@@ -289,7 +309,7 @@ export const useGameState = () => {
 
     actionQueueRef.current = nextAction.then(() => undefined);
     return nextAction;
-  }, [apiEnabled, applySnapshot, playerId, replayActionOutbox]);
+  }, [apiEnabled, applySnapshot, playerId, publishCombatFeedback, replayActionOutbox]);
 
   useEffect(() => {
     if (!apiEnabled) {
@@ -470,6 +490,9 @@ export const useGameState = () => {
     isBoss,
     monsterHealth: snapshot.monsterHealth,
     monsterMaxHealth: snapshot.monsterMaxHealth,
+    bossEncounterEndsAt: snapshot.bossEncounterEndsAt,
+    bossEnrageSignal,
+    snapshotUpdatedAt: snapshot.updatedAt,
     clickPower,
     dealDamage,
     comboCount,
