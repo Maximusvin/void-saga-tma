@@ -14,15 +14,18 @@
   background-repeat: no-repeat;
 }
 
-/*
- * The rift background is the procedural biome world drawn inside the Pixi canvas.
- * The shell only needs a dark base for the HUD/footer areas above and below the
- * canvas to blend into, so the painted .webp backdrop (which cannot scroll) is
- * dropped here and the world owns the movement.
- */
+/* The painted scene carries detail; Pixi adds a lightweight moving biome layer. */
 .app-shell.view-rift {
   background:
-    linear-gradient(180deg, #0a1f22 0%, #081a1b 46%, #050f12 100%);
+    linear-gradient(180deg, rgba(12, 35, 32, 0.03), rgba(5, 18, 18, 0.02) 54%, rgba(3, 13, 14, 0.64) 100%),
+    var(--rift-backdrop-image) center 56% / cover no-repeat;
+}
+
+/* Keep the same composition beyond the centered phone frame on Telegram Desktop. */
+:root[data-app-layout='desktop'] .app-shell.view-rift {
+  background:
+    linear-gradient(180deg, rgba(5, 21, 22, 0.08), rgba(3, 15, 17, 0.5) 72%, rgba(2, 10, 12, 0.82)),
+    var(--rift-backdrop-image) center 56% / cover no-repeat;
 }
 
 .app-shell.view-leagues {

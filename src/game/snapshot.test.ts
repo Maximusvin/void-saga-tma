@@ -5,7 +5,7 @@ import { normalizeGameSnapshot, normalizeStoredGameEvents } from './snapshot';
 const timestamp = '2026-07-09T12:00:00.000Z';
 
 describe('game snapshot normalization', () => {
-  it('migrates legacy numeric economy fields and progression to schema v6', () => {
+  it('migrates legacy numeric economy fields and progression to schema v7', () => {
     const snapshot = normalizeGameSnapshot({
       comboCount: 3,
       comboExpiresAt: null,
@@ -20,12 +20,14 @@ describe('game snapshot normalization', () => {
     });
 
     assert.ok(snapshot);
-    assert.equal(snapshot.schemaVersion, 6);
+    assert.equal(snapshot.schemaVersion, 7);
     assert.deepEqual(snapshot.activeHeroIds, ['legacy']);
     assert.equal(snapshot.bossEncounterEndsAt, null);
     // A pre-v6 save carries no idle watermark, so the next tick is granted at once
     // instead of back-paying every second since the save was written.
     assert.equal(snapshot.lastPassiveTickAt, null);
+    assert.equal(snapshot.enemyIndex, 0);
+    assert.equal(snapshot.summonPity, 0);
     assert.equal(snapshot.gold, '1002.6');
     assert.equal(snapshot.heroes[0]?.power, '10.5');
     assert.equal(snapshot.heroes[0]?.ascension, 0);
@@ -181,7 +183,11 @@ describe('game snapshot normalization', () => {
       { damage: '10', heroId: 'hero-10' },
     ]);
     assert.equal(events[2]?.type === 'monster_defeated' ? events[2].goldReward : null, '50');
+    assert.equal(events[2]?.type === 'monster_defeated' ? events[2].stageCleared : null, true);
+    assert.equal(events[2]?.type === 'monster_defeated' ? events[2].enemiesInStage : null, 3);
     assert.equal(events[3]?.type === 'hero_summoned' ? events[3].isDuplicate : null, false);
+    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].legendaryPityTriggered : null, false);
+    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].summonsUntilLegendaryPity : null, 60);
     assert.equal(events[3]?.type === 'hero_summoned' ? events[3].hero.templateId : null, 'void-grunt');
     assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].fromLevel : null, 1);
     assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].levelsGained : null, 1);

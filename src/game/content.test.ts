@@ -12,6 +12,8 @@ import {
 import {
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
+  getEncounterMaxHealth,
+  getEnemiesInStage,
   getMonsterMaxHealth,
   isBossStage,
   rollSummonTemplate,
@@ -70,6 +72,8 @@ describe('game content invariants', () => {
       assert.ok(stageBand.fromStage > previousFromStage);
       assert.ok(stageBand.baseMonsterHealth > 0);
       assert.ok(stageBand.monsterHealthGrowth >= 1);
+      assert.ok(stageBand.normalEnemiesPerStage >= 2);
+      assert.ok(stageBand.normalEnemyHealthGrowth >= 1);
       assert.ok(stageBand.monsterEmojis.length > 0);
       assert.ok(stageBand.boss.everyStages > 1);
       assert.ok(stageBand.boss.attemptSeconds >= 30);
@@ -91,11 +95,18 @@ describe('game content invariants', () => {
 
   it('resolves stages and boss health from content', () => {
     assert.equal(getStageBandForStage(1).id, 'rift-outskirts');
+    assert.equal(getStageBandForStage(201).id, 'rift-depths');
+    assert.equal(getStageBandForStage(1001).id, 'void-dominion');
     assert.equal(isBossStage(4), false);
     assert.equal(isBossStage(5), true);
+    assert.equal(getEnemiesInStage(1), 3);
+    assert.equal(getEnemiesInStage(201), 4);
+    assert.equal(getEnemiesInStage(1001), 5);
     assert.equal(getMonsterMaxHealth(1), '100');
-    assert.equal(getMonsterMaxHealth(5), '1035');
-    assert.equal(getBossAttemptDurationMs(5), 35_000);
+    assert.equal(getEncounterMaxHealth(1, 1), '115');
+    assert.equal(getEncounterMaxHealth(1, 2), '132.25');
+    assert.equal(getMonsterMaxHealth(5), '1656');
+    assert.equal(getBossAttemptDurationMs(5), 45_000);
     assert.equal(getBossPhaseForHealthPercent(5, 100).id, 'dominion');
     assert.equal(getBossPhaseForHealthPercent(5, 66).id, 'fracture');
     assert.equal(getBossPhaseForHealthPercent(5, 0).id, 'cataclysm');
@@ -103,10 +114,11 @@ describe('game content invariants', () => {
 
   it('keeps deterministic summon roll boundaries stable', () => {
     assert.equal(rollSummonTemplate(0).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.399999).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.4).id, 'void-mage');
-    assert.equal(rollSummonTemplate(0.7).id, 'void-knight');
-    assert.equal(rollSummonTemplate(0.9).id, 'void-lord');
+    assert.equal(rollSummonTemplate(0.599999).id, 'void-grunt');
+    assert.equal(rollSummonTemplate(0.6).id, 'void-mage');
+    assert.equal(rollSummonTemplate(0.88).id, 'void-knight');
+    assert.equal(rollSummonTemplate(0.98).id, 'void-lord');
     assert.equal(rollSummonTemplate(1).id, 'void-lord');
+    assert.equal(rollSummonTemplate(0, 'Legendary').id, 'void-lord');
   });
 });

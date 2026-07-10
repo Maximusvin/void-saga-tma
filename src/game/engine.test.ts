@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_BALANCE } from './balance';
 import {
+  applyDamageAction,
   applyCombatBatchAction,
   applyGameAction,
   ascendHeroAction,
@@ -32,14 +33,16 @@ const createSnapshot = (lastSeenAt: string, heroes: Hero[] = []): GameSnapshot =
   bossEncounterEndsAt: null,
   comboCount: 0,
   comboExpiresAt: null,
+  enemyIndex: 0,
   gold: gameNumber(1000),
-  gems: 50,
+  gems: GAME_BALANCE.initialGems,
   heroes,
   stage: 1,
   monsterMaxHealth: gameNumber(100),
   monsterHealth: gameNumber(100),
   lastPassiveTickAt: null,
   lastSeenAt,
+  summonPity: 0,
   updatedAt: lastSeenAt,
 });
 
@@ -138,8 +141,8 @@ describe('offline rewards', () => {
     assert.equal(event.elapsedSeconds, 7200);
     assert.equal(event.cappedSeconds, 7200);
     assert.equal(event.passivePower, '10');
-    assert.equal(event.goldReward, '3600');
-    assert.equal(result.snapshot.gold, '4600');
+    assert.equal(event.goldReward, '1800');
+    assert.equal(result.snapshot.gold, '2800');
     assert.equal(result.snapshot.lastSeenAt, '2026-07-09T12:00:00.000Z');
   });
 
@@ -151,7 +154,7 @@ describe('offline rewards', () => {
     assert.equal(event.type, 'offline_rewards_claimed');
     assert.equal(event.elapsedSeconds, 43200);
     assert.equal(event.cappedSeconds, GAME_BALANCE.offlineRewardMaxSeconds);
-    assert.equal(event.goldReward, '28800');
+    assert.equal(event.goldReward, '14400');
   });
 
   it('does not reward short sessions or empty rosters', () => {
@@ -208,9 +211,9 @@ describe('hero upgrades', () => {
     assert.equal(event.fromLevel, 1);
     assert.equal(event.levelsGained, 3);
     assert.equal(event.level, 4);
-    assert.equal(event.goldCost, '950');
+    assert.equal(event.goldCost, '855');
     assert.equal(event.power, '16.875');
-    assert.equal(result.snapshot.gold, '50');
+    assert.equal(result.snapshot.gold, '145');
   });
 
   it('rejects upgrades at the ascension level cap', () => {
@@ -277,7 +280,25 @@ describe('hero summons', () => {
     assert.equal(duplicateEvent.shardsGranted, 1);
     assert.equal(duplicate.snapshot.heroes.length, 1);
     assert.equal(duplicate.snapshot.heroes[0]?.shards, 1);
-    assert.equal(duplicate.snapshot.gems, 30);
+    assert.equal(duplicate.snapshot.gems, 10);
+    assert.equal(duplicate.snapshot.summonPity, 2);
+    assert.equal(duplicateEvent.summonsUntilLegendaryPity, 58);
+  });
+
+  it('forces a server-authoritative Legendary on the sixtieth summon', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      gems: GAME_BALANCE.summonCostGems,
+      summonPity: GAME_BALANCE.legendaryPityPulls - 1,
+    };
+    const result = summonHeroAction(snapshot, 0);
+    const event = result.events[0];
+
+    assert.equal(event.type, 'hero_summoned');
+    assert.equal(event.hero.rarity, 'Legendary');
+    assert.equal(event.legendaryPityTriggered, true);
+    assert.equal(event.summonsUntilLegendaryPity, GAME_BALANCE.legendaryPityPulls);
+    assert.equal(result.snapshot.summonPity, 0);
   });
 });
 
@@ -323,7 +344,7 @@ describe('active Warband', () => {
 });
 
 describe('server-authoritative combat batches', () => {
-  it('keeps hit and defeat events ordered while a batch crosses a stage', () => {
+  it('keeps hit and defeat events ordered while a batch crosses an encounter', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
       monsterHealth: gameNumber(2),
@@ -339,10 +360,47 @@ describe('server-authoritative combat batches', () => {
       'monster_defeated',
       'monster_hit',
     ]);
-    assert.equal(result.snapshot.stage, 2);
+    assert.equal(result.snapshot.stage, 1);
+    assert.equal(result.snapshot.enemyIndex, 1);
+    const defeat = result.events.find(event => event.type === 'monster_defeated');
+    assert.equal(defeat?.type === 'monster_defeated' ? defeat.stageCleared : null, false);
     assert.equal(result.snapshot.comboCount, 3);
     assert.equal(result.snapshot.comboExpiresAt, '2026-07-09T12:00:01.500Z');
     assert.ok(compareGameNumbers(result.snapshot.monsterHealth, result.snapshot.monsterMaxHealth) < 0);
+  });
+
+  it('advances the stage only after the final normal encounter', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      enemyIndex: 2,
+      monsterHealth: gameNumber(1),
+      monsterMaxHealth: gameNumber(1),
+    };
+    const result = applyCombatBatchAction(snapshot, 1, 0, {
+      nowMs: NOW_MS,
+      random: () => 0.5,
+    });
+    const defeat = result.events.find(event => event.type === 'monster_defeated');
+
+    assert.equal(result.snapshot.stage, 2);
+    assert.equal(result.snapshot.enemyIndex, 0);
+    assert.equal(defeat?.type === 'monster_defeated' ? defeat.stageCleared : null, true);
+    assert.equal(defeat?.type === 'monster_defeated' ? defeat.nextStage : null, 2);
+  });
+
+  it('never mints tap gold from overkill damage', () => {
+    const snapshot = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      monsterHealth: gameNumber(2),
+      monsterMaxHealth: gameNumber(100),
+    };
+    const result = applyDamageAction(snapshot, gameNumber(100), 'tap', { now: atOffsetMs(0) });
+    const hit = result.events[0];
+
+    assert.equal(hit.type, 'monster_hit');
+    assert.equal(hit.damage, '2');
+    assert.equal(result.snapshot.gold, '1018.2');
+    assert.equal(result.snapshot.enemyIndex, 1);
   });
 
   it('rolls critical damage inside the engine instead of accepting client damage', () => {
@@ -402,6 +460,7 @@ describe('server-authoritative combat batches', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
       stage: 4,
+      enemyIndex: 2,
       monsterMaxHealth: gameNumber(1),
       monsterHealth: gameNumber(1),
     };
@@ -411,7 +470,7 @@ describe('server-authoritative combat batches', () => {
     });
 
     assert.equal(result.snapshot.stage, 5);
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
   });
 
   it('resets boss health and combo before applying a hit after enrage', () => {
@@ -433,7 +492,7 @@ describe('server-authoritative combat batches', () => {
     assert.equal(result.events[0]?.type === 'boss_enraged' ? result.events[0].monsterHealth : null, '1000');
     assert.equal(result.snapshot.monsterHealth, '999');
     assert.equal(result.snapshot.comboCount, 1);
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
   });
 
   it('preserves boss progress while an attempt is active', () => {
@@ -469,6 +528,6 @@ describe('server-authoritative combat batches', () => {
 
     assert.deepEqual(result.events.map(event => event.type), ['monster_hit']);
     assert.equal(result.snapshot.monsterHealth, '1034');
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:35.000Z');
+    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
   });
 });
