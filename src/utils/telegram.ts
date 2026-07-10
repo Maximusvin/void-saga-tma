@@ -8,8 +8,16 @@ interface TelegramHapticFeedback {
   notificationOccurred?: (type: HapticNotificationType) => void;
 }
 
+interface TelegramSafeAreaInset {
+  bottom?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+}
+
 interface TelegramWebApp {
   HapticFeedback?: TelegramHapticFeedback;
+  contentSafeAreaInset?: TelegramSafeAreaInset;
   initData?: string;
   initDataUnsafe?: {
     user?: {
@@ -21,7 +29,9 @@ interface TelegramWebApp {
     };
   };
   isFullscreen?: boolean;
+  onEvent?: (eventType: string, eventHandler: () => void) => void;
   ready?: () => void;
+  safeAreaInset?: TelegramSafeAreaInset;
   expand?: () => void;
   disableVerticalSwipes?: () => void;
   isVersionAtLeast?: (version: string) => boolean;
@@ -29,9 +39,74 @@ interface TelegramWebApp {
   setBackgroundColor?: (color: string) => void;
   setBottomBarColor?: (color: string) => void;
   setHeaderColor?: (color: string) => void;
+  viewportStableHeight?: number;
 }
 
 let telegramInitialized = false;
+
+const FULLSCREEN_HOST_CONTROL_CLEARANCE = 48;
+
+const RUNTIME_INSET_PROPERTIES = {
+  contentBottom: '--app-runtime-content-safe-area-inset-bottom',
+  contentLeft: '--app-runtime-content-safe-area-inset-left',
+  contentRight: '--app-runtime-content-safe-area-inset-right',
+  contentTop: '--app-runtime-content-safe-area-inset-top',
+  safeBottom: '--app-runtime-safe-area-inset-bottom',
+  safeLeft: '--app-runtime-safe-area-inset-left',
+  safeRight: '--app-runtime-safe-area-inset-right',
+  safeTop: '--app-runtime-safe-area-inset-top',
+  viewportHeight: '--app-runtime-viewport-stable-height',
+} as const;
+
+const toCssPixelValue = (value: number | undefined) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '0px';
+  }
+
+  return `${Math.min(256, Math.max(0, value))}px`;
+};
+
+const getFullscreenSafeContentTop = (webApp: TelegramWebApp | undefined) => {
+  const safeTop = webApp?.safeAreaInset?.top ?? 0;
+  const contentTop = webApp?.contentSafeAreaInset?.top ?? 0;
+
+  if (!webApp?.isFullscreen) {
+    return contentTop;
+  }
+
+  // Older Android clients can report only the status bar while Telegram's
+  // close and menu controls still overlay the top row.
+  return Math.max(contentTop, safeTop + FULLSCREEN_HOST_CONTROL_CLEARANCE);
+};
+
+const syncTelegramViewportTokens = (webApp: TelegramWebApp | undefined) => {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const rootStyle = document.documentElement.style;
+  const safeArea = webApp?.safeAreaInset;
+  const contentSafeArea = webApp?.contentSafeAreaInset;
+
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.safeTop, toCssPixelValue(safeArea?.top));
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.safeRight, toCssPixelValue(safeArea?.right));
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.safeBottom, toCssPixelValue(safeArea?.bottom));
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.safeLeft, toCssPixelValue(safeArea?.left));
+  rootStyle.setProperty(
+    RUNTIME_INSET_PROPERTIES.contentTop,
+    toCssPixelValue(getFullscreenSafeContentTop(webApp)),
+  );
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentRight, toCssPixelValue(contentSafeArea?.right));
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentBottom, toCssPixelValue(contentSafeArea?.bottom));
+  rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentLeft, toCssPixelValue(contentSafeArea?.left));
+
+  if (typeof webApp?.viewportStableHeight === 'number' && Number.isFinite(webApp.viewportStableHeight)) {
+    rootStyle.setProperty(
+      RUNTIME_INSET_PROPERTIES.viewportHeight,
+      `${Math.max(1, webApp.viewportStableHeight)}px`,
+    );
+  }
+};
 
 declare global {
   interface Window {
@@ -57,10 +132,20 @@ export const initializeTelegramApp = () => {
   const webApp = getTelegramWebApp();
 
   try {
+    syncTelegramViewportTokens(webApp);
+    for (const eventType of [
+      'safeAreaChanged',
+      'contentSafeAreaChanged',
+      'fullscreenChanged',
+      'viewportChanged',
+    ]) {
+      webApp?.onEvent?.(eventType, () => syncTelegramViewportTokens(webApp));
+    }
+
     webApp?.ready?.();
     webApp?.expand?.();
     if (webApp?.isVersionAtLeast?.('6.1')) {
-      webApp.setHeaderColor?.('#0b2729');
+      webApp.setHeaderColor?.('#071315');
       webApp.setBackgroundColor?.('#071315');
     }
     if (webApp?.isVersionAtLeast?.('7.10')) {

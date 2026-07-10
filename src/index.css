@@ -27,6 +27,50 @@
   --glass-shadow: 0 14px 36px rgba(1, 10, 12, 0.3);
   --shadow-hud: 0 8px 22px rgba(2, 12, 14, 0.26);
   --neon-shadow: 0 0 18px rgba(102, 252, 241, 0.34), 0 0 38px rgba(166, 121, 220, 0.18);
+  --app-safe-area-top: max(
+    env(safe-area-inset-top, 0px),
+    var(--tg-safe-area-inset-top, 0px),
+    var(--app-runtime-safe-area-inset-top, 0px)
+  );
+  --app-safe-area-right: max(
+    env(safe-area-inset-right, 0px),
+    var(--tg-safe-area-inset-right, 0px),
+    var(--app-runtime-safe-area-inset-right, 0px)
+  );
+  --app-safe-area-bottom: max(
+    env(safe-area-inset-bottom, 0px),
+    var(--tg-safe-area-inset-bottom, 0px),
+    var(--app-runtime-safe-area-inset-bottom, 0px)
+  );
+  --app-safe-area-left: max(
+    env(safe-area-inset-left, 0px),
+    var(--tg-safe-area-inset-left, 0px),
+    var(--app-runtime-safe-area-inset-left, 0px)
+  );
+  --app-content-safe-area-top: max(
+    var(--app-safe-area-top),
+    var(--tg-content-safe-area-inset-top, 0px),
+    var(--app-runtime-content-safe-area-inset-top, 0px)
+  );
+  --app-content-safe-area-right: max(
+    var(--app-safe-area-right),
+    var(--tg-content-safe-area-inset-right, 0px),
+    var(--app-runtime-content-safe-area-inset-right, 0px)
+  );
+  --app-content-safe-area-bottom: max(
+    var(--app-safe-area-bottom),
+    var(--tg-content-safe-area-inset-bottom, 0px),
+    var(--app-runtime-content-safe-area-inset-bottom, 0px)
+  );
+  --app-content-safe-area-left: max(
+    var(--app-safe-area-left),
+    var(--tg-content-safe-area-inset-left, 0px),
+    var(--app-runtime-content-safe-area-inset-left, 0px)
+  );
+  --app-viewport-stable-height: var(
+    --app-runtime-viewport-stable-height,
+    var(--tg-viewport-stable-height, 100dvh)
+  );
 }
 
 * {

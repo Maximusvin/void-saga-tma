@@ -1,8 +1,8 @@
 .app-shell {
   position: relative;
   width: 100%;
-  height: var(--tg-viewport-stable-height, 100dvh);
-  min-height: var(--tg-viewport-stable-height, 100dvh);
+  height: var(--app-viewport-stable-height);
+  min-height: var(--app-viewport-stable-height);
   display: flex;
   justify-content: center;
   overflow: hidden;
