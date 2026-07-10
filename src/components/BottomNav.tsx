@@ -1,44 +1,72 @@
 import React from 'react';
-import { Swords, Sparkles, Users } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Compass, Sparkles, Trophy, Users, type LucideIcon } from 'lucide-react';
+import type { ActiveView } from '../game/types';
+import { triggerHaptic } from '../utils/haptics';
 import './BottomNav.css';
 
 interface BottomNavProps {
-  activeView: 'rift' | 'summon' | 'roster';
-  setActiveView: (view: 'rift' | 'summon' | 'roster') => void;
+  activeView: ActiveView;
+  setActiveView: (view: ActiveView) => void;
 }
 
+interface NavigationItem {
+  icon: LucideIcon;
+  label: string;
+  primary: boolean;
+  view: ActiveView;
+}
+
+const NAVIGATION_ITEMS = [
+  { icon: Sparkles, label: 'Summon', primary: false, view: 'summon' },
+  { icon: Compass, label: 'Campaign', primary: true, view: 'rift' },
+  { icon: Trophy, label: 'Leagues', primary: false, view: 'leagues' },
+  { icon: Users, label: 'Heroes', primary: false, view: 'roster' },
+] as const satisfies readonly NavigationItem[];
+
 export const BottomNav: React.FC<BottomNavProps> = ({ activeView, setActiveView }) => {
+  const prefersReducedMotion = useReducedMotion();
+
+  const navigate = (view: ActiveView) => {
+    if (view === activeView) {
+      return;
+    }
+
+    triggerHaptic('light');
+    setActiveView(view);
+  };
+
   return (
     <nav className="bottom-nav" aria-label="Primary game navigation">
-      <button
-        aria-current={activeView === 'rift' ? 'page' : undefined}
-        className={`nav-btn ${activeView === 'rift' ? 'active' : ''}`}
-        onClick={() => setActiveView('rift')}
-        type="button"
-      >
-        <Swords size={22} className="icon" aria-hidden="true" />
-        <span>Rift</span>
-      </button>
-      <button
-        aria-current={activeView === 'summon' ? 'page' : undefined}
-        className={`nav-btn summon-btn ${activeView === 'summon' ? 'active' : ''}`}
-        onClick={() => setActiveView('summon')}
-        type="button"
-      >
-        <div className="summon-icon-wrapper">
-          <Sparkles size={25} className="icon" aria-hidden="true" />
-        </div>
-        <span>Summon</span>
-      </button>
-      <button
-        aria-current={activeView === 'roster' ? 'page' : undefined}
-        className={`nav-btn ${activeView === 'roster' ? 'active' : ''}`}
-        onClick={() => setActiveView('roster')}
-        type="button"
-      >
-        <Users size={22} className="icon" aria-hidden="true" />
-        <span>Heroes</span>
-      </button>
+      {NAVIGATION_ITEMS.map(item => {
+        const Icon = item.icon;
+        const isActive = item.view === activeView;
+
+        return (
+          <motion.button
+            key={item.view}
+            aria-current={isActive ? 'page' : undefined}
+            aria-label={item.label}
+            className={`nav-btn ${item.primary ? 'nav-primary' : ''} ${isActive ? 'active' : ''}`}
+            onClick={() => navigate(item.view)}
+            transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+            type="button"
+            whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+          >
+            {isActive && (
+              <motion.span
+                className="nav-active-rail"
+                layoutId="primary-navigation-active-rail"
+                transition={{ type: 'spring', stiffness: 460, damping: 34 }}
+              />
+            )}
+            <span className="nav-icon-shell" aria-hidden="true">
+              <Icon className="nav-icon" size={item.primary ? 25 : 22} strokeWidth={2.35} />
+            </span>
+            <span className="nav-label">{item.label}</span>
+          </motion.button>
+        );
+      })}
     </nav>
   );
 };

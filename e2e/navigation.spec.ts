@@ -1,5 +1,69 @@
 import { expect, test } from '@playwright/test';
 
+test('requests Telegram fullscreen and configures immersive host colors when supported', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    Reflect.set(window, '__telegramBridgeCalls', calls);
+    window.Telegram = {
+      WebApp: {
+        expand: () => calls.push('expand'),
+        isFullscreen: false,
+        isVersionAtLeast: () => true,
+        ready: () => calls.push('ready'),
+        requestFullscreen: () => calls.push('fullscreen'),
+        setBackgroundColor: color => calls.push(`background:${color}`),
+        setBottomBarColor: color => calls.push(`bottom:${color}`),
+        setHeaderColor: color => calls.push(`header:${color}`),
+      },
+    };
+  });
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__telegramBridgeCalls'))).toEqual([
+    'ready',
+    'expand',
+    'header:#0b2729',
+    'background:#071315',
+    'bottom:#071315',
+    'fullscreen',
+  ]);
+});
+
+test('keeps the modal fallback clean on older Telegram clients', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    Reflect.set(window, '__telegramBridgeCalls', calls);
+    window.Telegram = {
+      WebApp: {
+        expand: () => calls.push('expand'),
+        isFullscreen: false,
+        isVersionAtLeast: () => false,
+        ready: () => calls.push('ready'),
+        requestFullscreen: () => calls.push('fullscreen'),
+        setBackgroundColor: () => calls.push('background'),
+        setBottomBarColor: () => calls.push('bottom'),
+        setHeaderColor: () => calls.push('header'),
+      },
+    };
+  });
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__telegramBridgeCalls'))).toEqual([
+    'ready',
+    'expand',
+  ]);
+});
+
 test('player HUD renders Telegram identity, game level, and a compact narrow layout', async ({ page }) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
@@ -79,7 +143,7 @@ test('player HUD falls back to initials when Telegram has no usable photo', asyn
   await expect(page.locator('.player-avatar-image')).toHaveCount(0);
 });
 
-test('bottom navigation survives repeated Pixi unmount and remount cycles', async ({ page }) => {
+test('bottom navigation exposes campaign and leagues while surviving Pixi remount cycles', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
 
@@ -96,7 +160,12 @@ test('bottom navigation survives repeated Pixi unmount and remount cycles', asyn
     await expect(page.getByText('Warband', { exact: true })).toBeVisible();
     await expect(page.locator('#root')).not.toBeEmpty();
 
-    await page.getByRole('button', { name: 'Rift', exact: true }).click();
+    await page.getByRole('button', { name: 'Leagues', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Rift Leagues' })).toBeVisible();
+    await expect(page.getByText('Unranked', { exact: true })).toBeVisible();
+    await expect(page.locator('.leaderboard-row')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Campaign', exact: true }).click();
     await expect(page.getByText('Luminous Verge', { exact: true })).toBeVisible();
     await expect(page.locator('.rift-pixi-canvas')).toHaveCount(1);
   }
@@ -119,15 +188,34 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
 
   for (const viewport of [{ width: 390, height: 720 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(viewport);
-    const layout = await page.evaluate(() => ({
-      bodyWidth: document.body.scrollWidth,
-      viewportWidth: window.innerWidth,
-      panelWidth: document.querySelector('.enemy-panel')?.getBoundingClientRect().width ?? 0,
-    }));
+    const layout = await page.evaluate(() => {
+      const navigation = document.querySelector('.bottom-nav')?.getBoundingClientRect();
+      const navigationButtons = [...document.querySelectorAll('.bottom-nav .nav-btn')]
+        .map(button => button.getBoundingClientRect());
+
+      return {
+        bodyWidth: document.body.scrollWidth,
+        buttonCount: navigationButtons.length,
+        minButtonHeight: Math.min(...navigationButtons.map(button => button.height)),
+        minButtonWidth: Math.min(...navigationButtons.map(button => button.width)),
+        navigationBottom: navigation?.bottom ?? -1,
+        navigationLeft: navigation?.left ?? -1,
+        navigationRight: navigation?.right ?? Number.POSITIVE_INFINITY,
+        panelWidth: document.querySelector('.enemy-panel')?.getBoundingClientRect().width ?? 0,
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
+    });
 
     expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
     expect(layout.panelWidth).toBeGreaterThan(280);
     expect(layout.panelWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.buttonCount).toBe(4);
+    expect(layout.minButtonHeight).toBeGreaterThanOrEqual(44);
+    expect(layout.minButtonWidth).toBeGreaterThanOrEqual(70);
+    expect(layout.navigationLeft).toBe(0);
+    expect(layout.navigationRight).toBe(layout.viewportWidth);
+    expect(layout.navigationBottom).toBe(layout.viewportHeight);
   }
 });
 
