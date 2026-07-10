@@ -32,6 +32,31 @@ const seedVoidLordCollection = async (page: Page) => {
   });
 };
 
+const seedIronrootEncounter = async (page: Page, monsterHealth = '120') => {
+  await page.addInitScript(health => {
+    Math.random = () => 0.5;
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 7,
+      activeHeroIds: [],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      enemyIndex: 0,
+      gems: 50,
+      gold: '1000',
+      heroes: [],
+      lastPassiveTickAt: now,
+      lastSeenAt: now,
+      monsterHealth: health,
+      monsterMaxHealth: '120',
+      stage: 2,
+      summonPity: 0,
+      updatedAt: now,
+    }));
+  }, monsterHealth);
+};
+
 test('requests Telegram fullscreen on mobile and configures immersive host colors', async ({ page }) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
@@ -866,6 +891,128 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
     expect(layout.navigationRight).toBe(layout.viewportWidth);
     expect(layout.navigationBottom).toBe(layout.viewportHeight);
   }
+});
+
+test('animates the layered Ironroot rig without rebuilding the Pixi scene', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await seedIronrootEncounter(page);
+  await page.goto('/');
+
+  const scene = page.locator('.rift-pixi-scene');
+  const monster = page.locator('.monster-button');
+  await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  await expect(scene).toHaveAttribute('data-art-loaded', 'true');
+  await expect(scene.locator('canvas')).toHaveCount(1);
+  await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+
+  const triggerObservedImpact = async (horizontalPosition: number, expectedDirection: 'left' | 'right') => (
+    page.evaluate(async ({ direction, position }) => {
+      const button = document.querySelector<HTMLButtonElement>('.monster-button')!;
+      const rig = document.querySelector<HTMLElement>('.rift-pixi-scene')!;
+      const bounds = button.getBoundingClientRect();
+      const startedAt = performance.now();
+
+      return new Promise<{ direction: string; latencyMs: number; phase: string }>(resolve => {
+        let settled = false;
+        const finish = () => {
+          if (settled || rig.dataset.hitReactionPhase !== 'impact' || rig.dataset.hitDirection !== direction) {
+            return;
+          }
+          settled = true;
+          observer.disconnect();
+          resolve({
+            direction: rig.dataset.hitDirection ?? '',
+            latencyMs: performance.now() - startedAt,
+            phase: rig.dataset.hitReactionPhase ?? '',
+          });
+        };
+        const observer = new MutationObserver(finish);
+        observer.observe(rig, { attributes: true });
+        button.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+          clientX: bounds.left + bounds.width * position,
+          clientY: bounds.top + bounds.height * 0.46,
+          pointerType: 'touch',
+        }));
+        finish();
+        window.setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            observer.disconnect();
+            resolve({
+              direction: rig.dataset.hitDirection ?? '',
+              latencyMs: Number.POSITIVE_INFINITY,
+              phase: rig.dataset.hitReactionPhase ?? '',
+            });
+          }
+        }, 250);
+      });
+    }, { direction: expectedDirection, position: horizontalPosition })
+  );
+
+  const leftImpact = await triggerObservedImpact(0.2, 'left');
+  expect(leftImpact).toMatchObject({ direction: 'left', phase: 'impact' });
+  expect(leftImpact.latencyMs).toBeLessThanOrEqual(80);
+  await page.waitForTimeout(450);
+
+  const rightImpact = await triggerObservedImpact(0.8, 'right');
+  expect(rightImpact).toMatchObject({ direction: 'right', phase: 'impact' });
+  expect(rightImpact.latencyMs).toBeLessThanOrEqual(80);
+
+  const initialSceneBuilds = await scene.getAttribute('data-scene-build-count');
+  await monster.evaluate(async button => {
+    const bounds = button.getBoundingClientRect();
+    for (let index = 0; index < 10; index += 1) {
+      button.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: bounds.left + bounds.width * (index % 2 === 0 ? 0.2 : 0.8),
+        clientY: bounds.top + bounds.height * 0.46,
+        pointerType: 'touch',
+      }));
+      await new Promise(resolve => window.setTimeout(resolve, 20));
+    }
+  });
+
+  await expect(scene).toHaveAttribute('data-scene-build-count', initialSceneBuilds ?? '1');
+  await expect(scene.locator('canvas')).toHaveCount(1);
+  await expect(scene).toHaveAttribute('data-rig-root-scale', '1.0000');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  await page.waitForTimeout(700);
+  await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'idle');
+  expect(pageErrors).toEqual([]);
+});
+
+test('plays Ironroot death before handing the canvas to the next enemy', async ({ page }) => {
+  await seedIronrootEncounter(page, '1');
+  await page.goto('/');
+
+  const scene = page.locator('.rift-pixi-scene');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  await page.locator('.monster-button').click({ position: { x: 90, y: 180 } });
+
+  await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'death', { timeout: 1_000 });
+  await expect(page.locator('.stage-mark strong')).toHaveText('2');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
+  await page.waitForTimeout(720);
+  await expect(scene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'static-sprite');
+});
+
+test('falls back to the static Ironroot sprite when its atlas cannot load', async ({ page }) => {
+  await page.route('**/assets/rift/ironroot-rig/**', route => route.abort());
+  await seedIronrootEncounter(page);
+  await page.goto('/');
+
+  const scene = page.locator('.rift-pixi-scene');
+  await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'static-sprite');
+  await expect(scene).toHaveAttribute('data-art-loaded', 'true');
+  await expect(scene.locator('canvas')).toHaveCount(1);
 });
 
 test('advances through enemy waves before increasing the campaign stage', async ({ page }) => {
