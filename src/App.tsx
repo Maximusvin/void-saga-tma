@@ -1,13 +1,14 @@
 
 import { AnimatePresence } from 'framer-motion';
 import { useGameState } from './store/useGameState';
+import { getRiftEnemyVisual } from './game/riftVisuals';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { TheRift } from './views/TheRift';
 import { SummonCircle } from './views/SummonCircle';
 import { HeroesRoster } from './views/HeroesRoster';
 import { initializeTelegramApp } from './utils/telegram';
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import './App.css';
 
 function App() {
@@ -16,9 +17,16 @@ function App() {
   }, []);
 
   const gameState = useGameState();
+  const riftVisual = getRiftEnemyVisual(gameState.stage, gameState.isBoss);
+  const shellStyle = gameState.activeView === 'rift'
+    ? { '--rift-backdrop-image': `url("${riftVisual.backdrop}")` } as CSSProperties
+    : undefined;
 
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell view-${gameState.activeView} ${gameState.isBoss ? 'rift-boss' : ''}`}
+      style={shellStyle}
+    >
       <div className="scene-fog" />
       <div className="game-frame">
       <TopBar backendStatus={gameState.backendStatus} gold={gameState.gold} gems={gameState.gems} />

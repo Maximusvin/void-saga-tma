@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Application, Container, Graphics, type Ticker } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, type Texture, type Ticker } from 'pixi.js';
 import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
 import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 
@@ -147,6 +147,8 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
   const lastHandledDefeatSignalRef = useRef(defeatSignal);
   const lastHandledHitSignalRef = useRef(hitSignal);
   const [rendererReady, setRendererReady] = useState(false);
+  const [enemyTexture, setEnemyTexture] = useState<{ asset: string; texture: Texture } | null>(null);
+  const visual = getRiftEnemyVisual(stage, isBoss);
 
   useEffect(() => {
     defeatSignalRef.current = defeatSignal;
@@ -161,6 +163,26 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     critRef.current = isLastHitCrit;
     hitSignalRef.current = hitSignal;
   }, [hitSignal, isLastHitCrit]);
+
+  useEffect(() => {
+    let active = true;
+
+    void Assets.load<Texture>(visual.asset)
+      .then(texture => {
+        if (active) {
+          setEnemyTexture({ asset: visual.asset, texture });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setEnemyTexture(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [visual.asset]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -227,9 +249,10 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
       return;
     }
 
-    const visual = getRiftEnemyVisual(stage, isBoss);
     const palette = visual.palette;
     const scene = new Container();
+    const resolvedTexture = enemyTexture?.asset === visual.asset ? enemyTexture.texture : null;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       const ringBack = new Graphics()
         .circle(0, 0, 122)
@@ -241,8 +264,9 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
 
       const beast = new Container();
       const shadow = new Graphics()
-        .ellipse(0, visual.body.height * 0.58, visual.body.width * 0.66, 20)
-        .fill({ color: 0x000000, alpha: 0.36 });
+        .ellipse(0, visual.artHeight * (1 - visual.artAnchorY) - 8, visual.shadowWidth / 2, 16)
+        .fill({ color: 0x07140f, alpha: 0.4 });
+      const proceduralArt = new Container();
       const leftWing = buildWing(-1, palette.wing, palette.glow, visual.wingSpread);
       const rightWing = buildWing(1, palette.wing, palette.glow, visual.wingSpread);
       const body = new Graphics()
@@ -276,8 +300,7 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
       rightClaw.y = visual.body.height * 0.45;
       rightClaw.rotation = -3.02;
 
-      beast.addChild(
-        shadow,
+      proceduralArt.addChild(
         leftWing,
         rightWing,
         body,
@@ -292,6 +315,27 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         leftClaw,
         rightClaw,
       );
+
+      proceduralArt.visible = !resolvedTexture;
+      beast.addChild(shadow, proceduralArt);
+
+      let enemyArt: Sprite | null = null;
+      let enemyHitFlash: Sprite | null = null;
+
+      if (resolvedTexture) {
+        const artScale = visual.artHeight / resolvedTexture.height;
+        enemyArt = new Sprite(resolvedTexture);
+        enemyArt.anchor.set(0.5, visual.artAnchorY);
+        enemyArt.scale.set(artScale);
+
+        enemyHitFlash = new Sprite(resolvedTexture);
+        enemyHitFlash.anchor.set(0.5, visual.artAnchorY);
+        enemyHitFlash.scale.set(artScale);
+        enemyHitFlash.blendMode = 'add';
+        enemyHitFlash.alpha = 0;
+
+        beast.addChild(enemyArt, enemyHitFlash);
+      }
 
       const particles: SparkParticle[] = Array.from({ length: visual.particleCount }, (_, index) => {
         const particle = buildCircle(1.7 + (index % 3), palette.glow, 0.54);
@@ -342,21 +386,33 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         }
 
         const bossPulse = isBoss ? 1.12 : 1;
-        const breath = 1 + Math.sin(elapsed * 2.2) * 0.035;
+        const breath = reduceMotion ? 1 : 1 + Math.sin(elapsed * 2.2) * 0.035;
         const hitSquash = impact ? 0.88 + Math.sin(elapsed * 36) * 0.035 : 1;
         const deathPulse = Math.max(0, deathEnergy);
 
-        halo.scale.set((1 + Math.sin(elapsed * 1.4) * 0.08 + deathPulse * 0.22) * bossPulse);
-        halo.alpha = Math.min(0.72, (impact ? 0.32 : 0.18 + Math.sin(elapsed * 1.9) * 0.05) + deathPulse * 0.28);
-        ringBack.rotation += 0.004 * ticker.deltaTime;
-        ringFront.rotation -= 0.006 * ticker.deltaTime;
-        ringBack.scale.set(1 + Math.sin(elapsed * 1.2) * 0.035 + deathPulse * 0.16);
-        ringFront.scale.set(1 + Math.cos(elapsed * 1.5) * 0.045 + deathPulse * 0.1);
+        const haloWave = reduceMotion ? 0 : Math.sin(elapsed * 1.4) * 0.08;
+        const ringBackWave = reduceMotion ? 0 : Math.sin(elapsed * 1.2) * 0.035;
+        const ringFrontWave = reduceMotion ? 0 : Math.cos(elapsed * 1.5) * 0.045;
+        halo.scale.set((1 + haloWave + deathPulse * 0.22) * bossPulse);
+        halo.alpha = Math.min(0.72, (impact ? 0.32 : 0.18 + haloWave * 0.6) + deathPulse * 0.28);
+        if (!reduceMotion) {
+          ringBack.rotation += 0.004 * ticker.deltaTime;
+          ringFront.rotation -= 0.006 * ticker.deltaTime;
+        }
+        ringBack.scale.set(1 + ringBackWave + deathPulse * 0.16);
+        ringFront.scale.set(1 + ringFrontWave + deathPulse * 0.1);
 
-        beast.y = Math.sin(elapsed * 2.4) * 7 - impact * 7;
-        beast.rotation = Math.sin(elapsed * 1.7) * 0.035 + (impact ? Math.sin(elapsed * 44) * 0.08 : 0) + deathPulse * Math.sin(elapsed * 28) * 0.09;
+        beast.y = (reduceMotion ? 0 : Math.sin(elapsed * 2.4) * 7) - impact * 7;
+        beast.x = impact ? Math.sin(elapsed * 42) * 9 : 0;
+        beast.rotation = (reduceMotion ? 0 : Math.sin(elapsed * 1.7) * 0.018) + (impact ? Math.sin(elapsed * 44) * 0.05 : 0) + deathPulse * Math.sin(elapsed * 28) * 0.09;
         beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14));
         beast.alpha = Math.max(0.38, 1 - deathPulse * 0.28);
+
+        if (enemyArt && enemyHitFlash) {
+          enemyArt.skew.x = reduceMotion ? 0 : Math.sin(elapsed * 1.3) * 0.008;
+          enemyHitFlash.skew.x = enemyArt.skew.x;
+          enemyHitFlash.alpha = Math.min(0.78, impact * (critRef.current ? 0.72 : 0.42) + deathPulse * 0.38);
+        }
 
         core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34 + deathPulse * 0.42);
         coreGlow.scale.set(1 + Math.sin(elapsed * 4.6) * 0.3 + impact * 0.55 + deathPulse * 0.8);
@@ -364,12 +420,12 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
         rightWing.rotation = 0.16 - Math.sin(elapsed * 2.6) * 0.055 + impact * 0.08;
 
         particles.forEach((particle, index) => {
-          const orbit = elapsed * particle.speed + particle.angle;
-          const wobble = Math.sin(elapsed * 1.7 + index) * 8;
+          const orbit = (reduceMotion ? 0 : elapsed * particle.speed) + particle.angle;
+          const wobble = reduceMotion ? 0 : Math.sin(elapsed * 1.7 + index) * 8;
 
           particle.graphic.x = Math.cos(orbit) * (particle.distance + wobble);
           particle.graphic.y = Math.sin(orbit) * (particle.distance * 0.72 + wobble);
-          particle.graphic.alpha = 0.18 + Math.sin(elapsed * 2.4 + index) * 0.22 + impact * 0.22;
+          particle.graphic.alpha = (reduceMotion ? 0.24 : 0.18 + Math.sin(elapsed * 2.4 + index) * 0.22) + impact * 0.22;
           particle.graphic.scale.set(particle.size + impact * 0.45);
         });
 
@@ -418,7 +474,15 @@ export const RiftPixiScene = ({ defeatSignal, isBossDefeat, isBoss, isHit, isLas
     return () => {
       cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
     };
-  }, [isBoss, rendererReady, stage]);
+  }, [enemyTexture, isBoss, rendererReady, stage, visual]);
 
-  return <div ref={hostRef} className="rift-pixi-scene" aria-hidden="true" />;
+  return (
+    <div
+      ref={hostRef}
+      className="rift-pixi-scene"
+      data-art-loaded={enemyTexture?.asset === visual.asset ? 'true' : 'false'}
+      data-enemy-id={visual.id}
+      aria-hidden="true"
+    />
+  );
 };
