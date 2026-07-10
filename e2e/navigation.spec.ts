@@ -34,6 +34,39 @@ test('requests Telegram fullscreen and configures immersive host colors when sup
   ]);
 });
 
+test('keeps the shell full height when Telegram reports a zero stable viewport', async ({ page }) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await page.addInitScript(() => {
+    window.Telegram = {
+      WebApp: {
+        contentSafeAreaInset: { bottom: 0, left: 0, right: 0, top: 0 },
+        isFullscreen: false,
+        isVersionAtLeast: () => true,
+        onEvent: () => undefined,
+        ready: () => undefined,
+        safeAreaInset: { bottom: 0, left: 0, right: 0, top: 0 },
+        // Telegram can report this before the viewport is measured. Clamping it
+        // to a 1px minimum used to collapse the entire game shell.
+        viewportStableHeight: 0,
+      },
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  const layout = await page.evaluate(() => ({
+    runtimeViewport: document.documentElement.style.getPropertyValue('--app-runtime-viewport-stable-height'),
+    shellHeight: document.querySelector('.app-shell')!.getBoundingClientRect().height,
+  }));
+
+  expect(layout.runtimeViewport).not.toBe('1px');
+  expect(layout.shellHeight).toBe(844);
+});
+
 test('keeps interactive HUD controls inside dynamic Telegram safe areas', async ({ page }) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
@@ -79,9 +112,12 @@ test('keeps interactive HUD controls inside dynamic Telegram safe areas', async 
     };
   });
 
-  expect(initialLayout.runtimeTop).toBe('76px');
+  // safeAreaInset is measured from the screen edge and contentSafeAreaInset from
+  // the content edge, so the HUD has to clear their sum (28 + 28), and the
+  // mirrored runtime token holds the reported content inset unchanged.
+  expect(initialLayout.runtimeTop).toBe('28px');
   expect(initialLayout.runtimeBottom).toBe('34px');
-  expect(initialLayout.topbarTop).toBeGreaterThanOrEqual(76);
+  expect(initialLayout.topbarTop).toBeGreaterThanOrEqual(56);
   expect(initialLayout.topbarLeft).toBeGreaterThanOrEqual(8);
   expect(initialLayout.topbarRight).toBeLessThanOrEqual(378);
   expect(initialLayout.navigationBottom).toBe(844);
@@ -96,9 +132,10 @@ test('keeps interactive HUD controls inside dynamic Telegram safe areas', async 
     handlers.safeAreaChanged?.();
   });
 
+  // 32px screen inset + 102px content inset.
   await expect.poll(() => page.locator('.topbar').evaluate(element => (
     element.getBoundingClientRect().top
-  ))).toBeGreaterThanOrEqual(102);
+  ))).toBeGreaterThanOrEqual(134);
   await expect.poll(() => page.locator('.bottom-nav .nav-btn').last().evaluate(element => (
     element.getBoundingClientRect().bottom
   ))).toBeLessThanOrEqual(796);
@@ -130,7 +167,8 @@ test('keeps interactive HUD controls inside dynamic Telegram safe areas', async 
   expect(compactLayout.appHeight).toBe(568);
   expect(compactLayout.bodyHeight).toBe(568);
   expect(compactLayout.bodyWidth).toBe(320);
-  expect(compactLayout.topbarTop).toBeGreaterThanOrEqual(72);
+  // 24px screen inset + 72px content inset.
+  expect(compactLayout.topbarTop).toBeGreaterThanOrEqual(96);
   expect(compactLayout.buttonBottom).toBeLessThanOrEqual(544);
   expect(compactLayout.minButtonHeight).toBeGreaterThanOrEqual(44);
 

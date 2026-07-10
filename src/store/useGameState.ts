@@ -569,7 +569,10 @@ export const useGameState = () => {
   const baseClickPower = useMemo(() => getBaseClickPower(activeHeroes), [activeHeroes]);
   const passivePower = useMemo(() => getPassivePower(activeHeroes), [activeHeroes]);
   const comboMultiplier = getComboMultiplier(comboCount);
-  const clickPower = multiplyGameNumbers(baseClickPower, comboMultiplier);
+  const clickPower = useMemo(
+    () => multiplyGameNumbers(baseClickPower, comboMultiplier),
+    [baseClickPower, comboMultiplier],
+  );
 
   const registerHit = useCallback(() => {
     setComboCount(c => c + 1);

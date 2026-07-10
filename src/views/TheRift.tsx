@@ -52,7 +52,9 @@ interface DamagePop {
   id: number;
   x: number;
   y: number;
-  damage: GameNumber;
+  // A pop's damage never changes once shown, so format it once instead of
+  // re-running decimal.js for every visible pop on every render.
+  damageLabel: string;
   isCrit: boolean;
   driftX: number;
 }
@@ -326,7 +328,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
           id: clickId,
           x: clientX,
           y: clientY,
-          damage: hitEvent.damage,
+          damageLabel: formatNumber(hitEvent.damage),
           isCrit: hitEvent.isCrit,
           driftX: (Math.random() - 0.5) * 92,
         };
@@ -616,7 +618,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
             transition={{ duration: 0.78, ease: 'easeOut' }}
           >
             {pop.isCrit && <span>CRIT</span>}
-            -{formatNumber(pop.damage)}
+            -{pop.damageLabel}
           </motion.div>
         ))}
       </AnimatePresence>
