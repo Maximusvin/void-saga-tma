@@ -159,6 +159,7 @@ curl -i https://game.riy.contact/api/game/state
 - `/api/health` повертає `200` і `{ "ok": true }`;
 - `/` повертає frontend;
 - `/index.html` повертає `Cache-Control: no-cache`, щоб Telegram WebView перевалідовував актуальний hashed bundle після deploy;
+- вже відкрита гра при відсутньому dynamic chunk один раз перезавантажується на актуальний bundle, а повторна помилка впродовж хвилини переходить у штатний ErrorBoundary без reload-loop;
 - game endpoint без `x-telegram-init-data` повертає `401`, а не frontend HTML;
 - після запуску через Telegram запити отримують валідний signed `initData`, а стан зберігається у SQLite volume.
 
