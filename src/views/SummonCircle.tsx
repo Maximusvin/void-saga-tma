@@ -1,17 +1,34 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
+import {
+  Crown,
+  Gem,
+  Shield,
+  Sparkles,
+  Swords,
+  WandSparkles,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { triggerHaptic, triggerHapticNotification } from '../utils/haptics';
 import {
   GAME_BALANCE,
   RARITY_COLORS,
   RARITY_ORDER,
   SUMMON_POOL,
-  getHeroIcon,
   getSummonDropPercent,
 } from '../game/balance';
-import type { GameEvent, Hero } from '../game/types';
+import type { GameEvent, Hero, HeroRarity } from '../game/types';
 import { formatNumber } from '../utils/formatNumber';
+import { getGameRenderProfile } from '../utils/renderQuality';
 import './SummonCircle.css';
 
 interface SummonCircleProps {
@@ -19,281 +36,281 @@ interface SummonCircleProps {
   summonHero: () => Promise<Extract<GameEvent, { type: 'hero_summoned' }> | null>;
 }
 
-export const SummonCircle: React.FC<SummonCircleProps> = ({ gems, summonHero }) => {
-  const [isSummoning, setIsSummoning] = useState(false);
+type SummonPhase = 'idle' | 'charging' | 'silhouette' | 'result';
+
+const RARITY_ICONS: Record<HeroRarity, LucideIcon> = {
+  Common: Shield,
+  Rare: WandSparkles,
+  Epic: Swords,
+  Legendary: Crown,
+};
+
+const SummonHeroGlyph = ({ rarity, size = 56 }: { rarity: HeroRarity; size?: number }) => {
+  const Icon = RARITY_ICONS[rarity];
+  return <Icon aria-hidden="true" size={size} strokeWidth={1.65} />;
+};
+
+export const SummonCircle = ({ gems, summonHero }: SummonCircleProps) => {
+  const [phase, setPhase] = useState<SummonPhase>('idle');
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
   const [duplicateShards, setDuplicateShards] = useState(0);
-  const [showSilhouette, setShowSilhouette] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  const renderProfile = useMemo(getGameRenderProfile, []);
+  const claimButtonRef = useRef<HTMLButtonElement | null>(null);
+  const timeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const isMountedRef = useRef(true);
+
+  const sortedSummonPool = useMemo(
+    () => [...SUMMON_POOL].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]),
+    [],
+  );
+  const celebrationParticleCount = Math.max(28, Math.round(150 * renderProfile.burstScale));
+
+  const scheduleTimeout = useCallback((callback: () => void, delay: number) => {
+    const timeout = setTimeout(() => {
+      timeoutsRef.current.delete(timeout);
+      callback();
+    }, delay);
+    timeoutsRef.current.add(timeout);
+    return timeout;
+  }, []);
+
+  useEffect(() => {
+    const activeTimeouts = timeoutsRef.current;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      activeTimeouts.forEach(clearTimeout);
+      activeTimeouts.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'result') {
+      return;
+    }
+
+    const animationFrame = requestAnimationFrame(() => {
+      claimButtonRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [phase]);
+
+  const launchCelebration = useCallback((hero: Hero) => {
+    if (
+      prefersReducedMotion ||
+      (hero.rarity !== 'Epic' && hero.rarity !== 'Legendary')
+    ) {
+      return;
+    }
+
+    confetti({
+      particleCount: celebrationParticleCount,
+      spread: 96,
+      startVelocity: 34,
+      ticks: renderProfile.quality === 'low' ? 90 : 120,
+      scalar: renderProfile.quality === 'low' ? 0.78 : 0.92,
+      origin: { y: 0.58 },
+      colors: hero.rarity === 'Legendary'
+        ? ['#ffd36f', '#fff1bc', '#74ead6']
+        : ['#d58aff', '#8deee0', '#ffffff'],
+      disableForReducedMotion: true,
+    });
+  }, [celebrationParticleCount, prefersReducedMotion, renderProfile.quality]);
 
   const handleSummon = () => {
+    if (phase !== 'idle') {
+      return;
+    }
     if (gems < GAME_BALANCE.summonCostGems) {
       triggerHapticNotification('error');
       return;
     }
 
-    setIsSummoning(true);
+    setPhase('charging');
     setSummonedHero(null);
     setDuplicateShards(0);
-    setShowSilhouette(false);
-    
     triggerHaptic('medium');
 
-    setTimeout(() => {
+    scheduleTimeout(() => {
       void summonHero().then(result => {
+        if (!isMountedRef.current) {
+          return;
+        }
         if (!result) {
           triggerHapticNotification('error');
-          setIsSummoning(false);
+          setPhase('idle');
           return;
         }
 
-        const newHero = result.hero;
-        setSummonedHero(newHero);
+        setSummonedHero(result.hero);
         setDuplicateShards(result.isDuplicate ? result.shardsGranted : 0);
-        setIsSummoning(false);
-        setShowSilhouette(true);
+        setPhase('silhouette');
         triggerHaptic('heavy');
 
-        setTimeout(() => {
-          setShowSilhouette(false);
-          triggerHaptic('heavy');
-          
-          if (newHero.rarity === 'Epic' || newHero.rarity === 'Legendary') {
-            confetti({
-              particleCount: 150,
-              spread: 100,
-              origin: { y: 0.6 },
-              colors: newHero.rarity === 'Legendary' ? ['#ffd700', '#ffaa00', '#ffffff'] : ['#ff00ff', '#aa00ff', '#00ffff']
-            });
+        scheduleTimeout(() => {
+          if (!isMountedRef.current) {
+            return;
           }
-        }, GAME_BALANCE.summonRevealMs);
+          setPhase('result');
+          triggerHapticNotification('success');
+          launchCelebration(result.hero);
+        }, prefersReducedMotion ? 180 : GAME_BALANCE.summonRevealMs);
       });
-    }, GAME_BALANCE.summonChargeMs);
+    }, prefersReducedMotion ? 120 : GAME_BALANCE.summonChargeMs);
   };
 
-  const sortedSummonPool = [...SUMMON_POOL].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]);
+  const claimHero = () => {
+    setSummonedHero(null);
+    setDuplicateShards(0);
+    setPhase('idle');
+    triggerHaptic('light');
+  };
+
+  const canSummon = phase === 'idle' && gems >= GAME_BALANCE.summonCostGems;
+  const resultStyle = summonedHero
+    ? { '--summon-rarity': RARITY_COLORS[summonedHero.rarity] } as CSSProperties
+    : undefined;
 
   return (
-    <motion.div 
-      className="view-container summon-view"
-      initial={{ opacity: 0 }}
+    <motion.section
       animate={{ opacity: 1 }}
+      className={`view-container summon-view phase-${phase}`}
+      data-celebration-particle-count={celebrationParticleCount}
+      data-render-quality={renderProfile.quality}
+      data-summon-phase={phase}
       exit={{ opacity: 0 }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        height: '100%',
-        flex: 1,
-        padding: '18px 16px 12px',
-        overflowY: 'auto'
-      }}
+      initial={{ opacity: 0 }}
     >
-      <div className="summon-heading">
-        <h2 className="text-gradient">
-          Void Summon
-        </h2>
-        <p>
-          Awaken the legendary heroes of the rift
-        </p>
-      </div>
-      
-      {/* Portal Area */}
-      <div style={{ position: 'relative', width: '220px', height: '220px', marginBottom: '30px' }}>
-        {/* Outer Ring */}
-        <motion.div 
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            borderRadius: '50%',
-            border: '2px solid rgba(102, 252, 241, 0.2)',
-            borderTopColor: 'var(--accent-cyan)',
-            borderBottomColor: 'var(--accent-cyan)',
-            boxShadow: '0 0 20px rgba(102, 252, 241, 0.2)'
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
-        />
-        
-        {/* Inner Ring */}
-        <motion.div 
-          style={{
-            position: 'absolute', top: '20px', left: '20px', right: '20px', bottom: '20px',
-            borderRadius: '50%',
-            border: '3px dashed rgba(255, 0, 255, 0.3)',
-            borderLeftColor: '#ff00ff',
-            borderRightColor: '#ff00ff',
-            boxShadow: 'inset 0 0 20px rgba(255, 0, 255, 0.2)'
-          }}
-          animate={{ rotate: -360 }}
-          transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-        />
+      <header className="summon-heading">
+        <span>Rift sanctuary</span>
+        <h2>Void Summon</h2>
+        <p>Call a champion through the celestial gate</p>
+      </header>
 
-        {/* Center Void Core */}
+      <div className="summon-stage" aria-live="polite">
+        <span className="summon-orbit outer" aria-hidden="true" />
+        <span className="summon-orbit inner" aria-hidden="true" />
         <motion.div
-          animate={{ 
-            scale: [1, 1.1, 1],
-            boxShadow: [
-              '0 0 30px rgba(102, 252, 241, 0.5)',
-              '0 0 60px rgba(255, 0, 255, 0.8)',
-              '0 0 30px rgba(102, 252, 241, 0.5)'
-            ]
-          }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '80px', height: '80px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, #ffffff 0%, #00ffff 40%, #ff00ff 100%)',
-            filter: 'blur(5px)',
-            opacity: 0.8
-          }}
-        />
-        
-        {/* Summon Animation Overlay */}
-        <AnimatePresence>
-          {isSummoning && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.1 }}
-              animate={{ opacity: 1, scale: 2 }}
-              exit={{ opacity: 0, scale: 3 }}
-              transition={{ duration: 1.5 }}
-              style={{
-                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                width: '100px', height: '100px',
-                background: '#ffffff',
-                borderRadius: '50%',
-                filter: 'blur(10px)',
-                zIndex: 10
-              }}
-            />
-          )}
-        </AnimatePresence>
+          animate={phase === 'charging' && !prefersReducedMotion
+            ? { scale: [1, 1.12, 0.96, 1.08], rotate: [0, 4, -4, 0] }
+            : { scale: 1, rotate: 0 }}
+          className="summon-core"
+          transition={{ duration: 1.1, repeat: phase === 'charging' ? Infinity : 0 }}
+        >
+          <Sparkles aria-hidden="true" size={34} strokeWidth={1.7} />
+        </motion.div>
+        <div className="summon-stage-copy">
+          <span>{phase === 'charging' ? 'Channeling' : 'Sanctuary attuned'}</span>
+          <strong>{phase === 'charging' ? 'Opening the rift...' : 'One champion awaits'}</strong>
+        </div>
       </div>
 
-      {/* Drop Rates Info */}
-      <div className="glass-panel summon-rates" style={{
-        width: '100%', maxWidth: '320px', padding: '15px', borderRadius: '15px', 
-        marginBottom: '30px', display: 'flex', justifyContent: 'space-between',
-        fontSize: '0.8rem', fontWeight: 'bold'
-      }}>
-        {sortedSummonPool.map(template => (
-          <div key={template.rarity} style={{ textAlign: 'center' }}>
-            <div style={{ color: RARITY_COLORS[template.rarity] }}>{getSummonDropPercent(template)}%</div>
-            <div style={{ color: '#aaa', fontSize: '0.7rem' }}>{template.rarity}</div>
-          </div>
-        ))}
+      <div className="summon-dock">
+        <div className="summon-rates" aria-label="Summon drop rates">
+          {sortedSummonPool.map(template => (
+            <div className={`summon-rate rarity-${template.rarity.toLowerCase()}`} key={template.rarity}>
+              <SummonHeroGlyph rarity={template.rarity} size={17} />
+              <span>{template.rarity}</span>
+              <strong>{getSummonDropPercent(template)}%</strong>
+            </div>
+          ))}
+        </div>
+
+        <motion.button
+          className="summon-action"
+          disabled={!canSummon}
+          onClick={handleSummon}
+          type="button"
+          whileTap={canSummon && !prefersReducedMotion ? { scale: 0.97 } : undefined}
+        >
+          <span className="summon-action-icon" aria-hidden="true"><Sparkles size={21} /></span>
+          <span className="summon-action-copy">
+            <strong>{phase === 'charging' ? 'Opening...' : 'Open the rift'}</strong>
+            <small>{canSummon ? 'Guaranteed champion' : phase !== 'idle' ? 'Rift in motion' : 'Not enough gems'}</small>
+          </span>
+          <span className="summon-cost"><Gem aria-hidden="true" size={17} />{GAME_BALANCE.summonCostGems}</span>
+        </motion.button>
       </div>
 
-      {/* Summon Button */}
-      <motion.button 
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.02 }}
-        onClick={handleSummon}
-        disabled={isSummoning || gems < GAME_BALANCE.summonCostGems || showSilhouette}
-        style={{ 
-          width: '100%', maxWidth: '320px', 
-          padding: '16px', borderRadius: '20px',
-          border: 'none',
-          background: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) 
-            ? 'rgba(255,255,255,0.1)' 
-            : 'linear-gradient(45deg, #00ffff, #ff00ff)',
-          color: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'rgba(255,255,255,0.4)' : '#000',
-          fontWeight: '900', fontSize: '1.2rem',
-          boxShadow: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'none' : '0 10px 20px rgba(255,0,255,0.3)',
-          cursor: (isSummoning || showSilhouette || gems < GAME_BALANCE.summonCostGems) ? 'not-allowed' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-        }}
-      >
-        <span>Summon</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '10px', fontSize: '1rem' }}>
-          {GAME_BALANCE.summonCostGems} <span style={{ color: '#fff', textShadow: '0 0 5px #ff00ff' }}>💎</span>
-        </span>
-      </motion.button>
-
-      {/* Silhouette & Result Modal */}
-      <AnimatePresence mode="wait">
-        {showSilhouette && summonedHero && (
-           <motion.div
-            key="silhouette"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1.5, filter: 'brightness(0) drop-shadow(0 0 30px #fff)' }}
-            exit={{ opacity: 0, scale: 2, filter: 'brightness(10)' }}
-            transition={{ duration: 1.5, ease: "easeIn" }}
-            style={{
-              position: 'absolute', top: '40%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              fontSize: '8rem', zIndex: 90
-            }}
-          >
-            {getHeroIcon(summonedHero.rarity)}
-          </motion.div>
-        )}
-        {!showSilhouette && summonedHero && (
+      <AnimatePresence>
+        {phase === 'silhouette' && summonedHero && (
           <motion.div
-            key="result"
-            initial={{ opacity: 0, y: 50, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              zIndex: 100, padding: '20px'
-            }}
+            animate={{ opacity: 1 }}
+            className="summon-silhouette"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            key="summon-silhouette"
+            style={resultStyle}
           >
+            <span className="summon-silhouette-rays" aria-hidden="true" />
             <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              style={{
-                background: `linear-gradient(135deg, rgba(31,40,51,0.9), rgba(11,12,16,0.9))`,
-                border: `2px solid ${RARITY_COLORS[summonedHero.rarity]}`,
-                boxShadow: `0 0 50px ${RARITY_COLORS[summonedHero.rarity]}88`,
-                padding: '40px', borderRadius: '24px', textAlign: 'center', width: '100%', maxWidth: '320px',
-                position: 'relative', overflow: 'hidden'
-              }}
+              animate={{ scale: prefersReducedMotion ? 1 : 1.34 }}
+              className="summon-silhouette-glyph"
+              exit={{ scale: prefersReducedMotion ? 1 : 1.7 }}
+              initial={{ scale: prefersReducedMotion ? 1 : 0.64 }}
             >
-              {/* Shine effect */}
-              <motion.div
-                initial={{ x: '-100%' }}
-                animate={{ x: '200%' }}
-                transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 2 }}
-                style={{
-                  position: 'absolute', top: 0, left: 0, width: '50%', height: '100%',
-                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-                  transform: 'skewX(-20deg)', zIndex: 0
-                }}
-              />
-
-              <div style={{ fontSize: '5rem', marginBottom: '10px', position: 'relative', zIndex: 1, textShadow: `0 0 20px ${RARITY_COLORS[summonedHero.rarity]}` }}>
-                {getHeroIcon(summonedHero.rarity)}
-              </div>
-              <h3 style={{ 
-                color: RARITY_COLORS[summonedHero.rarity], 
-                marginBottom: '5px', fontSize: '2rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '2px', position: 'relative', zIndex: 1
-              }}>
-                {duplicateShards > 0 ? 'DUPLICATE!' : `${summonedHero.rarity}!`}
-              </h3>
-              <p style={{ fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '15px', position: 'relative', zIndex: 1 }}>{summonedHero.name}</p>
-              
-              <div style={{ background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '12px', marginBottom: '30px', position: 'relative', zIndex: 1 }}>
-                {duplicateShards > 0
-                  ? <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>+{duplicateShards} ascension shards</p>
-                  : <p style={{ color: 'var(--accent-teal)', fontSize: '1.2rem' }}>⚡ Power: {formatNumber(summonedHero.power)}</p>}
-              </div>
-
-              <motion.button 
-                whileTap={{ scale: 0.95 }}
-                className="btn-primary" 
-                style={{ width: '100%', fontSize: '1.2rem', position: 'relative', zIndex: 1 }} 
-                onClick={() => setSummonedHero(null)}
-              >
-                Claim Hero
-              </motion.button>
+              <SummonHeroGlyph rarity={summonedHero.rarity} size={94} />
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+
+      <AnimatePresence>
+        {phase === 'result' && summonedHero && (
+          <motion.div
+            animate={{ opacity: 1 }}
+            aria-labelledby="summon-result-title"
+            aria-modal="true"
+            className="summon-result-backdrop"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            key="summon-result"
+            onKeyDown={event => {
+              if (event.key === 'Tab') {
+                event.preventDefault();
+                claimButtonRef.current?.focus();
+              }
+            }}
+            role="dialog"
+            style={resultStyle}
+          >
+            <motion.article
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className={`summon-result-card rarity-${summonedHero.rarity.toLowerCase()}`}
+              initial={prefersReducedMotion
+                ? { opacity: 0, scale: 1, y: 0 }
+                : { opacity: 0, scale: 0.86, y: 28 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.34, ease: 'easeOut' }}
+            >
+              <div className="summon-result-emblem">
+                <span aria-hidden="true" />
+                <SummonHeroGlyph rarity={summonedHero.rarity} size={72} />
+              </div>
+              <div className="summon-result-copy">
+                <span>{duplicateShards > 0 ? 'Echo recovered' : `${summonedHero.rarity} champion`}</span>
+                <h3 id="summon-result-title">{summonedHero.name}</h3>
+                <p>{duplicateShards > 0 ? 'Duplicate converted into ascension progress' : 'A new hero has joined your warband'}</p>
+              </div>
+              <div className="summon-result-stat">
+                {duplicateShards > 0 ? <Sparkles aria-hidden="true" size={20} /> : <Zap aria-hidden="true" size={20} />}
+                <span>{duplicateShards > 0 ? 'Ascension shards' : 'Starting power'}</span>
+                <strong>{duplicateShards > 0 ? `+${duplicateShards}` : formatNumber(summonedHero.power)}</strong>
+              </div>
+              <motion.button
+                className="summon-claim"
+                onClick={claimHero}
+                ref={claimButtonRef}
+                type="button"
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+              >
+                <span>Claim champion</span>
+                <Sparkles aria-hidden="true" size={18} />
+              </motion.button>
+            </motion.article>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   );
 };

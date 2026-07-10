@@ -19,21 +19,28 @@ describe('game render quality', () => {
   });
 
   it('uses the Telegram class before generic browser hardware hints', () => {
-    assert.equal(selectGameRenderProfile({
+    const lowProfile = selectGameRenderProfile({
       deviceMemory: 8,
       hardwareConcurrency: 8,
       userAgent: telegramUserAgent('LOW'),
-    }).quality, 'low');
-    assert.equal(selectGameRenderProfile({
+    });
+    const highProfile = selectGameRenderProfile({
       deviceMemory: 2,
       hardwareConcurrency: 2,
       userAgent: telegramUserAgent('HIGH'),
-    }).quality, 'high');
+    });
+
+    assert.equal(lowProfile.quality, 'low');
+    assert.equal(lowProfile.maxFps, 30);
+    assert.equal(highProfile.quality, 'high');
+    assert.equal(highProfile.maxFps, 60);
   });
 
   it('falls back conservatively when Telegram hardware data is unavailable', () => {
     assert.equal(selectGameRenderProfile({ userAgent: '', hardwareConcurrency: 2 }).quality, 'low');
-    assert.equal(selectGameRenderProfile({ userAgent: '', deviceMemory: 4 }).quality, 'balanced');
+    const balancedProfile = selectGameRenderProfile({ userAgent: '', deviceMemory: 4 });
+    assert.equal(balancedProfile.quality, 'balanced');
+    assert.equal(balancedProfile.maxFps, 45);
     assert.equal(selectGameRenderProfile({ userAgent: '', deviceMemory: 8, hardwareConcurrency: 8 }).quality, 'high');
   });
 });

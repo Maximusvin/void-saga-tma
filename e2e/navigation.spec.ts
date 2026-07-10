@@ -426,6 +426,95 @@ test.describe('average Telegram Android performance profile', () => {
     expect(renderBudget.shellAnimations).toBe(0);
     expect(pageErrors).toEqual([]);
   });
+
+  test('keeps the summon sanctuary and legendary reveal inside a short mobile viewport', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.addInitScript(() => {
+      Math.random = () => 0.95;
+      const now = new Date().toISOString();
+      localStorage.setItem('rift_heroes_save', JSON.stringify({
+        schemaVersion: 4,
+        bossEncounterEndsAt: null,
+        comboCount: 0,
+        comboExpiresAt: null,
+        gems: 500,
+        gold: '1000',
+        heroes: [],
+        stage: 1,
+        monsterMaxHealth: '100',
+        monsterHealth: '100',
+        lastSeenAt: now,
+        updatedAt: now,
+      }));
+    });
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Summon', exact: true }).click();
+    const summonView = page.locator('.summon-view');
+    const summonAction = page.locator('.summon-action');
+    await expect(summonView).toHaveAttribute('data-render-quality', 'balanced');
+    await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
+    await expect.poll(() => page.evaluate(() => (
+      getComputedStyle(document.querySelector('.app-shell')!).backgroundImage
+    ))).toContain('/assets/summon/rift-sanctuary.webp');
+
+    const idleLayout = await page.evaluate(() => {
+      const action = document.querySelector('.summon-action')!.getBoundingClientRect();
+      const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+      const rates = document.querySelector('.summon-rates')!.getBoundingClientRect();
+      return {
+        actionBottom: action.bottom,
+        actionHeight: action.height,
+        bodyHeight: document.body.scrollHeight,
+        bodyWidth: document.body.scrollWidth,
+        navigationTop: navigation.top,
+        ratesBottom: rates.bottom,
+        viewportHeight: innerHeight,
+        viewportWidth: innerWidth,
+      };
+    });
+    expect(idleLayout.bodyHeight).toBe(idleLayout.viewportHeight);
+    expect(idleLayout.bodyWidth).toBe(idleLayout.viewportWidth);
+    expect(idleLayout.actionHeight).toBeGreaterThanOrEqual(44);
+    expect(idleLayout.ratesBottom).toBeLessThan(idleLayout.actionBottom);
+    expect(idleLayout.actionBottom).toBeLessThanOrEqual(idleLayout.navigationTop);
+
+    await summonAction.click();
+    await expect(summonView).toHaveAttribute('data-summon-phase', 'charging');
+    const resultDialog = page.getByRole('dialog', { name: 'Void Lord' });
+    await expect(resultDialog).toBeVisible({ timeout: 5_000 });
+    await expect(resultDialog.getByText('Legendary champion', { exact: true })).toBeVisible();
+    await expect(resultDialog.getByText('Starting power', { exact: true })).toBeVisible();
+    const claimButton = resultDialog.getByRole('button', { name: 'Claim champion' });
+    await expect(claimButton).toBeVisible();
+    await expect(claimButton).toBeFocused();
+    await expect(page.locator('.resource-item.gem .amount')).toHaveText('490');
+
+    const resultLayout = await resultDialog.locator('.summon-result-card').evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+      const topbar = document.querySelector('.topbar')!.getBoundingClientRect();
+      const claim = element.querySelector('button')!.getBoundingClientRect();
+      return {
+        bottom: bounds.bottom,
+        claimHeight: claim.height,
+        navigationTop: navigation.top,
+        top: bounds.top,
+        topbarBottom: topbar.bottom,
+      };
+    });
+    expect(resultLayout.top).toBeGreaterThanOrEqual(resultLayout.topbarBottom);
+    expect(resultLayout.bottom).toBeLessThanOrEqual(resultLayout.navigationTop);
+    expect(resultLayout.claimHeight).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => {
+      const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+      const hitTarget = document.elementFromPoint(navigation.left + 20, navigation.top + 20);
+      return hitTarget?.closest('.summon-result-backdrop') !== null;
+    })).toBe(true);
+    expect(pageErrors).toEqual([]);
+  });
 });
 
 test('boss attempt exposes phases and resets through the shared engine after enrage', async ({ page }) => {
