@@ -10,6 +10,10 @@ import {
   type AutomaticActionBackendStatus,
 } from '../api/automaticActionPolicy';
 import {
+  getLeaderboardStatusWhenBackendIsBlocked,
+  type LeaderboardStatus,
+} from '../api/leaderboardPolicy';
+import {
   createGameCommandId,
   fetchGameState,
   fetchRealmLeaderboard,
@@ -66,7 +70,7 @@ import { getLocalPlayerProfilePreview, getTelegramPlayerId } from '../utils/tele
 export type { Hero } from '../game/types';
 
 export type BackendStatus = AutomaticActionBackendStatus;
-export type LeaderboardStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type { LeaderboardStatus } from '../api/leaderboardPolicy';
 
 const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
@@ -556,6 +560,9 @@ export const useGameState = () => {
       return localLeaderboard;
     }
     if (backendStatus !== 'synced' || realmSwitching) {
+      setLeaderboardStatus(currentStatus => (
+        getLeaderboardStatusWhenBackendIsBlocked(currentStatus, backendStatus)
+      ));
       return null;
     }
 
