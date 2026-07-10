@@ -362,6 +362,72 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
   }
 });
 
+test.describe('average Telegram Android performance profile', () => {
+  test.use({
+    deviceScaleFactor: 2,
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 Mobile '
+      + 'Telegram-Android/11.3.3 (Google Pixel 6a; Android 14; SDK 34; AVERAGE)',
+  });
+
+  test('keeps the stage 149 to 150 boss transition within its render budget', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      const now = new Date().toISOString();
+      localStorage.setItem('rift_heroes_save', JSON.stringify({
+        schemaVersion: 4,
+        bossEncounterEndsAt: null,
+        comboCount: 0,
+        comboExpiresAt: null,
+        gems: 50,
+        gold: '1000',
+        heroes: [
+          { ascension: 0, id: 'grunt-150', name: 'Void Grunt', rarity: 'Common', level: 3, power: '15000000000000', shards: 0, templateId: 'void-grunt' },
+          { ascension: 0, id: 'mage-150', name: 'Void Mage', rarity: 'Rare', level: 4, power: '15000000000000', shards: 0, templateId: 'void-mage' },
+          { ascension: 0, id: 'knight-150', name: 'Void Knight', rarity: 'Epic', level: 5, power: '15000000000000', shards: 0, templateId: 'void-knight' },
+          { ascension: 0, id: 'lord-150', name: 'Void Lord', rarity: 'Legendary', level: 6, power: '15000000000000', shards: 0, templateId: 'void-lord' },
+        ],
+        stage: 149,
+        monsterMaxHealth: '52338878808753',
+        monsterHealth: '1',
+        lastSeenAt: now,
+        updatedAt: now,
+      }));
+    });
+    await page.goto('/');
+
+    const scene = page.locator('.rift-pixi-scene');
+    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(scene).toHaveAttribute('data-render-quality', 'balanced');
+    await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+    await expect(page.locator('.rift-spark')).toHaveCount(8);
+
+    const initialSceneBuilds = Number(await scene.getAttribute('data-scene-build-count'));
+    await expect(page.locator('.stage-mark strong')).toHaveText('150', { timeout: 4_000 });
+    await expect(scene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
+    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(scene).toHaveAttribute('data-particle-count', '24');
+
+    const renderBudget = await scene.evaluate(element => {
+      const canvas = element.querySelector('canvas')!;
+      const bounds = canvas.getBoundingClientRect();
+      const beastShell = document.querySelector('.rift-beast-shell')!;
+      return {
+        canvasResolution: canvas.width / bounds.width,
+        renderQuality: document.documentElement.dataset.renderQuality,
+        sceneBuilds: Number(element.getAttribute('data-scene-build-count')),
+        shellAnimations: beastShell.getAnimations().length,
+      };
+    });
+
+    expect(renderBudget.renderQuality).toBe('balanced');
+    expect(renderBudget.canvasResolution).toBeLessThanOrEqual(1.51);
+    expect(renderBudget.sceneBuilds - initialSceneBuilds).toBe(1);
+    expect(renderBudget.shellAnimations).toBe(0);
+    expect(pageErrors).toEqual([]);
+  });
+});
+
 test('boss attempt exposes phases and resets through the shared engine after enrage', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {

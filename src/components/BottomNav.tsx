@@ -1,4 +1,4 @@
-import React from 'react';
+import { memo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Compass, Sparkles, Trophy, Users, type LucideIcon } from 'lucide-react';
 import type { ActiveView } from '../game/types';
@@ -24,7 +24,7 @@ const NAVIGATION_ITEMS = [
   { icon: Users, label: 'Heroes', primary: false, view: 'roster' },
 ] as const satisfies readonly NavigationItem[];
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeView, setActiveView }) => {
+export const BottomNav = memo(function BottomNav({ activeView, setActiveView }: BottomNavProps) {
   const prefersReducedMotion = useReducedMotion();
 
   const navigate = (view: ActiveView) => {
@@ -69,4 +69,4 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeView, setActiveView 
       })}
     </nav>
   );
-};
+});

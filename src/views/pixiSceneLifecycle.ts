@@ -12,8 +12,20 @@ interface PixiApplicationLike<TScene, TFrame> {
 }
 
 interface PixiSceneLike {
-  destroy(options: { children: true }): unknown;
+  destroy(options: {
+    children: true;
+    context: true;
+    texture: false;
+    textureSource: false;
+  }): unknown;
 }
+
+export const OWNED_PIXI_SCENE_DESTROY_OPTIONS = {
+  children: true,
+  context: true,
+  texture: false,
+  textureSource: false,
+} as const;
 
 export const cleanupOwnedPixiScene = <TScene extends PixiSceneLike, TFrame>(
   currentApplication: PixiApplicationLike<TScene, TFrame> | null,
@@ -27,6 +39,6 @@ export const cleanupOwnedPixiScene = <TScene extends PixiSceneLike, TFrame>(
 
   application.ticker.remove(animateScene);
   application.stage.removeChild(scene);
-  scene.destroy({ children: true });
+  scene.destroy(OWNED_PIXI_SCENE_DESTROY_OPTIONS);
   return true;
 };

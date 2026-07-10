@@ -133,3 +133,18 @@
     animation: none;
   }
 }
+
+:root[data-render-quality='balanced'] .app-shell::before,
+:root[data-render-quality='balanced'] .scene-fog {
+  animation-duration: 18s;
+}
+
+:root[data-render-quality='low'] .app-shell::before,
+:root[data-render-quality='low'] .scene-fog {
+  animation: none;
+}
+
+:root[data-render-quality='low'] .scene-fog {
+  filter: blur(7px);
+  opacity: 0.68;
+}

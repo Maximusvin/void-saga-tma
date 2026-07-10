@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, type Texture, type Ticker } from 'pixi.js';
-import { getRiftEnemyVisual, type RiftEnemyPalette } from '../game/riftVisuals';
+import { isBossStage } from '../game/balance';
+import { getGameRenderProfile } from '../utils/renderQuality';
+import {
+  getRiftEnemyVisual,
+  type RiftEnemyPalette,
+  type RiftEnemyVisualSpec,
+} from '../game/riftVisuals';
 import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 
 interface RiftPixiSceneProps {
@@ -40,7 +46,18 @@ interface Shockwave {
   targetRadius: number;
 }
 
-const clampResolution = () => Math.min(window.devicePixelRatio || 1, 2);
+interface RenderedEnemy {
+  texture: Texture | null;
+  visual: RiftEnemyVisualSpec;
+}
+
+const clampResolution = (resolutionCap: number) => (
+  Math.min(window.devicePixelRatio || 1, resolutionCap)
+);
+
+const scaleEffectCount = (count: number, scale: number, minimum: number) => (
+  Math.max(minimum, Math.round(count * scale))
+);
 
 const buildCircle = (radius: number, color: number, alpha: number) => {
   return new Graphics()
@@ -85,8 +102,12 @@ const buildWing = (side: -1 | 1, color: number, glow: number, spread: number) =>
   return wing;
 };
 
-const createImpactBurst = (palette: RiftEnemyPalette, isCrit: boolean): ImpactParticle[] => {
-  const count = isCrit ? 18 : 10;
+const createImpactBurst = (
+  palette: RiftEnemyPalette,
+  isCrit: boolean,
+  effectScale: number,
+): ImpactParticle[] => {
+  const count = scaleEffectCount(isCrit ? 18 : 10, effectScale, isCrit ? 8 : 5);
 
   return Array.from({ length: count }, (_, index) => {
     const angle = (index / count) * Math.PI * 2 + (isCrit ? 0.14 : 0);
@@ -104,8 +125,12 @@ const createImpactBurst = (palette: RiftEnemyPalette, isCrit: boolean): ImpactPa
   });
 };
 
-const createDeathBurst = (palette: RiftEnemyPalette, isBossDefeat: boolean): ImpactParticle[] => {
-  const count = isBossDefeat ? 54 : 32;
+const createDeathBurst = (
+  palette: RiftEnemyPalette,
+  isBossDefeat: boolean,
+  effectScale: number,
+): ImpactParticle[] => {
+  const count = scaleEffectCount(isBossDefeat ? 54 : 32, effectScale, isBossDefeat ? 20 : 14);
 
   return Array.from({ length: count }, (_, index) => {
     const angle = (index / count) * Math.PI * 2;
@@ -151,6 +176,7 @@ export const RiftPixiScene = ({
 }: RiftPixiSceneProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
+  const bossPhaseRef = useRef(bossPhase);
   const defeatSignalRef = useRef(defeatSignal);
   const enrageSignalRef = useRef(enrageSignal);
   const bossDefeatRef = useRef(isBossDefeat);
@@ -160,9 +186,17 @@ export const RiftPixiScene = ({
   const lastHandledDefeatSignalRef = useRef(defeatSignal);
   const lastHandledEnrageSignalRef = useRef(enrageSignal);
   const lastHandledHitSignalRef = useRef(hitSignal);
+  const sceneBuildCountRef = useRef(0);
+  const stageRef = useRef(stage);
+  const renderProfileRef = useRef(getGameRenderProfile());
   const [rendererReady, setRendererReady] = useState(false);
-  const [enemyTexture, setEnemyTexture] = useState<{ asset: string; texture: Texture } | null>(null);
+  const [renderedEnemy, setRenderedEnemy] = useState<RenderedEnemy | null>(null);
   const visual = getRiftEnemyVisual(stage, isBoss);
+
+  useEffect(() => {
+    bossPhaseRef.current = bossPhase;
+    stageRef.current = stage;
+  }, [bossPhase, stage]);
 
   useEffect(() => {
     defeatSignalRef.current = defeatSignal;
@@ -188,19 +222,25 @@ export const RiftPixiScene = ({
     void Assets.load<Texture>(visual.asset)
       .then(texture => {
         if (active) {
-          setEnemyTexture({ asset: visual.asset, texture });
+          setRenderedEnemy({ texture, visual });
         }
       })
       .catch(() => {
         if (active) {
-          setEnemyTexture(null);
+          setRenderedEnemy({ texture: null, visual });
         }
       });
+
+    const nextStage = stage + 1;
+    const nextVisual = getRiftEnemyVisual(nextStage, isBossStage(nextStage));
+    if (nextVisual.asset !== visual.asset) {
+      void Assets.load<Texture>(nextVisual.asset).catch(() => undefined);
+    }
 
     return () => {
       active = false;
     };
-  }, [visual.asset]);
+  }, [stage, visual]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -216,11 +256,11 @@ export const RiftPixiScene = ({
 
     const initialize = async () => {
       await app.init({
-        antialias: true,
+        antialias: renderProfileRef.current.antialias,
         autoDensity: true,
         backgroundAlpha: 0,
         powerPreference: 'high-performance',
-        resolution: clampResolution(),
+        resolution: clampResolution(renderProfileRef.current.resolutionCap),
       });
       initialized = true;
 
@@ -230,6 +270,7 @@ export const RiftPixiScene = ({
       }
 
       app.canvas.className = 'rift-pixi-canvas';
+      app.ticker.maxFPS = renderProfileRef.current.maxFps;
       host.append(app.canvas);
       appRef.current = app;
 
@@ -263,16 +304,17 @@ export const RiftPixiScene = ({
 
   useEffect(() => {
     const app = appRef.current;
-    if (!rendererReady || !app) {
+    if (!rendererReady || !app || !renderedEnemy) {
       return;
     }
 
-    const palette = visual.palette;
+    const renderProfile = renderProfileRef.current;
+    const sceneVisual = renderedEnemy.visual;
+    const sceneIsBoss = sceneVisual.archetype === 'sovereign';
+    const palette = sceneVisual.palette;
     const scene = new Container();
-    const resolvedTexture = enemyTexture?.asset === visual.asset ? enemyTexture.texture : null;
+    const resolvedTexture = renderedEnemy.texture;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const normalizedBossPhase = isBoss ? Math.max(1, Math.min(3, Math.floor(bossPhase))) : 1;
-    const phaseIntensity = 1 + (normalizedBossPhase - 1) * 0.14;
 
       const ringBack = new Graphics()
         .circle(0, 0, 122)
@@ -284,72 +326,79 @@ export const RiftPixiScene = ({
 
       const beast = new Container();
       const shadow = new Graphics()
-        .ellipse(0, visual.artHeight * (1 - visual.artAnchorY) - 8, visual.shadowWidth / 2, 16)
+        .ellipse(0, sceneVisual.artHeight * (1 - sceneVisual.artAnchorY) - 8, sceneVisual.shadowWidth / 2, 16)
         .fill({ color: 0x07140f, alpha: 0.4 });
-      const proceduralArt = new Container();
-      const leftWing = buildWing(-1, palette.wing, palette.glow, visual.wingSpread);
-      const rightWing = buildWing(1, palette.wing, palette.glow, visual.wingSpread);
-      const body = new Graphics()
-        .roundRect(-visual.body.width / 2, -visual.body.height / 2, visual.body.width, visual.body.height, visual.body.radius)
-        .fill({ color: palette.mid, alpha: 1 })
-        .stroke({ color: 0xffffff, width: 2, alpha: 0.26 });
-      const bodyShade = buildCircle(visual.body.width * 0.34, palette.dark, 0.24);
-      const core = buildCircle(visual.coreRadius, palette.core, 0.95);
-      const coreGlow = buildCircle(visual.coreRadius * 2, palette.core, 0.18);
-      const leftEye = new Graphics().roundRect(-visual.body.width * 0.26, -20, 10, 23, 5).fill({ color: 0x12051c, alpha: 0.92 });
-      const rightEye = new Graphics().roundRect(visual.body.width * 0.18, -20, 10, 23, 5).fill({ color: 0x12051c, alpha: 0.92 });
-      const mouth = new Graphics().roundRect(-16, 26, 32, 7, 4).fill({ color: 0x12051c, alpha: 0.72 });
-      const leftHorn = buildSpike(28, visual.hornHeight, palette.core, 0.92);
-      const rightHorn = buildSpike(28, visual.hornHeight, palette.core, 0.92);
-      const leftClaw = buildSpike(30, visual.hornHeight * 0.68, palette.core, 0.76);
-      const rightClaw = buildSpike(30, visual.hornHeight * 0.68, palette.core, 0.76);
+      let core: Graphics | null = null;
+      let coreGlow: Graphics | null = null;
+      let leftWing: Graphics | null = null;
+      let rightWing: Graphics | null = null;
 
-      bodyShade.y = 16;
-      coreGlow.y = 2;
-      core.y = 2;
-      leftHorn.x = -visual.body.width * 0.25;
-      leftHorn.y = -visual.body.height * 0.63;
-      leftHorn.rotation = -0.24;
-      rightHorn.x = visual.body.width * 0.25;
-      rightHorn.y = -visual.body.height * 0.63;
-      rightHorn.rotation = 0.24;
-      leftClaw.x = -visual.body.width * 0.34;
-      leftClaw.y = visual.body.height * 0.45;
-      leftClaw.rotation = 3.02;
-      rightClaw.x = visual.body.width * 0.34;
-      rightClaw.y = visual.body.height * 0.45;
-      rightClaw.rotation = -3.02;
+      beast.addChild(shadow);
 
-      proceduralArt.addChild(
-        leftWing,
-        rightWing,
-        body,
-        bodyShade,
-        coreGlow,
-        core,
-        leftEye,
-        rightEye,
-        mouth,
-        leftHorn,
-        rightHorn,
-        leftClaw,
-        rightClaw,
-      );
+      if (!resolvedTexture) {
+        const proceduralArt = new Container();
+        leftWing = buildWing(-1, palette.wing, palette.glow, sceneVisual.wingSpread);
+        rightWing = buildWing(1, palette.wing, palette.glow, sceneVisual.wingSpread);
+        const body = new Graphics()
+          .roundRect(-sceneVisual.body.width / 2, -sceneVisual.body.height / 2, sceneVisual.body.width, sceneVisual.body.height, sceneVisual.body.radius)
+          .fill({ color: palette.mid, alpha: 1 })
+          .stroke({ color: 0xffffff, width: 2, alpha: 0.26 });
+        const bodyShade = buildCircle(sceneVisual.body.width * 0.34, palette.dark, 0.24);
+        core = buildCircle(sceneVisual.coreRadius, palette.core, 0.95);
+        coreGlow = buildCircle(sceneVisual.coreRadius * 2, palette.core, 0.18);
+        const leftEye = new Graphics().roundRect(-sceneVisual.body.width * 0.26, -20, 10, 23, 5).fill({ color: 0x12051c, alpha: 0.92 });
+        const rightEye = new Graphics().roundRect(sceneVisual.body.width * 0.18, -20, 10, 23, 5).fill({ color: 0x12051c, alpha: 0.92 });
+        const mouth = new Graphics().roundRect(-16, 26, 32, 7, 4).fill({ color: 0x12051c, alpha: 0.72 });
+        const leftHorn = buildSpike(28, sceneVisual.hornHeight, palette.core, 0.92);
+        const rightHorn = buildSpike(28, sceneVisual.hornHeight, palette.core, 0.92);
+        const leftClaw = buildSpike(30, sceneVisual.hornHeight * 0.68, palette.core, 0.76);
+        const rightClaw = buildSpike(30, sceneVisual.hornHeight * 0.68, palette.core, 0.76);
 
-      proceduralArt.visible = !resolvedTexture;
-      beast.addChild(shadow, proceduralArt);
+        bodyShade.y = 16;
+        coreGlow.y = 2;
+        core.y = 2;
+        leftHorn.x = -sceneVisual.body.width * 0.25;
+        leftHorn.y = -sceneVisual.body.height * 0.63;
+        leftHorn.rotation = -0.24;
+        rightHorn.x = sceneVisual.body.width * 0.25;
+        rightHorn.y = -sceneVisual.body.height * 0.63;
+        rightHorn.rotation = 0.24;
+        leftClaw.x = -sceneVisual.body.width * 0.34;
+        leftClaw.y = sceneVisual.body.height * 0.45;
+        leftClaw.rotation = 3.02;
+        rightClaw.x = sceneVisual.body.width * 0.34;
+        rightClaw.y = sceneVisual.body.height * 0.45;
+        rightClaw.rotation = -3.02;
+
+        proceduralArt.addChild(
+          leftWing,
+          rightWing,
+          body,
+          bodyShade,
+          coreGlow,
+          core,
+          leftEye,
+          rightEye,
+          mouth,
+          leftHorn,
+          rightHorn,
+          leftClaw,
+          rightClaw,
+        );
+        beast.addChild(proceduralArt);
+      }
 
       let enemyArt: Sprite | null = null;
       let enemyHitFlash: Sprite | null = null;
 
       if (resolvedTexture) {
-        const artScale = visual.artHeight / resolvedTexture.height;
+        const artScale = sceneVisual.artHeight / resolvedTexture.height;
         enemyArt = new Sprite(resolvedTexture);
-        enemyArt.anchor.set(0.5, visual.artAnchorY);
+        enemyArt.anchor.set(0.5, sceneVisual.artAnchorY);
         enemyArt.scale.set(artScale);
 
         enemyHitFlash = new Sprite(resolvedTexture);
-        enemyHitFlash.anchor.set(0.5, visual.artAnchorY);
+        enemyHitFlash.anchor.set(0.5, sceneVisual.artAnchorY);
         enemyHitFlash.scale.set(artScale);
         enemyHitFlash.blendMode = 'add';
         enemyHitFlash.alpha = 0;
@@ -357,11 +406,12 @@ export const RiftPixiScene = ({
         beast.addChild(enemyArt, enemyHitFlash);
       }
 
-      const particles: SparkParticle[] = Array.from({ length: visual.particleCount }, (_, index) => {
+      const particleCount = scaleEffectCount(sceneVisual.particleCount, renderProfile.particleScale, 8);
+      const particles: SparkParticle[] = Array.from({ length: particleCount }, (_, index) => {
         const particle = buildCircle(1.7 + (index % 3), palette.glow, 0.54);
 
         return {
-          angle: (index / visual.particleCount) * Math.PI * 2,
+          angle: (index / particleCount) * Math.PI * 2,
           distance: 62 + ((index * 23) % 92),
           graphic: particle,
           size: 0.72 + (index % 5) * 0.12,
@@ -378,9 +428,20 @@ export const RiftPixiScene = ({
     scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
     app.stage.addChild(scene);
 
-    let elapsed = stage * 0.37;
+    sceneBuildCountRef.current += 1;
+    if (hostRef.current) {
+      hostRef.current.dataset.particleCount = String(particleCount);
+      hostRef.current.dataset.sceneBuildCount = String(sceneBuildCountRef.current);
+    }
+
+    let elapsed = stageRef.current * 0.37;
     const animateScene = (ticker: Ticker) => {
         elapsed += ticker.deltaMS / 1000;
+
+        const normalizedBossPhase = sceneIsBoss
+          ? Math.max(1, Math.min(3, Math.floor(bossPhaseRef.current)))
+          : 1;
+        const phaseIntensity = 1 + (normalizedBossPhase - 1) * 0.14;
 
         const impact = hitRef.current ? 1 : 0;
         const hasNewHit = hitSignalRef.current !== lastHandledHitSignalRef.current;
@@ -388,7 +449,7 @@ export const RiftPixiScene = ({
         const hasNewEnrage = enrageSignalRef.current !== lastHandledEnrageSignalRef.current;
 
         if (hasNewHit) {
-          const burst = createImpactBurst(palette, critRef.current);
+          const burst = createImpactBurst(palette, critRef.current, renderProfile.burstScale);
           lastHandledHitSignalRef.current = hitSignalRef.current;
           impactParticles.push(...burst);
           impacts.addChild(...burst.map(particle => particle.graphic));
@@ -396,8 +457,9 @@ export const RiftPixiScene = ({
 
         if (hasNewDefeat) {
           const isBossDeath = bossDefeatRef.current;
-          const burst = createDeathBurst(palette, isBossDeath);
-          const waves = Array.from({ length: isBossDeath ? 3 : 2 }, (_, index) => createShockwave(palette, isBossDeath, index));
+          const burst = createDeathBurst(palette, isBossDeath, renderProfile.burstScale);
+          const waveCount = scaleEffectCount(isBossDeath ? 3 : 2, renderProfile.burstScale, 1);
+          const waves = Array.from({ length: waveCount }, (_, index) => createShockwave(palette, isBossDeath, index));
 
           lastHandledDefeatSignalRef.current = defeatSignalRef.current;
           deathEnergy = isBossDeath ? 1.35 : 1;
@@ -408,8 +470,9 @@ export const RiftPixiScene = ({
         }
 
         if (hasNewEnrage) {
-          const burst = createImpactBurst(palette, true);
-          const waves = Array.from({ length: 3 }, (_, index) => createShockwave(palette, true, index));
+          const burst = createImpactBurst(palette, true, renderProfile.burstScale);
+          const waveCount = scaleEffectCount(3, renderProfile.burstScale, 1);
+          const waves = Array.from({ length: waveCount }, (_, index) => createShockwave(palette, true, index));
 
           lastHandledEnrageSignalRef.current = enrageSignalRef.current;
           enrageEnergy = 1;
@@ -419,7 +482,7 @@ export const RiftPixiScene = ({
           shockwaves.addChild(...waves.map(wave => wave.graphic));
         }
 
-        const bossPulse = (isBoss ? 1.12 : 1) * phaseIntensity;
+        const bossPulse = (sceneIsBoss ? 1.12 : 1) * phaseIntensity;
         const breath = reduceMotion ? 1 : 1 + Math.sin(elapsed * (2.2 * phaseIntensity)) * (0.035 * phaseIntensity);
         const hitSquash = impact ? 0.88 + Math.sin(elapsed * 36) * 0.035 : 1;
         const deathPulse = Math.max(0, deathEnergy);
@@ -449,10 +512,12 @@ export const RiftPixiScene = ({
           enemyHitFlash.alpha = Math.min(0.84, impact * (critRef.current ? 0.72 : 0.42) + deathPulse * 0.38 + enragePulse * 0.56);
         }
 
-        core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34 + deathPulse * 0.42);
-        coreGlow.scale.set(1 + Math.sin(elapsed * 4.6) * 0.3 + impact * 0.55 + deathPulse * 0.8);
-        leftWing.rotation = -0.16 + Math.sin(elapsed * 2.6) * 0.055 - impact * 0.08;
-        rightWing.rotation = 0.16 - Math.sin(elapsed * 2.6) * 0.055 + impact * 0.08;
+        if (core && coreGlow && leftWing && rightWing) {
+          core.scale.set(1 + Math.sin(elapsed * 5.6) * 0.22 + impact * 0.34 + deathPulse * 0.42);
+          coreGlow.scale.set(1 + Math.sin(elapsed * 4.6) * 0.3 + impact * 0.55 + deathPulse * 0.8);
+          leftWing.rotation = -0.16 + Math.sin(elapsed * 2.6) * 0.055 - impact * 0.08;
+          rightWing.rotation = 0.16 - Math.sin(elapsed * 2.6) * 0.055 + impact * 0.08;
+        }
 
         particles.forEach((particle, index) => {
           const orbit = (reduceMotion ? 0 : elapsed * particle.speed * phaseIntensity) + particle.angle;
@@ -510,14 +575,15 @@ export const RiftPixiScene = ({
     return () => {
       cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
     };
-  }, [bossPhase, enemyTexture, isBoss, rendererReady, stage, visual]);
+  }, [renderedEnemy, rendererReady]);
 
   return (
     <div
       ref={hostRef}
       className="rift-pixi-scene"
-      data-art-loaded={enemyTexture?.asset === visual.asset ? 'true' : 'false'}
+      data-art-loaded={renderedEnemy?.visual.asset === visual.asset && renderedEnemy.texture ? 'true' : 'false'}
       data-enemy-id={visual.id}
+      data-render-quality={renderProfileRef.current.quality}
       aria-hidden="true"
     />
   );
