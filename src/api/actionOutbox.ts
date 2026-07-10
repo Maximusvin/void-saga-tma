@@ -1,3 +1,4 @@
+import { GAME_BALANCE } from '../game/balance';
 import type { GameAction } from '../game/types';
 
 const OUTBOX_STORAGE_PREFIX = 'void_saga_action_outbox:';
@@ -27,7 +28,7 @@ const isGameAction = (value: unknown): value is GameAction => {
       Number(value.tapCount) <= 20 &&
       Number.isSafeInteger(value.passiveTicks) &&
       Number(value.passiveTicks) >= 0 &&
-      Number(value.passiveTicks) <= 1 &&
+      Number(value.passiveTicks) <= GAME_BALANCE.maxPassiveTicksPerBatch &&
       (Number(value.tapCount) > 0 || Number(value.passiveTicks) > 0)
     );
   }

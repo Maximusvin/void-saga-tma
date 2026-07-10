@@ -8,7 +8,7 @@ export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
 export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';
 export type HeroPortraitMotion = 'still' | 'aura' | 'embers' | 'mythic';
 
-export const GAME_SNAPSHOT_SCHEMA_VERSION = 5;
+export const GAME_SNAPSHOT_SCHEMA_VERSION = 6;
 
 export interface Hero {
   ascension: number;
@@ -96,6 +96,9 @@ export interface GameSnapshot {
   stage: number;
   monsterMaxHealth: GameNumber;
   monsterHealth: GameNumber;
+  // Watermark for idle income. The server advances it by exactly the ticks it
+  // grants, so a client cannot earn passive damage faster than wall-clock time.
+  lastPassiveTickAt: string | null;
   lastSeenAt: string;
   updatedAt: string;
 }

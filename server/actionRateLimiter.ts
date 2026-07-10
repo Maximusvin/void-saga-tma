@@ -37,7 +37,15 @@ export class ActionRateLimiter {
       return 'action_rate_limited';
     }
 
-    if (action.passiveTicks > 0 && nowMs - rate.lastPassiveAt < PASSIVE_MIN_INTERVAL_MS) {
+    // A batch that also carries taps is already bounded by the tap window, and
+    // dropping it because an idle tick rode along would throw away the player's
+    // taps. Idle income itself is policed by the engine's wall-clock watermark,
+    // not by this gate, which only exists to bound request spam.
+    if (
+      action.tapCount === 0 &&
+      action.passiveTicks > 0 &&
+      nowMs - rate.lastPassiveAt < PASSIVE_MIN_INTERVAL_MS
+    ) {
       return 'action_rate_limited';
     }
 

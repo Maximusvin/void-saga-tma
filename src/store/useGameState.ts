@@ -64,6 +64,14 @@ const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
 const TAP_BATCH_MAX_SIZE = 20;
 const TAP_BATCH_WINDOW_MS = 80;
+// Idle ticks accrue locally and ship as one batch, so watching the rift costs a
+// request every few seconds instead of one every second. The server still pays
+// exactly one tick per elapsed second, so nothing is gained by flushing sooner.
+const PASSIVE_FLUSH_TICKS = 5;
+
+interface CombatFeedbackOptions {
+  passiveVolley?: boolean;
+}
 
 const LOCAL_REALM_CONTEXT: RealmContext = {
   canonicalRealmCode: 'S-1',
@@ -256,6 +264,9 @@ export const useGameState = () => {
   const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comboResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTapsRef = useRef<PendingTap[]>([]);
+  // Ticks predicted locally but not yet acknowledged by the server. Losing these
+  // costs nothing: the server's watermark still owes them on the next batch.
+  const pendingPassiveTicksRef = useRef(0);
   const tapBatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerId = playerIdRef.current ?? getOrCreateDevPlayerId();
   playerIdRef.current = playerId;
@@ -393,9 +404,15 @@ export const useGameState = () => {
     };
   }, [apiEnabled, applyServerState, playerId, replayActionOutbox]);
 
-  const publishCombatFeedback = useCallback((events: GameEvent[]) => {
+  const publishCombatFeedback = useCallback((events: GameEvent[], options: CombatFeedbackOptions = {}) => {
     if (events.some(event => event.type === 'boss_enraged')) {
       setBossEnrageSignal(current => current + 1);
+    }
+
+    // A batched flush replays idle ticks the predicted volley already showed.
+    // Animating them twice would double every hero's attack.
+    if (options.passiveVolley === false) {
+      return events;
     }
 
     const passiveHit = events.find(event => event.type === 'monster_hit' && event.source === 'passive');
@@ -410,11 +427,11 @@ export const useGameState = () => {
     return events;
   }, []);
 
-  const runGameAction = useCallback((action: GameAction) => {
+  const runGameAction = useCallback((action: GameAction, feedbackOptions: CombatFeedbackOptions = {}) => {
     if (!apiEnabled) {
       const result = applyGameAction(snapshotRef.current, action);
       applySnapshot(result.snapshot);
-      return Promise.resolve(publishCombatFeedback(result.events));
+      return Promise.resolve(publishCombatFeedback(result.events, feedbackOptions));
     }
 
     if (backendStatus !== 'synced' || realmSwitching) {
@@ -441,7 +458,7 @@ export const useGameState = () => {
       .then(async () => {
         const events = await replayActionOutbox(characterId, command.commandId);
         setBackendStatus('synced');
-        return publishCombatFeedback(events);
+        return publishCombatFeedback(events, feedbackOptions);
       })
       .catch(error => {
         console.error(error);
@@ -593,6 +610,27 @@ export const useGameState = () => {
     };
   }, []);
 
+  /**
+   * The single exit for combat batches. Accrued idle ticks always ride along with
+   * whatever is being sent, so a tap flush never adopts a server snapshot that is
+   * missing the ticks already predicted locally — that would snap the health bar
+   * back up.
+   */
+  const dispatchCombatBatch = useCallback((tapCount: number) => {
+    const passiveTicks = Math.min(pendingPassiveTicksRef.current, GAME_BALANCE.maxPassiveTicksPerBatch);
+    if (tapCount === 0 && passiveTicks === 0) {
+      return Promise.resolve([] as GameEvent[]);
+    }
+
+    pendingPassiveTicksRef.current -= passiveTicks;
+    return runGameAction(
+      { type: 'combat_batch', tapCount, passiveTicks },
+      // Boss ticks are never predicted locally, so their volley must come back
+      // from the server; everything else was already animated on prediction.
+      { passiveVolley: isBossStage(snapshotRef.current.stage) },
+    );
+  }, [runGameAction]);
+
   const flushTapBatch = useCallback(() => {
     if (tapBatchTimeoutRef.current) {
       clearTimeout(tapBatchTimeoutRef.current);
@@ -604,11 +642,7 @@ export const useGameState = () => {
       return;
     }
 
-    void runGameAction({
-      type: 'combat_batch',
-      tapCount: taps.length,
-      passiveTicks: 0,
-    }).then(events => {
+    void dispatchCombatBatch(taps.length).then(events => {
       const groupedEvents = splitTapEvents(events, taps.length);
       taps.forEach((tap, index) => tap.resolve(groupedEvents[index] ?? []));
     });
@@ -616,7 +650,7 @@ export const useGameState = () => {
     if (pendingTapsRef.current.length > 0) {
       tapBatchTimeoutRef.current = setTimeout(() => flushTapBatch(), TAP_BATCH_WINDOW_MS);
     }
-  }, [runGameAction]);
+  }, [dispatchCombatBatch]);
 
   const dealDamage = useCallback(() => {
     return new Promise<GameEvent[]>(resolve => {
@@ -649,13 +683,86 @@ export const useGameState = () => {
     }
 
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.activeHeroIds.length > 0) {
+      if (
+        document.visibilityState !== 'visible' ||
+        activeView !== 'rift' ||
+        snapshotRef.current.activeHeroIds.length === 0
+      ) {
+        return;
+      }
+
+      // Without a backend the engine already runs locally, so predicting on top
+      // of it would apply every tick twice.
+      if (!apiEnabled) {
         void runGameAction({ type: 'combat_batch', tapCount: 0, passiveTicks: 1 });
+        return;
+      }
+
+      pendingPassiveTicksRef.current += 1;
+
+      // Boss encounters are timed and can enrage mid-fight, so their state has to
+      // come from the server rather than a local guess that could disagree.
+      if (isBossStage(snapshotRef.current.stage)) {
+        void dispatchCombatBatch(0);
+        return;
+      }
+
+      // Passive damage has no randomness, so replaying this tick on the server
+      // yields the same snapshot. Predict it to keep the bar draining every
+      // second while the network sees one batch every PASSIVE_FLUSH_TICKS.
+      const predicted = applyGameAction(snapshotRef.current, {
+        type: 'combat_batch',
+        tapCount: 0,
+        passiveTicks: 1,
+      });
+      if (!predicted.events.some(event => event.type === 'action_rejected')) {
+        applySnapshot(predicted.snapshot);
+        publishCombatFeedback(predicted.events);
+      }
+
+      if (pendingPassiveTicksRef.current >= PASSIVE_FLUSH_TICKS) {
+        void dispatchCombatBatch(0);
       }
     }, GAME_BALANCE.passiveTickMs);
-    
+
     return () => clearInterval(interval);
-  }, [activeView, automaticActionsEnabled, runGameAction, snapshot.activeHeroIds.length]);
+  }, [
+    activeView,
+    apiEnabled,
+    applySnapshot,
+    automaticActionsEnabled,
+    dispatchCombatBatch,
+    publishCombatFeedback,
+    runGameAction,
+  ]);
+
+  // Anything that takes the player off the rift — tab switch, backgrounding, or
+  // closing — must settle the accrued ticks before the next server snapshot
+  // arrives without them.
+  useEffect(() => {
+    if (!apiEnabled) {
+      return;
+    }
+
+    if (activeView !== 'rift') {
+      void dispatchCombatBatch(0);
+      return;
+    }
+
+    const flushOnHide = () => {
+      if (document.visibilityState === 'hidden') {
+        void dispatchCombatBatch(0);
+      }
+    };
+
+    document.addEventListener('visibilitychange', flushOnHide);
+    window.addEventListener('pagehide', flushOnHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide);
+      window.removeEventListener('pagehide', flushOnHide);
+    };
+  }, [activeView, apiEnabled, dispatchCombatBatch]);
 
   const summonHero = useCallback(async () => {
     if (snapshotRef.current.gems < GAME_BALANCE.summonCostGems) {
