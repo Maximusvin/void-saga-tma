@@ -866,6 +866,42 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
   }
 });
 
+test('advances through enemy waves before increasing the campaign stage', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 7,
+      activeHeroIds: [],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      enemyIndex: 0,
+      gems: 30,
+      gold: '1000',
+      heroes: [],
+      stage: 1,
+      summonPity: 0,
+      monsterMaxHealth: '1',
+      monsterHealth: '1',
+      lastSeenAt: now,
+      updatedAt: now,
+    }));
+  });
+  await page.goto('/');
+
+  await expect(page.locator('.stage-mark strong')).toHaveText('1');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 1/3');
+  await page.locator('.monster-button').click();
+
+  await expect(page.locator('.stage-mark strong')).toHaveText('1');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(page.locator('.rift-clear-banner')).toContainText('Enemy Defeated');
+  await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/3');
+  expect(pageErrors).toEqual([]);
+});
+
 test.describe('average Telegram Android performance profile', () => {
   test.use({
     deviceScaleFactor: 2,
@@ -889,6 +925,7 @@ test.describe('average Telegram Android performance profile', () => {
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
+        enemyIndex: 2,
         gems: 50,
         gold: '1000',
         heroes: [
@@ -949,17 +986,19 @@ test.describe('average Telegram Android performance profile', () => {
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.setViewportSize({ width: 360, height: 640 });
     await page.addInitScript(() => {
-      Math.random = () => 0.95;
+      Math.random = () => 0;
       const now = new Date().toISOString();
       localStorage.setItem('rift_heroes_save', JSON.stringify({
         schemaVersion: 4,
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
+        enemyIndex: 0,
         gems: 500,
         gold: '1000',
         heroes: [],
         stage: 1,
+        summonPity: 59,
         monsterMaxHealth: '100',
         monsterHealth: '100',
         lastSeenAt: now,
@@ -973,6 +1012,8 @@ test.describe('average Telegram Android performance profile', () => {
     const summonAction = page.locator('.summon-action');
     await expect(summonView).toHaveAttribute('data-render-quality', 'balanced');
     await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
+    await expect(summonAction).toContainText('Legendary guaranteed in 1');
+    await expect(summonView.getByText('2%', { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       getComputedStyle(document.querySelector('.app-shell')!).backgroundImage
     ))).toContain('/assets/summon/rift-sanctuary.webp');
@@ -1069,7 +1110,7 @@ test('boss attempt exposes phases and resets through the shared engine after enr
     const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
     return snapshot.monsterHealth;
   })).toBe('1034');
-  await expect(page.getByRole('timer')).toContainText(/3[45]s/);
+  await expect(page.getByRole('timer')).toContainText(/4[0-5]s/);
 });
 
 test('authoritative passive volleys animate every hero without overflowing the combat footer', async ({ page }) => {

@@ -3,8 +3,11 @@ import {
   HERO_RARITIES,
   SUMMON_POOL,
   getDuplicateShardReward,
-  getMonsterMaxHealth,
+  getEncounterMaxHealth,
+  getEnemiesInStage,
+  getSummonsUntilLegendaryPity,
   isBossStage,
+  normalizeEnemyIndex,
 } from './balance';
 import {
   addGameNumbers,
@@ -141,7 +144,8 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
   }
 
   const stage = normalizeInteger(value.stage, GAME_BALANCE.initialStage, GAME_BALANCE.initialStage);
-  const calculatedMonsterMaxHealth = getMonsterMaxHealth(stage);
+  const enemyIndex = normalizeEnemyIndex(stage, normalizeInteger(value.enemyIndex, 0, 0));
+  const calculatedMonsterMaxHealth = getEncounterMaxHealth(stage, enemyIndex);
   const parsedMonsterMaxHealth = tryParseGameNumber(value.monsterMaxHealth);
   const monsterMaxHealth = parsedMonsterMaxHealth && compareGameNumbers(parsedMonsterMaxHealth, 0) > 0
     ? parsedMonsterMaxHealth
@@ -162,6 +166,7 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
     bossEncounterEndsAt: isBossStage(stage) ? normalizeIsoTimestamp(value.bossEncounterEndsAt) : null,
     comboCount: normalizeInteger(value.comboCount, 0, 0),
     comboExpiresAt: typeof value.comboExpiresAt === 'string' ? value.comboExpiresAt : null,
+    enemyIndex,
     gems: normalizeInteger(value.gems, GAME_BALANCE.initialGems, 0),
     gold: parseGameNumber(value.gold, gameNumber(GAME_BALANCE.initialGold)),
     heroes,
@@ -172,6 +177,10 @@ export const normalizeGameSnapshot = (value: unknown): GameSnapshot | null => {
     monsterHealth,
     monsterMaxHealth,
     stage,
+    summonPity: Math.min(
+      normalizeInteger(value.summonPity, 0, 0),
+      GAME_BALANCE.legendaryPityPulls - 1,
+    ),
     updatedAt,
   };
 };
@@ -210,10 +219,23 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         return null;
       }
 
+      const stage = normalizeInteger(value.stage, 1, 1);
+      const nextStage = normalizeInteger(value.nextStage, 1, 1);
+      const stageCleared = typeof value.stageCleared === 'boolean'
+        ? value.stageCleared
+        : nextStage > stage;
+      const enemiesInStage = getEnemiesInStage(stage);
+
       return {
         type: 'monster_defeated',
-        stage: normalizeInteger(value.stage, 1, 1),
-        nextStage: normalizeInteger(value.nextStage, 1, 1),
+        enemiesInStage,
+        enemyIndex: normalizeEnemyIndex(stage, normalizeInteger(value.enemyIndex, 0, 0)),
+        nextEnemyIndex: stageCleared
+          ? 0
+          : normalizeEnemyIndex(stage, normalizeInteger(value.nextEnemyIndex, 0, 0)),
+        nextStage,
+        stage,
+        stageCleared,
         goldReward: parseGameNumber(value.goldReward),
         gemReward: normalizeInteger(value.gemReward, 0, 0),
       };
@@ -242,7 +264,13 @@ export const normalizeStoredGameEvent = (value: unknown): GameEvent | null => {
         hero,
         costGems: normalizeInteger(value.costGems, 0, 0),
         isDuplicate: value.isDuplicate === true,
+        legendaryPityTriggered: value.legendaryPityTriggered === true,
         shardsGranted: normalizeInteger(value.shardsGranted, 0, 0),
+        summonsUntilLegendaryPity: normalizeInteger(
+          value.summonsUntilLegendaryPity,
+          getSummonsUntilLegendaryPity(0),
+          1,
+        ),
       };
     }
     case 'hero_upgraded': {

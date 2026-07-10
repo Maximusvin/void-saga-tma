@@ -202,7 +202,7 @@ describe('game API persistence', () => {
           name: 'Void Grunt',
           power: gameNumber('2.12540502289226873016357e+9'),
           rarity: 'Common',
-          shards: 2,
+          shards: 3,
           templateId: 'void-grunt',
         }],
       });

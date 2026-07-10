@@ -45,7 +45,7 @@ export {
 export const GAME_BALANCE = {
   storageKey: 'rift_heroes_save',
   initialGold: 1000,
-  initialGems: 50,
+  initialGems: 30,
   initialStage: 1,
   baseMonsterHealth: STAGE_BANDS[0].baseMonsterHealth,
   monsterHealthGrowth: STAGE_BANDS[0].monsterHealthGrowth,
@@ -56,10 +56,10 @@ export const GAME_BALANCE = {
   comboMaxBonus: 2,
   comboDecayMs: 1500,
   comboDecayTickMs: 500,
-  killGoldMultiplier: 0.5,
+  killGoldMultiplier: 0.18,
   bossGoldMultiplier: STAGE_BANDS[0].boss.goldMultiplier,
   bossGemReward: STAGE_BANDS[0].boss.gemReward,
-  clickGoldMultiplier: 0.5,
+  clickGoldMultiplier: 0.1,
   passiveTickMs: 1000,
   // The client batches idle ticks instead of posting one request per second.
   maxPassiveTicksPerBatch: 10,
@@ -68,16 +68,22 @@ export const GAME_BALANCE = {
   passiveTickCatchUpMs: 15_000,
   offlineRewardMinSeconds: 60,
   offlineRewardMaxSeconds: 8 * 60 * 60,
-  offlineGoldPerPowerSecond: 0.05,
+  offlineGoldPerPowerSecond: 0.025,
   // Gold is still credited from 60s away, but the welcome-back modal only
   // interrupts the player after a meaningful absence so tab-aways stay silent.
   offlineRewardModalMinSeconds: 5 * 60,
   summonCostGems: 10,
+  legendaryPityPulls: 60,
   summonChargeMs: 1500,
   summonRevealMs: 1500,
   ascensionBaseLevelCap: 50,
   ascensionLevelsPerRank: 50,
-  ascensionShardCost: 2,
+  ascensionShardCostByRarity: {
+    Common: 3,
+    Rare: 2,
+    Epic: 2,
+    Legendary: 3,
+  },
   duplicateShardsByRarity: {
     Common: 1,
     Rare: 2,
@@ -88,9 +94,9 @@ export const GAME_BALANCE = {
   upgradeCostGrowth: 1.5,
   upgradeRarityCostMultiplier: {
     Common: 1,
-    Rare: 2,
-    Epic: 4,
-    Legendary: 10,
+    Rare: 1.8,
+    Epic: 3.4,
+    Legendary: 7,
   },
   upgradePowerMultiplier: 1.5,
   maxBulkUpgradeLevels: 50,
@@ -128,8 +134,25 @@ export const getBossPhaseForHealthPercent = (stage: number, healthPercent: numbe
 };
 
 export const getMonsterMaxHealth = (stage: number) => {
+  return getEncounterMaxHealth(stage, 0);
+};
+
+export const getEnemiesInStage = (stage: number) => {
+  const normalizedStage = normalizeStage(stage);
+  return isBossStage(normalizedStage)
+    ? 1
+    : getStageBandForStage(normalizedStage).normalEnemiesPerStage;
+};
+
+export const normalizeEnemyIndex = (stage: number, enemyIndex: number) => {
+  const normalizedIndex = Number.isFinite(enemyIndex) ? Math.max(0, Math.floor(enemyIndex)) : 0;
+  return Math.min(normalizedIndex, getEnemiesInStage(stage) - 1);
+};
+
+export const getEncounterMaxHealth = (stage: number, enemyIndex: number) => {
   const normalizedStage = normalizeStage(stage);
   const stageBand = getStageBandForStage(normalizedStage);
+  const normalizedEnemyIndex = normalizeEnemyIndex(normalizedStage, enemyIndex);
   const scaledHealth = floorGameNumber(
     multiplyGameNumbers(
       stageBand.baseMonsterHealth,
@@ -137,7 +160,12 @@ export const getMonsterMaxHealth = (stage: number) => {
     ),
   );
 
-  return multiplyGameNumbers(scaledHealth, isBossStage(normalizedStage) ? stageBand.boss.healthMultiplier : 1);
+  return multiplyGameNumbers(
+    scaledHealth,
+    isBossStage(normalizedStage)
+      ? stageBand.boss.healthMultiplier
+      : powGameNumber(stageBand.normalEnemyHealthGrowth, normalizedEnemyIndex),
+  );
 };
 
 export const getBaseClickPower = (heroes: Hero[]) => {
@@ -170,8 +198,8 @@ export const getHeroLevelCap = (hero: Pick<Hero, 'ascension'>) => {
     Math.max(0, Math.floor(hero.ascension)) * GAME_BALANCE.ascensionLevelsPerRank;
 };
 
-export const getAscensionShardCost = (_hero: Pick<Hero, 'ascension'>) => {
-  return GAME_BALANCE.ascensionShardCost;
+export const getAscensionShardCost = (hero: Pick<Hero, 'ascension' | 'rarity'>) => {
+  return GAME_BALANCE.ascensionShardCostByRarity[hero.rarity];
 };
 
 export const getDuplicateShardReward = (rarity: HeroRarity) => {
@@ -231,16 +259,28 @@ export const getSummonDropPercent = (template: SummonHeroTemplate) => {
   return Math.round(template.dropRate * 100);
 };
 
-export const rollSummonTemplate = (randomValue = Math.random()) => {
+export const getSummonsUntilLegendaryPity = (summonPity: number) => {
+  const normalizedPity = Number.isFinite(summonPity) ? Math.max(0, Math.floor(summonPity)) : 0;
+  return Math.max(1, GAME_BALANCE.legendaryPityPulls - normalizedPity);
+};
+
+export const rollSummonTemplate = (
+  randomValue = Math.random(),
+  guaranteedRarity?: HeroRarity,
+) => {
   const normalizedRoll = Math.max(0, Math.min(randomValue, 0.999999));
+  const pool = guaranteedRarity
+    ? SUMMON_POOL.filter(hero => hero.rarity === guaranteedRarity)
+    : SUMMON_POOL;
+  const totalRate = pool.reduce((total, hero) => total + hero.dropRate, 0);
   let cumulativeRate = 0;
 
-  for (const hero of SUMMON_POOL) {
-    cumulativeRate += hero.dropRate;
+  for (const hero of pool) {
+    cumulativeRate += hero.dropRate / totalRate;
     if (normalizedRoll < cumulativeRate) {
       return hero;
     }
   }
 
-  return SUMMON_POOL[SUMMON_POOL.length - 1];
+  return pool[pool.length - 1];
 };

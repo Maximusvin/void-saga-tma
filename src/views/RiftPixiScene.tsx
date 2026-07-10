@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, type Texture, type Ticker } from 'pixi.js';
-import { isBossStage } from '../game/balance';
+import { getEnemiesInStage, isBossStage } from '../game/balance';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import {
   getRiftEnemyVisual,
@@ -15,6 +15,7 @@ import { getBiomeForStage, type BiomeSpec } from '../game/biome';
 interface RiftPixiSceneProps {
   bossPhase: number;
   defeatSignal: number;
+  enemyIndex: number;
   enrageSignal: number;
   isBossDefeat: boolean;
   isBoss: boolean;
@@ -197,6 +198,7 @@ const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index
 export const RiftPixiScene = ({
   bossPhase,
   defeatSignal,
+  enemyIndex,
   enrageSignal,
   isBossDefeat,
   isBoss,
@@ -226,7 +228,8 @@ export const RiftPixiScene = ({
   const worldRef = useRef<{ world: RiftWorld; animateWorld: (ticker: Ticker) => void } | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
   const [renderedEnemy, setRenderedEnemy] = useState<RenderedEnemy | null>(null);
-  const visual = getRiftEnemyVisual(stage, isBoss);
+  const visualStage = isBoss ? stage : stage + enemyIndex;
+  const visual = getRiftEnemyVisual(visualStage, isBoss);
 
   useEffect(() => {
     bossPhaseRef.current = bossPhase;
@@ -266,8 +269,9 @@ export const RiftPixiScene = ({
         }
       });
 
-    const nextStage = stage + 1;
-    const nextVisual = getRiftEnemyVisual(nextStage, isBossStage(nextStage));
+    const hasNextEnemy = !isBoss && enemyIndex + 1 < getEnemiesInStage(stage);
+    const nextStage = hasNextEnemy ? stage + enemyIndex + 1 : stage + 1;
+    const nextVisual = getRiftEnemyVisual(nextStage, hasNextEnemy ? false : isBossStage(nextStage));
     if (nextVisual.asset !== visual.asset) {
       void Assets.load<Texture>(nextVisual.asset).catch(() => undefined);
     }
@@ -275,7 +279,7 @@ export const RiftPixiScene = ({
     return () => {
       active = false;
     };
-  }, [stage, visual]);
+  }, [enemyIndex, isBoss, stage, visual]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -317,6 +321,7 @@ export const RiftPixiScene = ({
         ? { layerCount: 2, propBudget: 8 }
         : { layerCount: 3, propBudget: 16 };
       const world = createRiftWorld(worldProfile);
+      world.container.alpha = renderProfileRef.current.quality === 'low' ? 0.1 : 0.14;
       app.stage.addChild(world.container);
 
       let fromBiome: BiomeSpec = getBiomeForStage(stageRef.current);
