@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Application, Assets, Container, Graphics, Sprite, type Texture, type Ticker } from 'pixi.js';
+import { Application, Assets, Container, Graphics, type Texture, type Ticker } from 'pixi.js';
 import { isBossStage } from '../game/balance';
+import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyRigMotion';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import {
   getRiftEnemyVisual,
@@ -11,16 +12,22 @@ import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 import { createShardPool, type ShardPool } from './shardPool';
 import { createRiftWorld, type RiftWorld } from './riftWorld';
 import { getBiomeForStage, type BiomeSpec } from '../game/biome';
+import {
+  createIronrootEnemyRig,
+  createStaticEnemyRig,
+  parseEnemyAtlasManifest,
+  type EnemyRig,
+  type LoadedEnemyRigAsset,
+} from './enemyRig';
 
 interface RiftPixiSceneProps {
   bossPhase: number;
+  critSignal: EnemyCritSignal;
   defeatSignal: number;
   enrageSignal: number;
+  impactSignal: EnemyImpactSignal;
   isBossDefeat: boolean;
   isBoss: boolean;
-  isHit: boolean;
-  isLastHitCrit: boolean;
-  hitSignal: number;
   stage: number;
 }
 
@@ -54,9 +61,18 @@ interface Shockwave {
 }
 
 interface RenderedEnemy {
+  rigAsset: LoadedEnemyRigAsset | null;
   texture: Texture | null;
   visual: RiftEnemyVisualSpec;
 }
+
+const loadManifest = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Enemy rig manifest request failed with ${response.status}.`);
+  }
+  return parseEnemyAtlasManifest(await response.json() as unknown);
+};
 
 const clampResolution = (resolutionCap: number) => (
   Math.min(window.devicePixelRatio || 1, resolutionCap)
@@ -196,13 +212,12 @@ const createShockwave = (palette: RiftEnemyPalette, isBossDefeat: boolean, index
 
 export const RiftPixiScene = ({
   bossPhase,
+  critSignal,
   defeatSignal,
   enrageSignal,
+  impactSignal,
   isBossDefeat,
   isBoss,
-  isHit,
-  isLastHitCrit,
-  hitSignal,
   stage,
 }: RiftPixiSceneProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -211,12 +226,12 @@ export const RiftPixiScene = ({
   const defeatSignalRef = useRef(defeatSignal);
   const enrageSignalRef = useRef(enrageSignal);
   const bossDefeatRef = useRef(isBossDefeat);
-  const hitRef = useRef(isHit);
-  const critRef = useRef(isLastHitCrit);
-  const hitSignalRef = useRef(hitSignal);
+  const impactSignalRef = useRef(impactSignal);
+  const critSignalRef = useRef(critSignal);
   const lastHandledDefeatSignalRef = useRef(defeatSignal);
   const lastHandledEnrageSignalRef = useRef(enrageSignal);
-  const lastHandledHitSignalRef = useRef(hitSignal);
+  const lastHandledImpactSignalRef = useRef(impactSignal.id);
+  const lastHandledCritSignalRef = useRef(critSignal.id);
   const sceneBuildCountRef = useRef(0);
   const stageRef = useRef(stage);
   const renderProfileRef = useRef(getGameRenderProfile());
@@ -243,33 +258,60 @@ export const RiftPixiScene = ({
   }, [enrageSignal]);
 
   useEffect(() => {
-    hitRef.current = isHit;
-  }, [isHit]);
+    impactSignalRef.current = impactSignal;
+  }, [impactSignal]);
 
   useEffect(() => {
-    critRef.current = isLastHitCrit;
-    hitSignalRef.current = hitSignal;
-  }, [hitSignal, isLastHitCrit]);
+    critSignalRef.current = critSignal;
+  }, [critSignal]);
 
   useEffect(() => {
     let active = true;
+    const loadVisual = async () => {
+      if (visual.rig?.kind === 'layered-pixi') {
+        const variant = renderProfileRef.current.quality === 'low' ? visual.rig.low : visual.rig.high;
+        try {
+          const [atlas, manifest] = await Promise.all([
+            Assets.load<Texture>(variant.atlas),
+            loadManifest(variant.manifest),
+          ]);
+          if (active) {
+            setRenderedEnemy({ rigAsset: { atlas, manifest }, texture: null, visual });
+          }
+          return;
+        } catch {
+          // A static production asset is always retained as the recoverable path.
+        }
+      }
 
-    void Assets.load<Texture>(visual.asset)
-      .then(texture => {
+      try {
+        const texture = await Assets.load<Texture>(visual.asset);
         if (active) {
-          setRenderedEnemy({ texture, visual });
+          setRenderedEnemy({ rigAsset: null, texture, visual });
         }
-      })
-      .catch(() => {
+      } catch {
         if (active) {
-          setRenderedEnemy({ texture: null, visual });
+          setRenderedEnemy({ rigAsset: null, texture: null, visual });
         }
-      });
+      }
+    };
+
+    void loadVisual();
 
     const nextStage = stage + 1;
     const nextVisual = getRiftEnemyVisual(nextStage, isBossStage(nextStage));
-    if (nextVisual.asset !== visual.asset) {
-      void Assets.load<Texture>(nextVisual.asset).catch(() => undefined);
+    const nextRigVariant = nextVisual.rig?.kind === 'layered-pixi'
+      ? renderProfileRef.current.quality === 'low' ? nextVisual.rig.low : nextVisual.rig.high
+      : null;
+    const nextPrimaryAsset = nextRigVariant?.atlas ?? nextVisual.asset;
+    const currentPrimaryAsset = visual.rig?.kind === 'layered-pixi'
+      ? (renderProfileRef.current.quality === 'low' ? visual.rig.low : visual.rig.high).atlas
+      : visual.asset;
+    if (nextPrimaryAsset !== currentPrimaryAsset) {
+      void Assets.load<Texture>(nextPrimaryAsset).catch(() => undefined);
+      if (nextRigVariant) {
+        void loadManifest(nextRigVariant.manifest).catch(() => undefined);
+      }
     }
 
     return () => {
@@ -412,6 +454,9 @@ export const RiftPixiScene = ({
     const scene = new Container();
     const resolvedTexture = renderedEnemy.texture;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const runtimeAssetUrl = renderedEnemy.rigAsset && sceneVisual.rig?.kind === 'layered-pixi'
+      ? (renderProfile.quality === 'low' ? sceneVisual.rig.low : sceneVisual.rig.high).atlas
+      : resolvedTexture ? sceneVisual.asset : null;
 
       const ringBack = new Graphics()
         .circle(0, 0, 122)
@@ -429,10 +474,11 @@ export const RiftPixiScene = ({
       let coreGlow: Graphics | null = null;
       let leftWing: Graphics | null = null;
       let rightWing: Graphics | null = null;
+      let enemyRig: EnemyRig | null = null;
 
       beast.addChild(shadow);
 
-      if (!resolvedTexture) {
+      if (!resolvedTexture && !renderedEnemy.rigAsset) {
         const proceduralArt = new Container();
         leftWing = buildWing(-1, palette.wing, palette.glow, sceneVisual.wingSpread);
         rightWing = buildWing(1, palette.wing, palette.glow, sceneVisual.wingSpread);
@@ -485,22 +531,19 @@ export const RiftPixiScene = ({
         beast.addChild(proceduralArt);
       }
 
-      let enemyArt: Sprite | null = null;
-      let enemyHitFlash: Sprite | null = null;
+      if (renderedEnemy.rigAsset && sceneVisual.rig?.kind === 'layered-pixi') {
+        enemyRig = createIronrootEnemyRig(renderedEnemy.rigAsset, sceneVisual, reduceMotion);
+        beast.addChild(enemyRig.container);
+      } else if (resolvedTexture) {
+        enemyRig = createStaticEnemyRig(resolvedTexture, sceneVisual);
+        beast.addChild(enemyRig.container);
+      }
 
-      if (resolvedTexture) {
-        const artScale = sceneVisual.artHeight / resolvedTexture.height;
-        enemyArt = new Sprite(resolvedTexture);
-        enemyArt.anchor.set(0.5, sceneVisual.artAnchorY);
-        enemyArt.scale.set(artScale);
-
-        enemyHitFlash = new Sprite(resolvedTexture);
-        enemyHitFlash.anchor.set(0.5, sceneVisual.artAnchorY);
-        enemyHitFlash.scale.set(artScale);
-        enemyHitFlash.blendMode = 'add';
-        enemyHitFlash.alpha = 0;
-
-        beast.addChild(enemyArt, enemyHitFlash);
+      if (hostRef.current) {
+        hostRef.current.dataset.enemyRig = enemyRig?.kind ?? 'procedural-fallback';
+        hostRef.current.dataset.hitReactionPhase = 'idle';
+        hostRef.current.dataset.hitDirection = 'center';
+        hostRef.current.dataset.rigRootScale = enemyRig ? enemyRig.debugState().rootScale.toFixed(4) : '1.0000';
       }
 
       const particleCount = scaleEffectCount(sceneVisual.particleCount, renderProfile.particleScale, 8);
@@ -528,8 +571,11 @@ export const RiftPixiScene = ({
     };
     const shockwaves = new Container();
     const activeShockwaves: Shockwave[] = [];
+    let impactEnergy = 0;
+    let critEnergy = 0;
     let deathEnergy = 0;
     let enrageEnergy = 0;
+    let lastRigDebugKey = '';
 
     scene.addChild(halo, ringBack, ringFront, ...particles.map(particle => particle.graphic), beast, shockwaves, impacts);
     app.stage.addChild(scene);
@@ -549,14 +595,24 @@ export const RiftPixiScene = ({
           : 1;
         const phaseIntensity = 1 + (normalizedBossPhase - 1) * 0.14;
 
-        const impact = hitRef.current ? 1 : 0;
-        const hasNewHit = hitSignalRef.current !== lastHandledHitSignalRef.current;
+        const hasNewImpact = impactSignalRef.current.id !== lastHandledImpactSignalRef.current;
+        const hasNewCrit = critSignalRef.current.id !== lastHandledCritSignalRef.current;
         const hasNewDefeat = defeatSignalRef.current !== lastHandledDefeatSignalRef.current;
         const hasNewEnrage = enrageSignalRef.current !== lastHandledEnrageSignalRef.current;
 
-        if (hasNewHit) {
-          spawnImpactBurst(shardPool, impactParticles, palette, critRef.current, renderProfile.burstScale);
-          lastHandledHitSignalRef.current = hitSignalRef.current;
+        if (hasNewImpact) {
+          impactEnergy = Math.min(1.4, impactEnergy + 1);
+          enemyRig?.applyImpact(impactSignalRef.current);
+          spawnImpactBurst(shardPool, impactParticles, palette, false, renderProfile.burstScale);
+          lastHandledImpactSignalRef.current = impactSignalRef.current.id;
+          reportShardPool();
+        }
+
+        if (hasNewCrit) {
+          critEnergy = 1;
+          enemyRig?.applyCrit(critSignalRef.current);
+          spawnImpactBurst(shardPool, impactParticles, palette, true, renderProfile.burstScale);
+          lastHandledCritSignalRef.current = critSignalRef.current.id;
           reportShardPool();
         }
 
@@ -568,6 +624,7 @@ export const RiftPixiScene = ({
 
           lastHandledDefeatSignalRef.current = defeatSignalRef.current;
           deathEnergy = isBossDeath ? 1.35 : 1;
+          enemyRig?.beginDeath();
           activeShockwaves.push(...waves);
           shockwaves.addChild(...waves.map(wave => wave.graphic));
           reportShardPool();
@@ -585,6 +642,7 @@ export const RiftPixiScene = ({
           reportShardPool();
         }
 
+        const impact = Math.min(1, impactEnergy);
         const bossPulse = (sceneIsBoss ? 1.12 : 1) * phaseIntensity;
         const breath = reduceMotion ? 1 : 1 + Math.sin(elapsed * (2.2 * phaseIntensity)) * (0.035 * phaseIntensity);
         const hitSquash = impact ? 0.88 + Math.sin(elapsed * 36) * 0.035 : 1;
@@ -595,7 +653,10 @@ export const RiftPixiScene = ({
         const ringBackWave = reduceMotion ? 0 : Math.sin(elapsed * 1.2) * 0.035;
         const ringFrontWave = reduceMotion ? 0 : Math.cos(elapsed * 1.5) * 0.045;
         halo.scale.set((1 + haloWave + deathPulse * 0.22 + enragePulse * 0.16) * bossPulse);
-        halo.alpha = Math.min(0.82, (impact ? 0.32 : 0.18 + haloWave * 0.6) + deathPulse * 0.28 + enragePulse * 0.38);
+        halo.alpha = Math.min(
+          0.82,
+          (impact ? 0.32 : 0.18 + haloWave * 0.6) + critEnergy * 0.18 + deathPulse * 0.28 + enragePulse * 0.38,
+        );
         if (!reduceMotion) {
           ringBack.rotation += 0.004 * phaseIntensity * ticker.deltaTime;
           ringFront.rotation -= 0.006 * phaseIntensity * ticker.deltaTime;
@@ -603,16 +664,36 @@ export const RiftPixiScene = ({
         ringBack.scale.set(1 + ringBackWave + deathPulse * 0.16);
         ringFront.scale.set(1 + ringFrontWave + deathPulse * 0.1);
 
-        beast.y = (reduceMotion ? 0 : Math.sin(elapsed * 2.4) * 7) - impact * 7;
-        beast.x = impact ? Math.sin(elapsed * 42) * 9 : 0;
-        beast.rotation = (reduceMotion ? 0 : Math.sin(elapsed * 1.7) * 0.018) + (impact ? Math.sin(elapsed * 44) * 0.05 : 0) + deathPulse * Math.sin(elapsed * 28) * 0.09;
-        beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14 + enragePulse * 0.08));
-        beast.alpha = Math.max(0.38, 1 - deathPulse * 0.28);
-
-        if (enemyArt && enemyHitFlash) {
-          enemyArt.skew.x = reduceMotion ? 0 : Math.sin(elapsed * 1.3) * 0.008;
-          enemyHitFlash.skew.x = enemyArt.skew.x;
-          enemyHitFlash.alpha = Math.min(0.84, impact * (critRef.current ? 0.72 : 0.42) + deathPulse * 0.38 + enragePulse * 0.56);
+        if (enemyRig) {
+          const rigLayoutScale = enemyRig.kind === 'layered-pixi'
+            ? Math.min(1, Math.max(0.76, (app.screen.height - 24) / sceneVisual.artHeight))
+            : 1;
+          beast.position.set(0, 0);
+          beast.rotation = 0;
+          beast.scale.set(rigLayoutScale);
+          beast.alpha = 1;
+          enemyRig.update({
+            deltaSeconds: Math.min(0.05, ticker.deltaMS / 1000),
+            elapsedSeconds: elapsed,
+            enrageEnergy: enragePulse,
+            reduceMotion,
+          });
+          const debug = enemyRig.debugState();
+          const debugKey = `${debug.phase}:${debug.direction}:${debug.rootScale.toFixed(4)}`;
+          if (debugKey !== lastRigDebugKey && hostRef.current) {
+            lastRigDebugKey = debugKey;
+            hostRef.current.dataset.hitReactionPhase = debug.phase;
+            hostRef.current.dataset.hitDirection = debug.direction;
+            hostRef.current.dataset.rigRootScale = debug.rootScale.toFixed(4);
+          }
+        } else {
+          beast.y = (reduceMotion ? 0 : Math.sin(elapsed * 2.4) * 7) - impact * 7;
+          beast.x = impact ? Math.sin(elapsed * 42) * 9 : 0;
+          beast.rotation = (reduceMotion ? 0 : Math.sin(elapsed * 1.7) * 0.018)
+            + (impact ? Math.sin(elapsed * 44) * 0.05 : 0)
+            + deathPulse * Math.sin(elapsed * 28) * 0.09;
+          beast.scale.set(breath * hitSquash * (1 + deathPulse * 0.14 + enragePulse * 0.08));
+          beast.alpha = Math.max(0.38, 1 - deathPulse * 0.28);
         }
 
         if (core && coreGlow && leftWing && rightWing) {
@@ -668,6 +749,8 @@ export const RiftPixiScene = ({
           }
         }
 
+        impactEnergy = Math.max(0, impactEnergy - ticker.deltaMS / 340);
+        critEnergy = Math.max(0, critEnergy - ticker.deltaMS / 220);
         deathEnergy = Math.max(0, deathEnergy - ticker.deltaMS / (bossDefeatRef.current ? 920 : 680));
         enrageEnergy = Math.max(0, enrageEnergy - ticker.deltaMS / 760);
     };
@@ -679,7 +762,14 @@ export const RiftPixiScene = ({
       // detached, so it needs an explicit sweep to avoid leaking GPU buffers
       // across every stage rebuild.
       shardPool.destroy();
+      if (enemyRig) {
+        beast.removeChild(enemyRig.container);
+        enemyRig.destroy();
+      }
       cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
+      if (runtimeAssetUrl) {
+        void Assets.unload(runtimeAssetUrl).catch(() => undefined);
+      }
     };
   }, [renderedEnemy, rendererReady]);
 
@@ -687,7 +777,9 @@ export const RiftPixiScene = ({
     <div
       ref={hostRef}
       className="rift-pixi-scene"
-      data-art-loaded={renderedEnemy?.visual.asset === visual.asset && renderedEnemy.texture ? 'true' : 'false'}
+      data-art-loaded={
+        renderedEnemy?.visual.id === visual.id && (renderedEnemy.texture || renderedEnemy.rigAsset) ? 'true' : 'false'
+      }
       data-enemy-id={visual.id}
       data-render-quality={renderProfileRef.current.quality}
       aria-hidden="true"

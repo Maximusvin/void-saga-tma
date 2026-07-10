@@ -8,6 +8,17 @@ export interface RiftEnemyPalette {
   wing: number;
 }
 
+export interface RiftEnemyRigVariant {
+  atlas: string;
+  manifest: string;
+}
+
+export interface RiftEnemyRigSpec {
+  high: RiftEnemyRigVariant;
+  kind: 'layered-pixi';
+  low: RiftEnemyRigVariant;
+}
+
 export interface RiftEnemyVisualSpec {
   id: string;
   name: string;
@@ -29,6 +40,7 @@ export interface RiftEnemyVisualSpec {
   hornHeight: number;
   particleCount: number;
   wingSpread: number;
+  rig?: RiftEnemyRigSpec;
 }
 
 const ENEMY_VISUALS = [
@@ -79,6 +91,17 @@ const ENEMY_VISUALS = [
     hornHeight: 48,
     particleCount: 19,
     wingSpread: 68,
+    rig: {
+      kind: 'layered-pixi',
+      high: {
+        atlas: '/assets/rift/ironroot-rig/ironroot-atlas-high.webp',
+        manifest: '/assets/rift/ironroot-rig/ironroot-atlas-high.json',
+      },
+      low: {
+        atlas: '/assets/rift/ironroot-rig/ironroot-atlas-low.webp',
+        manifest: '/assets/rift/ironroot-rig/ironroot-atlas-low.json',
+      },
+    },
   },
   {
     id: 'ashveil-oracle',

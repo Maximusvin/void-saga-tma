@@ -16,6 +16,7 @@ import {
   gameNumberToPercent,
   type GameNumber,
 } from '../game/gameNumber';
+import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyRigMotion';
 import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
 import { getBiomeForStage, getBiomeIndexForStage, getStageRole } from '../game/biome';
 import { getGameRenderProfile } from '../utils/renderQuality';
@@ -141,8 +142,15 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [damagePops, setDamagePops] = useState<DamagePop[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [isHit, setIsHit] = useState(false);
-  const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
+  const [impactState, setImpactState] = useState<EnemyImpactSignal>({
+    id: 0,
+    normalizedX: 0,
+    normalizedY: 0,
+    source: 'tap',
+  });
+  const [critState, setCritState] = useState<EnemyCritSignal>({ id: 0, impactId: 0 });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const [enemySceneStage, setEnemySceneStage] = useState(stage);
   const [biomeEnter, setBiomeEnter] = useState<{ id: string; name: string } | null>(null);
   const [visiblePassiveVolleySignal, setVisiblePassiveVolleySignal] = useState<number | null>(null);
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
@@ -156,6 +164,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const lastHandledPassiveVolleySignalRef = useRef(passiveVolleySignal);
   const lastDefeatStageRef = useRef<number | null>(null);
   const clickCounterRef = useRef(0);
+  const impactCounterRef = useRef(0);
   const hitResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
 
@@ -201,6 +210,24 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, [bossEnrageSignal, scheduleTimeout]);
 
   useEffect(() => {
+    if (enemySceneStage === stage) {
+      return;
+    }
+
+    const defeatedVisual = getRiftEnemyVisual(enemySceneStage, isBossStage(enemySceneStage));
+    if (stage > enemySceneStage && defeatedVisual.rig?.kind === 'layered-pixi') {
+      const activeTimeouts = timeoutsRef.current;
+      const timeout = scheduleTimeout(() => setEnemySceneStage(stage), 700);
+      return () => {
+        clearTimeout(timeout);
+        activeTimeouts.delete(timeout);
+      };
+    }
+
+    setEnemySceneStage(stage);
+  }, [enemySceneStage, scheduleTimeout, stage]);
+
+  useEffect(() => {
     if (
       passiveVolleySignal === lastHandledPassiveVolleySignalRef.current ||
       passiveVolleyHeroContributions.length === 0
@@ -237,7 +264,13 @@ export const TheRift: React.FC<TheRiftProps> = ({
     scheduleTimeout(() => {
       setProjectiles(current => current.filter(projectile => projectile.volleySignal !== passiveVolleySignal));
       flashHit();
-      setImpactState(current => ({ id: current.id + 1, isCrit: false }));
+      impactCounterRef.current += 1;
+      setImpactState({
+        id: impactCounterRef.current,
+        normalizedX: 0,
+        normalizedY: 0,
+        source: 'passive',
+      });
     }, GAME_BALANCE.passiveVolleyTravelMs);
     scheduleTimeout(() => {
       setVisiblePassiveVolleySignal(current => current === passiveVolleySignal ? null : current);
@@ -336,9 +369,16 @@ export const TheRift: React.FC<TheRiftProps> = ({
     };
   }, [defeatTransition, scheduleTimeout]);
 
-  const attackAt = (clientX: number, clientY: number) => {
+  const attackAt = (clientX: number, clientY: number, bounds: DOMRect) => {
     const clickId = clickCounterRef.current;
     clickCounterRef.current += 1;
+    impactCounterRef.current += 1;
+    const impactSignal: EnemyImpactSignal = {
+      id: impactCounterRef.current,
+      normalizedX: Math.min(1, Math.max(-1, ((clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1)),
+      normalizedY: Math.min(1, Math.max(-1, ((clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1)),
+      source: 'tap',
+    };
 
     void dealDamage().then(events => {
       const hitEvent = getTapHitEvent(events);
@@ -359,7 +399,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
         if (hitEvent.isCrit) {
           triggerHaptic('heavy');
-          setImpactState(current => ({ id: current.id + 1, isCrit: true }));
+          setCritState(current => ({ id: current.id + 1, impactId: impactSignal.id }));
         }
       }
       if (defeatedEvent) {
@@ -369,14 +409,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
     registerHit();
     triggerHaptic(isBoss ? 'medium' : 'light');
     flashHit();
-    setImpactState(current => ({ id: current.id + 1, isCrit: false }));
+    setImpactState(impactSignal);
   };
 
   const handleAttack = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.cancelable) {
       event.preventDefault();
     }
-    attackAt(event.clientX, event.clientY);
+    attackAt(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
   };
 
   const handleAttackKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -386,12 +426,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
-    attackAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+    attackAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2, bounds);
   };
 
   const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
   const enemyVisual = getRiftEnemyVisual(stage, isBoss);
+  const usesLayeredRig = enemyVisual.rig?.kind === 'layered-pixi';
+  const enemySceneIsBoss = isBossStage(enemySceneStage);
   const stageRole = getStageRole(stage);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
   const bossPhases = getStageBandForStage(stage).boss.phases;
@@ -495,7 +537,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
         <motion.button
           type="button"
           aria-label={`Attack ${enemyVisual.name}`}
-          className={`monster-button ${isHit ? 'hit' : ''}`}
+          className={`monster-button ${isHit && !usesLayeredRig ? 'hit' : ''}`}
           onPointerDown={handleAttack}
           onKeyDown={handleAttackKeyDown}
         >
@@ -503,7 +545,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
           <span className="monster-ring inner" />
           <motion.span
             className="rift-beast-shell"
-            animate={isHit
+            animate={isHit && !usesLayeredRig
               ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] }
               : { scale: 1, rotate: 0 }}
             transition={{
@@ -514,15 +556,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
           >
             <Suspense fallback={<span className="rift-pixi-loading" />}>
               <RiftPixiScene
+                critSignal={critState}
                 defeatSignal={defeatTransition?.id ?? 0}
                 enrageSignal={bossEnrageSignal}
-                hitSignal={impactState.id}
+                impactSignal={impactState}
                 bossPhase={bossPhaseIndex}
-                isBoss={isBoss}
+                isBoss={enemySceneIsBoss}
                 isBossDefeat={defeatTransition?.wasBoss ?? false}
-                isHit={isHit}
-                isLastHitCrit={impactState.isCrit}
-                stage={stage}
+                stage={enemySceneStage}
               />
             </Suspense>
           </motion.span>
