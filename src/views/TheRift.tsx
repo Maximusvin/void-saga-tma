@@ -433,10 +433,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
         <div className="combat-dashboard">
           <div className={`encounter-rank ${isBoss ? 'boss' : ''} ${stageRole === 'mini-boss' ? 'elite' : ''}`}>
             {isBoss && <Crown size={14} aria-hidden="true" />}
-            <span>
-              {stageRole === 'mini-boss' && <em className="elite-tag">Elite</em>}
-              {isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}
-            </span>
+            {stageRole === 'mini-boss' && <em className="elite-tag">Elite</em>}
+            <span>{isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}</span>
           </div>
           <div className="combat-status-right">
             {isBoss && (

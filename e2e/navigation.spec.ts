@@ -802,9 +802,9 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
   await expect(page.locator('.rift-pixi-canvas')).toHaveCount(1);
   await expect(page.locator('.rift-pixi-scene')).toHaveAttribute('data-enemy-id', 'mirefang-stalker');
   await expect(page.locator('.rift-pixi-scene')).toHaveAttribute('data-art-loaded', 'true');
-  await expect.poll(() => page.evaluate(() => {
-    return getComputedStyle(document.querySelector('.app-shell')!).backgroundImage;
-  })).toContain('/assets/rift/luminous-verge.webp');
+  // The rift background is now the procedural biome world, not a static backdrop
+  // image, so the scene advertises which biome it is rendering.
+  await expect(page.locator('.rift-pixi-scene')).toHaveAttribute('data-biome', 'luminous-verge');
 
   for (const viewport of [{ width: 390, height: 720 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(viewport);
