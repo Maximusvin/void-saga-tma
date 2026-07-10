@@ -126,7 +126,7 @@ Hero collection використовує оптимізовані WebP portrait 
 - Telegram account і realm character розділені: кожен `S-*` має окремий snapshot/outbox, а merge змінює canonical realm без переписування прогресу. Рішення описане в [`docs/adr/0002-logical-realm-servers.md`](docs/adr/0002-logical-realm-servers.md).
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
-- UI використовує всю доступну площу Telegram WebView, враховує content safe area та запитує fullscreen у Telegram Bot API 8.0+ з безпечним modal fallback для старіших клієнтів. Нижня навігація має окремі DOM-підписи для майбутньої локалізації; іконки не містять вбудованого тексту.
+- UI використовує всю доступну площу мобільного Telegram WebView, враховує content safe area та запитує fullscreen у Telegram Bot API 8.0+ лише на Android/iOS. Telegram Desktop не отримує fullscreen-запит і рендерить інтерактивну гру в центрованому `430x900` phone viewport поверх повноекранного декоративного фону; portal-екрани дотримуються тієї самої межі. Нижня навігація має окремі DOM-підписи для майбутньої локалізації; іконки не містять вбудованого тексту.
 - UI оптимізований під мобільний і stable Telegram viewport, але ще потребує окремої Telegram theme-політики перед публічним запуском.
 
 ## Backend API

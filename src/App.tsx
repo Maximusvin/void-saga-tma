@@ -6,7 +6,6 @@ import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { RealmSwitcher } from './components/RealmSwitcher';
 import { TheRift } from './views/TheRift';
-import { initializeTelegramApp } from './utils/telegram';
 import { Suspense, lazy, useEffect, useState, type CSSProperties } from 'react';
 import './App.css';
 
@@ -18,9 +17,6 @@ const LeaguesHall = lazy(() => import('./views/LeaguesHall').then(m => ({ defaul
 
 function App() {
   const [realmSwitcherOpen, setRealmSwitcherOpen] = useState(false);
-  useEffect(() => {
-    initializeTelegramApp();
-  }, []);
 
   // Warm the lazy view chunks once the rift is interactive, so switching tabs
   // never waits on a network round trip.

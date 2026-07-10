@@ -18,6 +18,7 @@ interface TelegramSafeAreaInset {
 interface TelegramWebApp {
   HapticFeedback?: TelegramHapticFeedback;
   contentSafeAreaInset?: TelegramSafeAreaInset;
+  exitFullscreen?: () => void;
   initData?: string;
   initDataUnsafe?: {
     user?: {
@@ -30,6 +31,7 @@ interface TelegramWebApp {
   };
   isFullscreen?: boolean;
   onEvent?: (eventType: string, eventHandler: () => void) => void;
+  platform?: string;
   ready?: () => void;
   safeAreaInset?: TelegramSafeAreaInset;
   expand?: () => void;
@@ -45,6 +47,8 @@ interface TelegramWebApp {
 let telegramInitialized = false;
 
 const FULLSCREEN_CONTROL_FALLBACK_TOP = 48;
+const MOBILE_TELEGRAM_PLATFORMS = new Set(['android', 'android_x', 'ios']);
+const MOBILE_LAYOUT_MAX_WIDTH = 600;
 
 const RUNTIME_INSET_PROPERTIES = {
   contentBottom: '--app-runtime-content-safe-area-inset-bottom',
@@ -74,8 +78,11 @@ const toCssPixelValue = (value: number | undefined) => {
  */
 const getContentSafeAreaTop = (webApp: TelegramWebApp | undefined) => {
   const contentTop = webApp?.contentSafeAreaInset?.top ?? 0;
+  const mobileTelegram = MOBILE_TELEGRAM_PLATFORMS.has(
+    webApp?.platform?.trim().toLowerCase() ?? '',
+  );
 
-  if (webApp?.isFullscreen && contentTop <= 0) {
+  if (mobileTelegram && webApp?.isFullscreen && contentTop <= 0) {
     return FULLSCREEN_CONTROL_FALLBACK_TOP;
   }
 
@@ -101,12 +108,24 @@ const getStableViewportHeight = (webApp: TelegramWebApp | undefined) => {
   return null;
 };
 
+const getAppLayout = (webApp: TelegramWebApp | undefined) => {
+  const platform = webApp?.platform?.trim().toLowerCase();
+  if (platform && platform !== 'unknown') {
+    return MOBILE_TELEGRAM_PLATFORMS.has(platform) ? 'mobile' : 'desktop';
+  }
+
+  return typeof window !== 'undefined' && window.innerWidth <= MOBILE_LAYOUT_MAX_WIDTH
+    ? 'mobile'
+    : 'desktop';
+};
+
 const syncTelegramViewportTokens = (webApp: TelegramWebApp | undefined) => {
   if (typeof document === 'undefined') {
     return;
   }
 
   const rootStyle = document.documentElement.style;
+  document.documentElement.dataset.appLayout = getAppLayout(webApp);
   const safeArea = webApp?.safeAreaInset;
   const contentSafeArea = webApp?.contentSafeAreaInset;
 
@@ -186,8 +205,15 @@ export const initializeTelegramApp = () => {
     if (webApp?.isVersionAtLeast?.('7.7')) {
       webApp.disableVerticalSwipes?.();
     }
-    if (webApp?.isVersionAtLeast?.('8.0') && !webApp.isFullscreen) {
-      webApp.requestFullscreen?.();
+    if (webApp?.isVersionAtLeast?.('8.0')) {
+      const mobileTelegram = MOBILE_TELEGRAM_PLATFORMS.has(
+        webApp.platform?.trim().toLowerCase() ?? '',
+      );
+      if (mobileTelegram && !webApp.isFullscreen) {
+        webApp.requestFullscreen?.();
+      } else if (!mobileTelegram && webApp.isFullscreen) {
+        webApp.exitFullscreen?.();
+      }
     }
   } catch {
     // Telegram bridge methods can throw in non-Telegram browser previews.
