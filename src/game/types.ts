@@ -2,7 +2,7 @@ import type { GameNumber } from './gameNumber';
 
 export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type HeroUpgradeAmount = 1 | 10 | 'max';
-export type ActiveView = 'rift' | 'summon' | 'roster';
+export type ActiveView = 'rift' | 'summon' | 'leagues' | 'roster';
 export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
 export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
 export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';

@@ -1,0 +1,301 @@
+.leagues-view {
+  position: relative;
+  padding: 6px var(--screen-gutter) 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: #ffffff;
+}
+
+.leagues-view::before {
+  content: '';
+  position: absolute;
+  inset: 4% -18% auto;
+  height: 260px;
+  background: radial-gradient(ellipse, rgba(255, 216, 126, 0.18), rgba(99, 224, 202, 0.1) 34%, transparent 68%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.leagues-content {
+  position: relative;
+  width: min(100%, 520px);
+  min-height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.leagues-heading {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 5px 0 13px;
+  text-align: center;
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.52);
+}
+
+.leagues-kicker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffe29a;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.leagues-heading h1 {
+  font-size: clamp(1.75rem, 8vw, 2.45rem);
+  line-height: 1;
+}
+
+.leagues-season {
+  color: rgba(227, 248, 241, 0.68);
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.league-status-band {
+  position: relative;
+  min-height: 142px;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(255, 229, 164, 0.36);
+  border-radius: 8px;
+  background:
+    linear-gradient(128deg, rgba(255, 216, 126, 0.14), transparent 38%),
+    linear-gradient(300deg, rgba(107, 232, 207, 0.12), transparent 42%),
+    rgba(5, 18, 23, 0.76);
+  box-shadow: 0 18px 42px rgba(1, 8, 12, 0.36), inset 0 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(17px) saturate(1.16);
+  -webkit-backdrop-filter: blur(17px) saturate(1.16);
+}
+
+.league-crest {
+  position: relative;
+  width: 78px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #ffe29a;
+  border: 1px solid rgba(255, 230, 167, 0.5);
+  border-radius: 8px 8px 22px 22px;
+  background: linear-gradient(160deg, rgba(95, 68, 111, 0.92), rgba(19, 68, 70, 0.94));
+  box-shadow: 0 0 24px rgba(255, 216, 126, 0.18), inset 0 0 20px rgba(255, 255, 255, 0.06);
+}
+
+.league-crest::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(255, 239, 197, 0.22);
+  border-radius: 5px 5px 17px 17px;
+}
+
+.league-crest-rays {
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(from 0deg, transparent, rgba(255, 226, 152, 0.12), transparent 20% 50%, rgba(119, 255, 227, 0.12), transparent 70%);
+}
+
+.league-crest svg {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 10px rgba(255, 218, 126, 0.48));
+}
+
+.league-standing {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.league-standing span,
+.league-standing small {
+  color: rgba(222, 245, 239, 0.66);
+  font-size: 0.58rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.league-standing strong {
+  color: #ffffff;
+  font-size: 1.32rem;
+  line-height: 1;
+}
+
+.league-standing small {
+  color: #ffe29a;
+}
+
+.league-readiness {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.league-readiness > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 5px;
+  padding: 7px;
+  border-top: 1px solid rgba(204, 255, 242, 0.16);
+  color: #75f6de;
+}
+
+.league-readiness span {
+  overflow: hidden;
+  color: rgba(221, 244, 238, 0.62);
+  font-size: 0.54rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.league-readiness strong {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.division-path {
+  margin-top: 12px;
+}
+
+.division-path > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  padding-inline: 2px;
+}
+
+.division-path > header div {
+  display: grid;
+  gap: 1px;
+}
+
+.division-path > header span {
+  color: rgba(221, 244, 238, 0.62);
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.division-path > header strong {
+  font-size: 0.94rem;
+}
+
+.division-count {
+  color: #ffe29a !important;
+}
+
+.division-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.division-tile {
+  --division-color: #c28a61;
+  min-width: 0;
+  min-height: 67px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid rgba(207, 166, 120, 0.38);
+  border-color: color-mix(in srgb, var(--division-color) 42%, transparent);
+  border-radius: 8px;
+  background: rgba(4, 17, 21, 0.78);
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--division-color) 20%, transparent), transparent 58%),
+    rgba(4, 17, 21, 0.7);
+  color: var(--division-color);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.division-tile.silver { --division-color: #d8e7e6; }
+.division-tile.gold { --division-color: #ffdb7c; }
+.division-tile.mythic { --division-color: #dc9bff; }
+
+.division-emblem {
+  width: 34px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-bottom: 1px solid currentColor;
+  filter: drop-shadow(0 0 8px rgba(255, 220, 156, 0.28));
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--division-color) 55%, transparent));
+}
+
+.division-tile strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.league-season-state {
+  min-height: 39px;
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(210, 255, 244, 0.16);
+  color: #75f6de;
+}
+
+.league-season-state span {
+  color: rgba(221, 244, 238, 0.66);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.league-season-state strong {
+  color: #ffe29a;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+@media (max-height: 620px) {
+  .leagues-heading {
+    padding-block: 2px 8px;
+  }
+
+  .league-status-band {
+    min-height: 126px;
+    padding-block: 8px;
+  }
+
+  .league-crest {
+    height: 76px;
+  }
+
+  .division-tile {
+    min-height: 58px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leagues-view {
+    scroll-behavior: auto;
+  }
+}

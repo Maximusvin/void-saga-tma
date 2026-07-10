@@ -93,6 +93,7 @@ npm run balance:simulate
 - `src/views/TheRift.tsx` - основний бойовий екран.
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - список героїв і upgrade.
+- `src/views/LeaguesHall.tsx` - чесний preseason-екран майбутніх асинхронних ліг без вигаданих рейтингів до появи серверного сезону.
 - `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
 - `src/observability/` - privacy-safe client error contract і доставлення Telegram-authenticated telemetry у backend runtime logs.
 
@@ -118,6 +119,7 @@ npm run balance:simulate
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
+- UI використовує всю доступну площу Telegram WebView, враховує content safe area та запитує fullscreen у Telegram Bot API 8.0+ з безпечним modal fallback для старіших клієнтів. Нижня навігація має окремі DOM-підписи для майбутньої локалізації; іконки не містять вбудованого тексту.
 - UI оптимізований під мобільний і stable Telegram viewport, але ще потребує окремої Telegram theme-політики перед публічним запуском.
 
 ## Backend API

@@ -20,10 +20,15 @@ interface TelegramWebApp {
       username?: string;
     };
   };
+  isFullscreen?: boolean;
   ready?: () => void;
   expand?: () => void;
   disableVerticalSwipes?: () => void;
   isVersionAtLeast?: (version: string) => boolean;
+  requestFullscreen?: () => void;
+  setBackgroundColor?: (color: string) => void;
+  setBottomBarColor?: (color: string) => void;
+  setHeaderColor?: (color: string) => void;
 }
 
 let telegramInitialized = false;
@@ -54,12 +59,23 @@ export const initializeTelegramApp = () => {
   try {
     webApp?.ready?.();
     webApp?.expand?.();
+    if (webApp?.isVersionAtLeast?.('6.1')) {
+      webApp.setHeaderColor?.('#0b2729');
+      webApp.setBackgroundColor?.('#071315');
+    }
+    if (webApp?.isVersionAtLeast?.('7.10')) {
+      webApp.setBottomBarColor?.('#071315');
+    }
     if (webApp?.isVersionAtLeast?.('7.7')) {
       webApp.disableVerticalSwipes?.();
     }
-    telegramInitialized = true;
+    if (webApp?.isVersionAtLeast?.('8.0') && !webApp.isFullscreen) {
+      webApp.requestFullscreen?.();
+    }
   } catch {
     // Telegram bridge methods can throw in non-Telegram browser previews.
+  } finally {
+    telegramInitialized = true;
   }
 };
 

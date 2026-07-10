@@ -7,6 +7,7 @@ import { BottomNav } from './components/BottomNav';
 import { TheRift } from './views/TheRift';
 import { SummonCircle } from './views/SummonCircle';
 import { HeroesRoster } from './views/HeroesRoster';
+import { LeaguesHall } from './views/LeaguesHall';
 import { initializeTelegramApp } from './utils/telegram';
 import { useEffect, type CSSProperties } from 'react';
 import './App.css';
@@ -75,6 +76,14 @@ function App() {
               ascendHero={gameState.ascendHero}
               upgradeHero={gameState.upgradeHero}
               gold={gameState.gold}
+            />
+          )}
+          {gameState.activeView === 'leagues' && (
+            <LeaguesHall
+              key="leagues"
+              heroCount={gameState.heroes.length}
+              passivePower={gameState.passivePower}
+              stage={gameState.stage}
             />
           )}
         </AnimatePresence>

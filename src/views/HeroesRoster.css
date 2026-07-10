@@ -1,4 +1,5 @@
 .roster-view {
+  padding-inline: var(--screen-gutter);
   color: var(--text-light);
 }
 
