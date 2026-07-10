@@ -112,8 +112,14 @@ function App() {
               <LeaguesHall
                 key="leagues"
                 heroCount={gameState.activeHeroes.length}
+                isLocal={gameState.backendStatus === 'local'}
+                leaderboard={gameState.leaderboard}
+                onRefresh={() => {
+                  void gameState.refreshLeaderboard();
+                }}
                 passivePower={gameState.passivePower}
                 stage={gameState.stage}
+                status={gameState.leaderboardStatus}
               />
             )}
           </AnimatePresence>

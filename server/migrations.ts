@@ -159,6 +159,40 @@ export const GAME_MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 4,
+    name: 'create_realm_leaderboards',
+    sql: `
+      ALTER TABLE players
+        ADD COLUMN stage INTEGER NOT NULL DEFAULT 1 CHECK (stage >= 1);
+      ALTER TABLE players
+        ADD COLUMN enemy_index INTEGER NOT NULL DEFAULT 0 CHECK (enemy_index >= 0);
+      ALTER TABLE players
+        ADD COLUMN progress_updated_at TEXT NOT NULL DEFAULT '';
+
+      UPDATE players
+      SET stage = MAX(
+            1,
+            COALESCE(CAST(json_extract(snapshot_json, '$.stage') AS INTEGER), 1)
+          ),
+          enemy_index = MAX(
+            0,
+            COALESCE(CAST(json_extract(snapshot_json, '$.enemyIndex') AS INTEGER), 0)
+          ),
+          progress_updated_at = updated_at;
+
+      CREATE INDEX players_progress_idx
+        ON players(stage DESC, enemy_index DESC, progress_updated_at ASC, id ASC);
+
+      CREATE TABLE account_profiles (
+        account_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        photo_url TEXT,
+        source TEXT NOT NULL CHECK (source IN ('local', 'telegram')),
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export const applyGameMigrations = (database: DatabaseSync) => {

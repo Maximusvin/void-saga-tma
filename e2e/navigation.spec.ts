@@ -510,8 +510,10 @@ test('bottom navigation exposes campaign and leagues while surviving Pixi remoun
 
     await page.getByRole('button', { name: 'Leagues', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Rift Leagues' })).toBeVisible();
-    await expect(page.getByText('Unranked', { exact: true })).toBeVisible();
-    await expect(page.locator('.leaderboard-row')).toHaveCount(0);
+    await expect(page.getByText('Bronze', { exact: true })).toBeVisible();
+    await expect(page.getByText('Practice ranking', { exact: true })).toBeVisible();
+    await expect(page.locator('.league-player-row.current')).toHaveCount(1);
+    await expect(page.locator('.league-player-row.current')).toContainText('Riftwalker');
 
     await page.getByRole('button', { name: 'Campaign', exact: true }).click();
     await expect(page.getByText('Luminous Verge', { exact: true })).toBeVisible();

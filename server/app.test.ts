@@ -12,6 +12,7 @@ import type { RealmContext, RealmDirectory } from '../src/shared/realm';
 import { createGameRequestHandler } from './app';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
+import { LeaderboardRepository } from './leaderboardRepository';
 import { RealmRepository } from './realmRepository';
 
 interface PlayerStateResponse {
@@ -65,7 +66,11 @@ describe('game API persistence', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-'));
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
-    const server = createServer(createGameRequestHandler(repository, new RealmRepository(database)));
+    const server = createServer(createGameRequestHandler(
+      repository,
+      new RealmRepository(database),
+      new LeaderboardRepository(database),
+    ));
     let serverStarted = false;
 
     try {
@@ -184,7 +189,11 @@ describe('game API persistence', () => {
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
     const realmRepository = new RealmRepository(database);
-    const server = createServer(createGameRequestHandler(repository, realmRepository));
+    const server = createServer(createGameRequestHandler(
+      repository,
+      realmRepository,
+      new LeaderboardRepository(database),
+    ));
     const playerId = 'dev:http-ascension-player';
     let serverStarted = false;
 
@@ -292,7 +301,11 @@ describe('game API persistence', () => {
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
     const realmRepository = new RealmRepository(database);
-    const server = createServer(createGameRequestHandler(repository, realmRepository));
+    const server = createServer(createGameRequestHandler(
+      repository,
+      realmRepository,
+      new LeaderboardRepository(database),
+    ));
     let serverStarted = false;
 
     try {

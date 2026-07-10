@@ -1,24 +1,108 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Crown, Gem, Shield, Sparkles, Swords, Timer, Trophy, Users } from 'lucide-react';
+import {
+  Crown,
+  Gem,
+  Medal,
+  RefreshCw,
+  Shield,
+  Sparkles,
+  Swords,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import type { GameNumber } from '../game/gameNumber';
+import type {
+  LeagueDivision,
+  RealmLeaderboard,
+  RealmLeaderboardEntry,
+} from '../shared/leaderboard';
+import type { LeaderboardStatus } from '../store/useGameState';
 import { formatNumber } from '../utils/formatNumber';
 import './LeaguesHall.css';
 
 interface LeaguesHallProps {
   heroCount: number;
+  isLocal: boolean;
+  leaderboard: RealmLeaderboard | null;
+  onRefresh: () => void;
   passivePower: GameNumber;
   stage: number;
+  status: LeaderboardStatus;
 }
 
-const DIVISIONS = [
-  { className: 'bronze', icon: Shield, label: 'Bronze' },
-  { className: 'silver', icon: Swords, label: 'Silver' },
-  { className: 'gold', icon: Gem, label: 'Gold' },
-  { className: 'mythic', icon: Crown, label: 'Mythic' },
-] as const;
+const DIVISION_META = {
+  bronze: { icon: Shield, label: 'Bronze' },
+  silver: { icon: Swords, label: 'Silver' },
+  gold: { icon: Gem, label: 'Gold' },
+  mythic: { icon: Crown, label: 'Mythic' },
+} as const satisfies Record<LeagueDivision, { icon: typeof Shield; label: string }>;
 
-export const LeaguesHall: React.FC<LeaguesHallProps> = ({ heroCount, passivePower, stage }) => {
+const getInitials = (name: string) => name
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map(part => part[0])
+  .join('')
+  .toUpperCase() || 'VS';
+
+const RankMark = ({ rank }: { rank: number }) => {
+  if (rank <= 3) {
+    return <Medal aria-hidden="true" size={18} />;
+  }
+  return <span>{rank}</span>;
+};
+
+const PlayerRow = ({ entry, pinned = false }: {
+  entry: RealmLeaderboardEntry;
+  pinned?: boolean;
+}) => (
+  <li
+    className={`league-player-row ${entry.isCurrentPlayer ? 'current' : ''} ${pinned ? 'pinned' : ''}`}
+    data-rank={entry.rank}
+  >
+    <span className={`league-rank rank-${Math.min(entry.rank, 4)}`}>
+      <RankMark rank={entry.rank} />
+    </span>
+    <span className="league-avatar">
+      {entry.photoUrl ? (
+        <img
+          alt=""
+          decoding="async"
+          referrerPolicy="no-referrer"
+          src={entry.photoUrl}
+        />
+      ) : (
+        <span>{getInitials(entry.displayName)}</span>
+      )}
+    </span>
+    <span className="league-player-copy">
+      <strong>{entry.displayName}</strong>
+      <small>
+        Stage {entry.stage} · Wave {entry.enemyIndex + 1}
+      </small>
+    </span>
+    <span className="league-player-power">
+      <strong>{formatNumber(entry.passivePower)}</strong>
+      <small>power/s</small>
+    </span>
+  </li>
+);
+
+export const LeaguesHall: React.FC<LeaguesHallProps> = ({
+  heroCount,
+  isLocal,
+  leaderboard,
+  onRefresh,
+  passivePower,
+  stage,
+  status,
+}) => {
+  const current = leaderboard?.currentPlayer;
+  const division = current?.division ?? 'bronze';
+  const divisionMeta = DIVISION_META[division];
+  const DivisionIcon = divisionMeta.icon;
+  const currentIsInTop = leaderboard?.top.some(entry => entry.isCurrentPlayer) ?? false;
   return (
     <motion.section
       className="view-container leagues-view"
@@ -29,66 +113,97 @@ export const LeaguesHall: React.FC<LeaguesHallProps> = ({ heroCount, passivePowe
     >
       <div className="leagues-content">
         <header className="leagues-heading">
-          <span className="leagues-kicker"><Trophy aria-hidden="true" size={14} /> Preseason</span>
+          <span className="leagues-kicker">
+            <Trophy aria-hidden="true" size={13} />
+            {leaderboard?.realmCode ?? 'Realm'} standings
+          </span>
           <h1>Rift Leagues</h1>
-          <span className="leagues-season">Season 0 · Calibration</span>
+          <span className="leagues-season">
+            {isLocal ? 'Practice ranking' : 'All-time campaign rank'}
+          </span>
         </header>
 
-        <section className="league-status-band" aria-label="Current league status">
+        <section className={`league-status-band division-${division}`} aria-label="Current league status">
           <div className="league-crest" aria-hidden="true">
             <span className="league-crest-rays" />
-            <Trophy size={38} strokeWidth={1.8} />
+            <DivisionIcon size={36} strokeWidth={1.8} />
           </div>
           <div className="league-standing">
             <span>Current division</span>
-            <strong>Unranked</strong>
-            <small>Calibration locked</small>
+            <strong>{divisionMeta.label}</strong>
+            <small>
+              {current && leaderboard
+                ? `#${current.rank} of ${leaderboard.totalPlayers}`
+                : status === 'error' ? 'Sync unavailable' : 'Calculating rank'}
+            </small>
           </div>
           <div className="league-readiness">
             <div>
-              <Swords size={15} aria-hidden="true" />
+              <Trophy size={14} aria-hidden="true" />
               <span>Campaign</span>
-              <strong>Stage {stage}</strong>
+              <strong>Stage {current?.stage ?? stage}</strong>
             </div>
             <div>
-              <Users size={15} aria-hidden="true" />
+              <Users size={14} aria-hidden="true" />
               <span>Warband</span>
               <strong>{heroCount}/4</strong>
             </div>
             <div>
-              <Sparkles size={15} aria-hidden="true" />
+              <Sparkles size={14} aria-hidden="true" />
               <span>Power</span>
-              <strong>{formatNumber(passivePower)}/s</strong>
+              <strong>{formatNumber(current?.passivePower ?? passivePower)}/s</strong>
             </div>
           </div>
         </section>
 
-        <section className="division-path" aria-labelledby="division-path-title">
+        <section className="realm-standings" aria-labelledby="realm-standings-title">
           <header>
             <div>
-              <span>Competitive path</span>
-              <strong id="division-path-title">Divisions</strong>
+              <span>Campaign progress</span>
+              <strong id="realm-standings-title">Realm standings</strong>
             </div>
-            <span className="division-count">4 tiers</span>
+            <button
+              aria-label="Refresh leaderboard"
+              className="league-refresh"
+              disabled={status === 'loading'}
+              onClick={onRefresh}
+              title="Refresh"
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" size={17} />
+            </button>
           </header>
-          <div className="division-grid">
-            {DIVISIONS.map(division => {
-              const DivisionIcon = division.icon;
-              return (
-                <div key={division.label} className={`division-tile ${division.className}`}>
-                  <span className="division-emblem"><DivisionIcon aria-hidden="true" size={21} /></span>
-                  <strong>{division.label}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </section>
 
-        <footer className="league-season-state">
-          <Timer size={17} aria-hidden="true" />
-          <span>First competitive season</span>
-          <strong>Preseason</strong>
-        </footer>
+          {status === 'error' && !leaderboard ? (
+            <div className="league-empty-state">
+              <Shield aria-hidden="true" size={22} />
+              <strong>Standings unavailable</strong>
+              <button onClick={onRefresh} type="button">Try again</button>
+            </div>
+          ) : status === 'loading' && !leaderboard ? (
+            <div className="league-loading" aria-label="Loading leaderboard">
+              {Array.from({ length: 6 }, (_, index) => (
+                <span key={index} />
+              ))}
+            </div>
+          ) : (
+            <>
+              <ol className="league-player-list">
+                {leaderboard?.top.map(entry => (
+                  <PlayerRow entry={entry} key={entry.rank} />
+                ))}
+              </ol>
+              {current && !currentIsInTop && (
+                <div className="league-current-pin">
+                  <span>Your position</span>
+                  <ol className="league-player-list">
+                    <PlayerRow entry={current} pinned />
+                  </ol>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </div>
     </motion.section>
   );

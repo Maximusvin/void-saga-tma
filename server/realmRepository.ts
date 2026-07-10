@@ -319,10 +319,20 @@ export class RealmRepository {
       }
 
       const characterId = `character:${randomUUID()}`;
+      const initialSnapshot = createInitialGameSnapshot();
       this.database.prepare(`
-        INSERT INTO players (id, created_at, updated_at, snapshot_json)
-        VALUES (?, ?, ?, ?)
-      `).run(characterId, now, now, JSON.stringify(createInitialGameSnapshot()));
+        INSERT INTO players (
+          id, created_at, updated_at, snapshot_json, stage, enemy_index, progress_updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        characterId,
+        now,
+        now,
+        JSON.stringify(initialSnapshot),
+        initialSnapshot.stage,
+        initialSnapshot.enemyIndex,
+        now,
+      );
       this.database.prepare(`
         INSERT INTO realm_characters (id, account_id, origin_realm_id, created_at, last_played_at)
         VALUES (?, ?, ?, ?, ?)
