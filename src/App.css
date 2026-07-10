@@ -1,8 +1,8 @@
 .app-shell {
   position: relative;
   width: 100%;
-  height: var(--app-viewport-stable-height);
-  min-height: var(--app-viewport-stable-height);
+  height: min(var(--app-viewport-stable-height), 100dvh);
+  min-height: min(var(--app-viewport-stable-height), 100dvh);
   display: flex;
   justify-content: center;
   overflow: hidden;
