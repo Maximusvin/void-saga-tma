@@ -44,7 +44,7 @@ interface TelegramWebApp {
 
 let telegramInitialized = false;
 
-const FULLSCREEN_HOST_CONTROL_CLEARANCE = 48;
+const FULLSCREEN_CONTROL_FALLBACK_TOP = 48;
 
 const RUNTIME_INSET_PROPERTIES = {
   contentBottom: '--app-runtime-content-safe-area-inset-bottom',
@@ -66,17 +66,39 @@ const toCssPixelValue = (value: number | undefined) => {
   return `${Math.min(256, Math.max(0, value))}px`;
 };
 
-const getFullscreenSafeContentTop = (webApp: TelegramWebApp | undefined) => {
-  const safeTop = webApp?.safeAreaInset?.top ?? 0;
+/**
+ * Telegram's content inset is relative to the device safe area, and CSS adds the
+ * two together. Returning `safeTop + clearance` here would count the status bar
+ * twice, so this only guards the case where a fullscreen client draws its close
+ * and menu controls without reporting any content inset for them.
+ */
+const getContentSafeAreaTop = (webApp: TelegramWebApp | undefined) => {
   const contentTop = webApp?.contentSafeAreaInset?.top ?? 0;
 
-  if (!webApp?.isFullscreen) {
-    return contentTop;
+  if (webApp?.isFullscreen && contentTop <= 0) {
+    return FULLSCREEN_CONTROL_FALLBACK_TOP;
   }
 
-  // Older Android clients can report only the status bar while Telegram's
-  // close and menu controls still overlay the top row.
-  return Math.max(contentTop, safeTop + FULLSCREEN_HOST_CONTROL_CLEARANCE);
+  return contentTop;
+};
+
+/**
+ * Telegram can report a zero stable height before the viewport is known, and
+ * `viewportChanged` is the only signal that would repair it. Prefer the stable
+ * height, fall back to the live window height, and give up rather than write a
+ * value that cannot be a real viewport.
+ */
+const getStableViewportHeight = (webApp: TelegramWebApp | undefined) => {
+  const reported = webApp?.viewportStableHeight;
+  if (typeof reported === 'number' && Number.isFinite(reported) && reported > 0) {
+    return reported;
+  }
+
+  if (typeof window !== 'undefined' && window.innerHeight > 0) {
+    return window.innerHeight;
+  }
+
+  return null;
 };
 
 const syncTelegramViewportTokens = (webApp: TelegramWebApp | undefined) => {
@@ -94,17 +116,19 @@ const syncTelegramViewportTokens = (webApp: TelegramWebApp | undefined) => {
   rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.safeLeft, toCssPixelValue(safeArea?.left));
   rootStyle.setProperty(
     RUNTIME_INSET_PROPERTIES.contentTop,
-    toCssPixelValue(getFullscreenSafeContentTop(webApp)),
+    toCssPixelValue(getContentSafeAreaTop(webApp)),
   );
   rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentRight, toCssPixelValue(contentSafeArea?.right));
   rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentBottom, toCssPixelValue(contentSafeArea?.bottom));
   rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.contentLeft, toCssPixelValue(contentSafeArea?.left));
 
-  if (typeof webApp?.viewportStableHeight === 'number' && Number.isFinite(webApp.viewportStableHeight)) {
-    rootStyle.setProperty(
-      RUNTIME_INSET_PROPERTIES.viewportHeight,
-      `${Math.max(1, webApp.viewportStableHeight)}px`,
-    );
+  const stableViewportHeight = getStableViewportHeight(webApp);
+  if (stableViewportHeight === null) {
+    // Clamping a bogus 0 to 1px would collapse the whole shell; leaving the
+    // property unset lets CSS fall back to 100dvh instead.
+    rootStyle.removeProperty(RUNTIME_INSET_PROPERTIES.viewportHeight);
+  } else {
+    rootStyle.setProperty(RUNTIME_INSET_PROPERTIES.viewportHeight, `${stableViewportHeight}px`);
   }
 };
 
@@ -140,6 +164,14 @@ export const initializeTelegramApp = () => {
       'viewportChanged',
     ]) {
       webApp?.onEvent?.(eventType, () => syncTelegramViewportTokens(webApp));
+    }
+
+    // Telegram's events are the primary signal, but they never fire outside a
+    // Telegram client and can be missed on rotation, so resync on the DOM ones.
+    if (typeof window !== 'undefined') {
+      const resync = () => syncTelegramViewportTokens(getTelegramWebApp());
+      window.addEventListener('resize', resync, { passive: true });
+      window.addEventListener('orientationchange', resync, { passive: true });
     }
 
     webApp?.ready?.();

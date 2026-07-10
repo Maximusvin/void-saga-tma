@@ -47,26 +47,34 @@
     var(--tg-safe-area-inset-left, 0px),
     var(--app-runtime-safe-area-inset-left, 0px)
   );
-  --app-content-safe-area-top: max(
-    var(--app-safe-area-top),
+  /*
+   * Telegram reports contentSafeAreaInset as the space to avoid at the top of
+   * the *content area*, while safeAreaInset is the space to avoid at the top of
+   * the *screen*. The content inset therefore starts where the device inset
+   * ends, and the offset content must clear is their sum. Taking max() instead
+   * lets the HUD slide under Telegram's fullscreen close/menu controls by
+   * exactly the status bar height.
+   */
+  --app-telegram-inset-top: max(
     var(--tg-content-safe-area-inset-top, 0px),
     var(--app-runtime-content-safe-area-inset-top, 0px)
   );
-  --app-content-safe-area-right: max(
-    var(--app-safe-area-right),
+  --app-telegram-inset-right: max(
     var(--tg-content-safe-area-inset-right, 0px),
     var(--app-runtime-content-safe-area-inset-right, 0px)
   );
-  --app-content-safe-area-bottom: max(
-    var(--app-safe-area-bottom),
+  --app-telegram-inset-bottom: max(
     var(--tg-content-safe-area-inset-bottom, 0px),
     var(--app-runtime-content-safe-area-inset-bottom, 0px)
   );
-  --app-content-safe-area-left: max(
-    var(--app-safe-area-left),
+  --app-telegram-inset-left: max(
     var(--tg-content-safe-area-inset-left, 0px),
     var(--app-runtime-content-safe-area-inset-left, 0px)
   );
+  --app-content-safe-area-top: calc(var(--app-safe-area-top) + var(--app-telegram-inset-top));
+  --app-content-safe-area-right: calc(var(--app-safe-area-right) + var(--app-telegram-inset-right));
+  --app-content-safe-area-bottom: calc(var(--app-safe-area-bottom) + var(--app-telegram-inset-bottom));
+  --app-content-safe-area-left: calc(var(--app-safe-area-left) + var(--app-telegram-inset-left));
   --app-viewport-stable-height: var(
     --app-runtime-viewport-stable-height,
     var(--tg-viewport-stable-height, 100dvh)
@@ -108,6 +116,47 @@ button {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+/*
+ * backdrop-filter re-samples and blurs everything painted behind an element on
+ * every composite. The rift keeps five of these mounted at once above an
+ * animating WebGL canvas, which makes them the dominant GPU cost on low-end
+ * phones. The render profile already scales Pixi work; scale compositor work
+ * with it. Opaque surfaces keep the HUD legible once the blur is dropped.
+ */
+:root[data-render-quality='balanced'] {
+  --hud-blur: 9px;
+}
+
+:root[data-render-quality='balanced'] .glass-panel,
+:root[data-render-quality='balanced'] .bottom-nav {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+:root[data-render-quality='low'] {
+  --panel-bg: rgba(8, 24, 27, 0.94);
+  --hud-surface: rgba(6, 22, 25, 0.94);
+  --hud-surface-strong: rgba(4, 18, 21, 0.96);
+}
+
+:root[data-render-quality='low'] .glass-panel,
+:root[data-render-quality='low'] .player-hud,
+:root[data-render-quality='low'] .resource-item,
+:root[data-render-quality='low'] .bottom-nav,
+:root[data-render-quality='low'] .combo-chip,
+:root[data-render-quality='low'] .encounter-rank,
+:root[data-render-quality='low'] .rift-footer,
+:root[data-render-quality='low'] .boss-clock,
+:root[data-render-quality='low'] .enemy-panel,
+:root[data-render-quality='low'] .rift-clear-banner,
+:root[data-render-quality='low'] .rift-warband,
+:root[data-render-quality='low'] .league-status-band,
+:root[data-render-quality='low'] .roster-header,
+:root[data-render-quality='low'] .realm-switcher-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .sr-only {
