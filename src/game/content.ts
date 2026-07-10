@@ -26,6 +26,12 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     name: 'Void Mage',
     portrait: '/assets/heroes/void-mage.webp',
     portraitMotion: 'aura',
+    videoShowcase: {
+      id: 'void-mage-living-idle',
+      video: '/assets/heroes/showcase/void-mage-idle.mp4',
+      poster: '/assets/heroes/void-mage.webp',
+      tagline: 'Arcanist of the Void',
+    },
     rarity: 'Rare',
     power: 10,
     dropRate: 0.3,

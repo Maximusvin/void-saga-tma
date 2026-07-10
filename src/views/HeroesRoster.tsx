@@ -34,6 +34,10 @@ const AngelShowcase = lazy(() => import('./AngelShowcase').then(module => ({
   default: module.AngelShowcase,
 })));
 
+const HeroVideoShowcase = lazy(() => import('./HeroVideoShowcase').then(module => ({
+  default: module.HeroVideoShowcase,
+})));
+
 type HeroFilter = 'all' | 'warband';
 type HeroSort = 'rarity' | 'power' | 'level';
 
@@ -91,7 +95,7 @@ const HeroCard = memo(function HeroCard({
     >
       <div className="hero-card-visual">
         <HeroPortrait eager={eager} hero={hero} />
-        {template?.showcase && (
+        {(template?.showcase || template?.videoShowcase) && (
           <button
             aria-label={`Preview ${hero.name} animation`}
             className="hero-preview-action"
@@ -384,6 +388,16 @@ export function HeroesRoster({
             onClose={handleShowcaseClose}
             portrait={showcaseTemplate.portrait}
             showcase={showcaseTemplate.showcase}
+          />
+        </Suspense>
+      )}
+      {showcaseHero && showcaseTemplate?.videoShowcase && !showcaseTemplate.showcase && (
+        <Suspense fallback={null}>
+          <HeroVideoShowcase
+            hero={showcaseHero}
+            onClose={handleShowcaseClose}
+            portrait={showcaseTemplate.videoShowcase.poster}
+            showcase={showcaseTemplate.videoShowcase}
           />
         </Suspense>
       )}
