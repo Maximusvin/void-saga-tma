@@ -5,6 +5,10 @@ import {
   removeActionOutbox,
   type PendingGameCommand,
 } from '../api/actionOutbox';
+import {
+  canDispatchAutomaticGameActions,
+  type AutomaticActionBackendStatus,
+} from '../api/automaticActionPolicy';
 import { createGameCommandId, fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
 import {
   GAME_BALANCE,
@@ -32,7 +36,7 @@ import { getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
 
-export type BackendStatus = 'local' | 'loading' | 'synced' | 'error';
+export type BackendStatus = AutomaticActionBackendStatus;
 
 const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
@@ -171,6 +175,7 @@ export const useGameState = () => {
     heroContributions: [],
     signal: 0,
   });
+  const automaticActionsEnabled = canDispatchAutomaticGameActions(apiEnabled, backendStatus);
   const playerIdRef = useRef<string | null>(null);
   const snapshotRef = useRef(snapshot);
   const actionQueueRef = useRef(Promise.resolve());
@@ -362,24 +367,28 @@ export const useGameState = () => {
   }, [apiEnabled, replayActionOutbox]);
 
   useEffect(() => {
-    if ((apiEnabled && backendStatus !== 'synced') || offlineClaimRequestedRef.current) {
+    if (!automaticActionsEnabled || offlineClaimRequestedRef.current) {
       return;
     }
 
     offlineClaimRequestedRef.current = true;
     void runGameAction({ type: 'claim_offline_rewards' });
-  }, [apiEnabled, backendStatus, runGameAction]);
+  }, [automaticActionsEnabled, runGameAction]);
 
   useEffect(() => {
     const claimAfterResume = () => {
-      if (document.visibilityState === 'visible' && offlineClaimRequestedRef.current) {
+      if (
+        automaticActionsEnabled &&
+        document.visibilityState === 'visible' &&
+        offlineClaimRequestedRef.current
+      ) {
         void runGameAction({ type: 'claim_offline_rewards' });
       }
     };
 
     document.addEventListener('visibilitychange', claimAfterResume);
     return () => document.removeEventListener('visibilitychange', claimAfterResume);
-  }, [runGameAction]);
+  }, [automaticActionsEnabled, runGameAction]);
 
   const isBoss = isBossStage(snapshot.stage);
   const baseClickPower = useMemo(() => getBaseClickPower(snapshot.heroes), [snapshot.heroes]);
@@ -457,6 +466,10 @@ export const useGameState = () => {
   }, [flushTapBatch]);
 
   useEffect(() => {
+    if (!automaticActionsEnabled) {
+      return;
+    }
+
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && activeView === 'rift' && snapshot.heroes.length > 0) {
         void runGameAction({ type: 'combat_batch', tapCount: 0, passiveTicks: 1 });
@@ -464,7 +477,7 @@ export const useGameState = () => {
     }, GAME_BALANCE.passiveTickMs);
     
     return () => clearInterval(interval);
-  }, [activeView, passivePower, runGameAction, snapshot.heroes.length]);
+  }, [activeView, automaticActionsEnabled, runGameAction, snapshot.heroes.length]);
 
   const summonHero = useCallback(async () => {
     if (snapshotRef.current.gems < GAME_BALANCE.summonCostGems) {
