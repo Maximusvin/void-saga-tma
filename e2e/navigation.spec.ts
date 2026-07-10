@@ -1141,3 +1141,34 @@ test('does not interrupt a returning player who was only away briefly', async ({
   // The gold is still credited silently; the modal must never appear.
   await expect(page.locator('.welcome-back-modal')).toHaveCount(0);
 });
+
+test('crosses into a new biome with a banner as the journey advances', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 6,
+      activeHeroIds: ['crusher'],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      gems: 50,
+      gold: '1000',
+      heroes: [{ ascension: 0, id: 'crusher', name: 'Crusher', rarity: 'Legendary', level: 60, power: '1000000000000', shards: 0, templateId: 'void-lord' }],
+      stage: 10,
+      monsterMaxHealth: '1',
+      monsterHealth: '1',
+      lastPassiveTickAt: iso(now),
+      lastSeenAt: iso(now),
+      updatedAt: iso(now),
+    }));
+  });
+  await page.goto('/');
+
+  const scene = page.locator('.rift-pixi-scene');
+  await expect(scene).toHaveAttribute('data-biome', 'luminous-verge', { timeout: 8_000 });
+  // The one-health stage-10 boss dies to the auto passive tick, advancing to
+  // stage 11 — the first stage of the next biome.
+  await expect(scene).toHaveAttribute('data-biome', 'ember-deep', { timeout: 10_000 });
+  await expect(page.locator('.biome-enter-banner')).toContainText('Ember Deep');
+});

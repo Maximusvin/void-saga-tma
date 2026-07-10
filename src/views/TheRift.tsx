@@ -17,6 +17,7 @@ import {
   type GameNumber,
 } from '../game/gameNumber';
 import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
+import { getBiomeForStage, getBiomeIndexForStage, getStageRole } from '../game/biome';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import { getRiftEnemyVisual } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
@@ -142,6 +143,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const [biomeEnter, setBiomeEnter] = useState<{ id: string; name: string } | null>(null);
   const [visiblePassiveVolleySignal, setVisiblePassiveVolleySignal] = useState<number | null>(null);
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
   const [visibleBossEnrageSignal, setVisibleBossEnrageSignal] = useState<number | null>(null);
@@ -149,6 +151,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const renderProfile = useMemo(getGameRenderProfile, []);
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
+  const previousBiomeIndexRef = useRef(getBiomeIndexForStage(stage));
   const lastHandledBossEnrageSignalRef = useRef(bossEnrageSignal);
   const lastHandledPassiveVolleySignalRef = useRef(passiveVolleySignal);
   const lastDefeatStageRef = useRef<number | null>(null);
@@ -301,6 +304,23 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, [isBoss, stage]);
 
   useEffect(() => {
+    const biomeIndex = getBiomeIndexForStage(stage);
+    if (biomeIndex > previousBiomeIndexRef.current) {
+      const biome = getBiomeForStage(stage);
+      setBiomeEnter({ id: biome.id, name: biome.name });
+    }
+    previousBiomeIndexRef.current = biomeIndex;
+  }, [stage]);
+
+  useEffect(() => {
+    if (!biomeEnter) {
+      return;
+    }
+    const timeout = scheduleTimeout(() => setBiomeEnter(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [biomeEnter, scheduleTimeout]);
+
+  useEffect(() => {
     if (!defeatTransition) {
       return;
     }
@@ -372,6 +392,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
   const enemyVisual = getRiftEnemyVisual(stage, isBoss);
+  const stageRole = getStageRole(stage);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
   const bossPhases = getStageBandForStage(stage).boss.phases;
   const bossPhase = getBossPhaseForHealthPercent(stage, healthPercent);
@@ -410,9 +431,12 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
       <div className="rift-arena">
         <div className="combat-dashboard">
-          <div className={`encounter-rank ${isBoss ? 'boss' : ''}`}>
+          <div className={`encounter-rank ${isBoss ? 'boss' : ''} ${stageRole === 'mini-boss' ? 'elite' : ''}`}>
             {isBoss && <Crown size={14} aria-hidden="true" />}
-            <span>{isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}</span>
+            <span>
+              {stageRole === 'mini-boss' && <em className="elite-tag">Elite</em>}
+              {isBoss ? `Phase ${bossPhaseIndex} · ${bossPhase.label}` : enemyVisual.title}
+            </span>
           </div>
           <div className="combat-status-right">
             {isBoss && (
@@ -588,6 +612,22 @@ export const TheRift: React.FC<TheRiftProps> = ({
                   <span className="reward-pill gem">+{formatNumber(defeatTransition.gemReward ?? 0)} Gems</span>
                 )}
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {biomeEnter && (
+            <motion.div
+              key={biomeEnter.id}
+              className="biome-enter-banner"
+              initial={{ opacity: 0, x: '-50%', y: -18, scale: 0.9 }}
+              animate={{ opacity: 1, x: '-50%', y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: '-50%', y: -18, scale: 0.94 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            >
+              <span className="biome-enter-kicker">Нова зона</span>
+              <strong className="biome-enter-name">Входимо в {biomeEnter.name}</strong>
             </motion.div>
           )}
         </AnimatePresence>
