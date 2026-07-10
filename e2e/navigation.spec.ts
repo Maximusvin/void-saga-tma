@@ -32,7 +32,7 @@ const seedVoidLordCollection = async (page: Page) => {
   });
 };
 
-test('requests Telegram fullscreen and configures immersive host colors when supported', async ({ page }) => {
+test('requests Telegram fullscreen on mobile and configures immersive host colors', async ({ page }) => {
   await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
     body: '',
     contentType: 'application/javascript',
@@ -46,6 +46,7 @@ test('requests Telegram fullscreen and configures immersive host colors when sup
         expand: () => calls.push('expand'),
         isFullscreen: false,
         isVersionAtLeast: () => true,
+        platform: 'android',
         ready: () => calls.push('ready'),
         requestFullscreen: () => calls.push('fullscreen'),
         setBackgroundColor: color => calls.push(`background:${color}`),
@@ -64,6 +65,87 @@ test('requests Telegram fullscreen and configures immersive host colors when sup
     'bottom:#071315',
     'fullscreen',
   ]);
+});
+
+test('keeps Telegram Desktop inside a centered phone viewport', async ({ page }, testInfo) => {
+  await page.route('https://telegram.org/js/telegram-web-app.js?62', route => route.fulfill({
+    body: '',
+    contentType: 'application/javascript',
+    status: 200,
+  }));
+  await seedVoidLordCollection(page);
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    Reflect.set(window, '__telegramBridgeCalls', calls);
+    window.Telegram = {
+      WebApp: {
+        exitFullscreen: () => calls.push('exit-fullscreen'),
+        expand: () => calls.push('expand'),
+        isFullscreen: true,
+        isVersionAtLeast: () => true,
+        platform: 'tdesktop',
+        ready: () => calls.push('ready'),
+        requestFullscreen: () => calls.push('fullscreen'),
+        setBackgroundColor: color => calls.push(`background:${color}`),
+        setBottomBarColor: color => calls.push(`bottom:${color}`),
+        setHeaderColor: color => calls.push(`header:${color}`),
+        viewportStableHeight: 1152,
+      },
+    };
+  });
+  await page.setViewportSize({ width: 2048, height: 1152 });
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__telegramBridgeCalls'))).toEqual([
+    'ready',
+    'expand',
+    'header:#071315',
+    'background:#071315',
+    'bottom:#071315',
+    'exit-fullscreen',
+  ]);
+  await expect(page.locator('html')).toHaveAttribute('data-app-layout', 'desktop');
+  await expect(page.locator('.rift-pixi-scene')).toHaveAttribute('data-art-loaded', 'true', {
+    timeout: 8_000,
+  });
+
+  const layout = await page.evaluate(() => {
+    const shell = document.querySelector('.app-shell')!.getBoundingClientRect();
+    const frame = document.querySelector('.game-frame')!.getBoundingClientRect();
+    const navigation = document.querySelector('.bottom-nav')!.getBoundingClientRect();
+    const monster = document.querySelector('.monster-button')!.getBoundingClientRect();
+    return {
+      frame: { bottom: frame.bottom, height: frame.height, left: frame.left, right: frame.right, top: frame.top, width: frame.width },
+      monster: { left: monster.left, right: monster.right },
+      navigation: { left: navigation.left, right: navigation.right, width: navigation.width },
+      shell: { height: shell.height, width: shell.width },
+    };
+  });
+
+  expect(layout.shell).toEqual({ height: 1152, width: 2048 });
+  expect(layout.frame.width).toBe(430);
+  expect(layout.frame.height).toBe(900);
+  expect(layout.frame.left).toBe(809);
+  expect(layout.frame.top).toBe(126);
+  expect(layout.frame.right).toBe(1239);
+  expect(layout.frame.bottom).toBe(1026);
+  expect(layout.navigation.width).toBe(430);
+  expect(layout.navigation.left).toBe(layout.frame.left);
+  expect(layout.navigation.right).toBe(layout.frame.right);
+  expect(layout.monster.left).toBeGreaterThanOrEqual(layout.frame.left);
+  expect(layout.monster.right).toBeLessThanOrEqual(layout.frame.right);
+  await page.screenshot({ path: testInfo.outputPath('telegram-desktop-2048x1152.png') });
+
+  await page.getByRole('button', { name: 'Heroes', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview Void Lord animation' }).click();
+  const showcase = page.getByRole('dialog', { name: 'Void Lord' });
+  await expect(showcase).toBeVisible();
+  await expect.poll(async () => (await showcase.boundingBox())?.width ?? 0).toBe(430);
+  const showcaseBounds = await showcase.boundingBox();
+  expect(showcaseBounds?.width).toBe(430);
+  expect(showcaseBounds?.height).toBe(900);
+  expect(showcaseBounds?.x).toBe(809);
+  expect(showcaseBounds?.y).toBe(126);
 });
 
 test('keeps the shell full height when Telegram reports a zero stable viewport', async ({ page }) => {
@@ -111,6 +193,7 @@ test('keeps interactive HUD controls inside dynamic Telegram safe areas', async 
       contentSafeAreaInset: { bottom: 0, left: 0, right: 0, top: 28 },
       isFullscreen: true,
       isVersionAtLeast: () => true,
+      platform: 'android',
       onEvent: (eventType: string, handler: () => void) => {
         handlers[eventType] = handler;
       },

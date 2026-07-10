@@ -79,6 +79,20 @@
     --app-runtime-viewport-stable-height,
     var(--tg-viewport-stable-height, 100dvh)
   );
+  --game-viewport-width: 100vw;
+  --game-viewport-height: min(var(--app-viewport-stable-height), 100dvh);
+  --game-viewport-left: 0px;
+  --game-viewport-top: 0px;
+}
+
+:root[data-app-layout='desktop'] {
+  --game-viewport-width: min(430px, 100vw);
+  --game-viewport-height: min(900px, var(--app-viewport-stable-height), 100dvh);
+  --game-viewport-left: max(0px, calc((100vw - var(--game-viewport-width)) / 2));
+  --game-viewport-top: max(
+    0px,
+    calc((min(var(--app-viewport-stable-height), 100dvh) - var(--game-viewport-height)) / 2)
+  );
 }
 
 * {
@@ -102,6 +116,19 @@ body {
   overflow: hidden;
   color: var(--text-main);
   background: var(--bg-color);
+}
+
+:root[data-app-layout='desktop'] :is(
+  .angel-showcase,
+  .summon-result-backdrop,
+  .summon-silhouette
+) {
+  top: var(--game-viewport-top);
+  right: auto;
+  bottom: auto;
+  left: var(--game-viewport-left);
+  width: var(--game-viewport-width);
+  height: var(--game-viewport-height);
 }
 
 button {
