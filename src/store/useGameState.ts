@@ -31,6 +31,7 @@ import {
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
+import { summarizeOfflineReward, type OfflineRewardSummary } from '../game/offlineReward';
 import { ZERO_GAME_NUMBER, multiplyGameNumbers, type GameNumber } from '../game/gameNumber';
 import { normalizeGameSnapshot } from '../game/snapshot';
 import type {
@@ -249,6 +250,7 @@ export const useGameState = () => {
   const [realmDirectory, setRealmDirectory] = useState<RealmDirectory>(LOCAL_REALM_DIRECTORY);
   const [realmSwitching, setRealmSwitching] = useState(false);
   const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
+  const [offlineReward, setOfflineReward] = useState<OfflineRewardSummary | null>(null);
   const [passiveVolleyFeedback, setPassiveVolleyFeedback] = useState<PassiveVolleyFeedback>({
     damage: ZERO_GAME_NUMBER,
     heroContributions: [],
@@ -551,14 +553,23 @@ export const useGameState = () => {
     return switchOperation;
   }, [apiEnabled, applyServerState, backendStatus, playerId, realmSwitching, refreshRealmDirectory, replayActionOutbox]);
 
+  const applyOfflineRewardEvents = useCallback((events: GameEvent[]) => {
+    const summary = summarizeOfflineReward(events, GAME_BALANCE.offlineRewardModalMinSeconds);
+    // A claim with no qualifying reward must not clear an already-shown modal,
+    // so only set when there is something to show.
+    if (summary) {
+      setOfflineReward(summary);
+    }
+  }, []);
+
   useEffect(() => {
     if (!automaticActionsEnabled || offlineClaimRequestedRef.current) {
       return;
     }
 
     offlineClaimRequestedRef.current = true;
-    void runGameAction({ type: 'claim_offline_rewards' });
-  }, [automaticActionsEnabled, runGameAction]);
+    void runGameAction({ type: 'claim_offline_rewards' }).then(applyOfflineRewardEvents);
+  }, [applyOfflineRewardEvents, automaticActionsEnabled, runGameAction]);
 
   useEffect(() => {
     const claimAfterResume = () => {
@@ -567,13 +578,13 @@ export const useGameState = () => {
         document.visibilityState === 'visible' &&
         offlineClaimRequestedRef.current
       ) {
-        void runGameAction({ type: 'claim_offline_rewards' });
+        void runGameAction({ type: 'claim_offline_rewards' }).then(applyOfflineRewardEvents);
       }
     };
 
     document.addEventListener('visibilitychange', claimAfterResume);
     return () => document.removeEventListener('visibilitychange', claimAfterResume);
-  }, [automaticActionsEnabled, runGameAction]);
+  }, [applyOfflineRewardEvents, automaticActionsEnabled, runGameAction]);
 
   const isBoss = isBossStage(snapshot.stage);
   const activeHeroes = useMemo(
@@ -835,6 +846,8 @@ export const useGameState = () => {
     monsterMaxHealth: snapshot.monsterMaxHealth,
     bossEncounterEndsAt: snapshot.bossEncounterEndsAt,
     bossEnrageSignal,
+    offlineReward,
+    dismissOfflineReward: () => setOfflineReward(null),
     snapshotUpdatedAt: snapshot.updatedAt,
     clickPower,
     dealDamage,
