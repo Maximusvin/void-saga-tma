@@ -9,6 +9,7 @@ COPY tsconfig.server.json ./
 COPY server ./server
 COPY src/game ./src/game
 COPY src/observability ./src/observability
+COPY src/shared ./src/shared
 
 RUN npm run server:check && npm run server:bundle
 
