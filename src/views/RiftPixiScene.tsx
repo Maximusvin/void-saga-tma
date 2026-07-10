@@ -9,6 +9,8 @@ import {
 } from '../game/riftVisuals';
 import { cleanupOwnedPixiScene } from './pixiSceneLifecycle';
 import { createShardPool, type ShardPool } from './shardPool';
+import { createRiftWorld, type RiftWorld } from './riftWorld';
+import { getBiomeForStage, type BiomeSpec } from '../game/biome';
 
 interface RiftPixiSceneProps {
   bossPhase: number;
@@ -218,6 +220,10 @@ export const RiftPixiScene = ({
   const sceneBuildCountRef = useRef(0);
   const stageRef = useRef(stage);
   const renderProfileRef = useRef(getGameRenderProfile());
+  const worldCameraXRef = useRef(0);
+  const worldCameraTargetRef = useRef(0);
+  const worldLastDefeatRef = useRef(defeatSignal);
+  const worldRef = useRef<{ world: RiftWorld; animateWorld: (ticker: Ticker) => void } | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
   const [renderedEnemy, setRenderedEnemy] = useState<RenderedEnemy | null>(null);
   const visual = getRiftEnemyVisual(stage, isBoss);
@@ -303,6 +309,25 @@ export const RiftPixiScene = ({
       host.append(app.canvas);
       appRef.current = app;
 
+      // The scrolling biome world lives below the combat scene and persists
+      // across enemy rebuilds — the combat scene is added later, so it renders
+      // on top of this.
+      const worldReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const worldProfile = renderProfileRef.current.quality === 'low'
+        ? { layerCount: 2, propBudget: 8 }
+        : { layerCount: 3, propBudget: 16 };
+      const world = createRiftWorld(worldProfile);
+      app.stage.addChild(world.container);
+
+      let fromBiome: BiomeSpec = getBiomeForStage(stageRef.current);
+      let toBiome: BiomeSpec = fromBiome;
+      let biomeBlend = 1;
+      if (hostRef.current) {
+        hostRef.current.dataset.biome = toBiome.id;
+      }
+
+      const SEGMENT_WIDTH = 220;
+
       const resize = () => {
         const bounds = host.getBoundingClientRect();
         const width = Math.max(1, Math.floor(bounds.width));
@@ -310,11 +335,48 @@ export const RiftPixiScene = ({
 
         app.renderer.resize(width, height);
         app.stage.position.set(width / 2, height / 2);
+        world.layout(width, height);
+      };
+
+      const animateWorld = (ticker: Ticker) => {
+        const targetBiome = getBiomeForStage(stageRef.current);
+        if (targetBiome.id !== toBiome.id) {
+          fromBiome = biomeBlend >= 1 ? toBiome : fromBiome;
+          toBiome = targetBiome;
+          biomeBlend = 0;
+          if (hostRef.current) {
+            hostRef.current.dataset.biome = targetBiome.id;
+          }
+        }
+        if (biomeBlend < 1) {
+          biomeBlend = Math.min(1, biomeBlend + ticker.deltaMS / 600);
+        }
+
+        if (defeatSignalRef.current !== worldLastDefeatRef.current) {
+          worldLastDefeatRef.current = defeatSignalRef.current;
+          worldCameraTargetRef.current += SEGMENT_WIDTH;
+        }
+
+        if (worldReduceMotion) {
+          worldCameraXRef.current = worldCameraTargetRef.current;
+        } else {
+          const ease = Math.min(1, ticker.deltaMS / 800);
+          worldCameraXRef.current += (worldCameraTargetRef.current - worldCameraXRef.current) * ease;
+        }
+
+        world.render({
+          cameraX: worldCameraXRef.current,
+          from: fromBiome,
+          to: toBiome,
+          blend: biomeBlend,
+        });
       };
 
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
       resize();
+      app.ticker.add(animateWorld);
+      worldRef.current = { world, animateWorld };
       setRendererReady(true);
     };
 
@@ -323,9 +385,15 @@ export const RiftPixiScene = ({
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
+      const owned = worldRef.current;
+      worldRef.current = null;
       appRef.current = null;
 
       if (initialized) {
+        if (owned) {
+          app.ticker.remove(owned.animateWorld);
+          owned.world.destroy();
+        }
         app.destroy(true, { children: true });
       }
     };
