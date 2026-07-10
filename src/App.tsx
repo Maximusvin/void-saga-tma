@@ -4,15 +4,17 @@ import { useGameState } from './store/useGameState';
 import { getRiftEnemyVisual } from './game/riftVisuals';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
+import { RealmSwitcher } from './components/RealmSwitcher';
 import { TheRift } from './views/TheRift';
 import { SummonCircle } from './views/SummonCircle';
 import { HeroesRoster } from './views/HeroesRoster';
 import { LeaguesHall } from './views/LeaguesHall';
 import { initializeTelegramApp } from './utils/telegram';
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import './App.css';
 
 function App() {
+  const [realmSwitcherOpen, setRealmSwitcherOpen] = useState(false);
   useEffect(() => {
     initializeTelegramApp();
   }, []);
@@ -35,7 +37,12 @@ function App() {
         gems={gameState.gems}
         gold={gameState.gold}
         level={gameState.stage}
+        onOpenRealmSwitcher={() => {
+          setRealmSwitcherOpen(true);
+          void gameState.refreshRealmDirectory();
+        }}
         playerProfile={gameState.playerProfile}
+        realmCode={gameState.realmContext.canonicalRealmCode}
       />
       
       <div className="view-stage">
@@ -90,6 +97,18 @@ function App() {
       </div>
 
       <BottomNav activeView={gameState.activeView} setActiveView={gameState.setActiveView} />
+      <AnimatePresence>
+        {realmSwitcherOpen && (
+          <RealmSwitcher
+            activeRealm={gameState.realmContext}
+            busy={gameState.realmSwitching}
+            directory={gameState.realmDirectory}
+            key="realm-switcher"
+            onClose={() => setRealmSwitcherOpen(false)}
+            onSelect={gameState.switchRealm}
+          />
+        )}
+      </AnimatePresence>
       </div>
     </main>
   );

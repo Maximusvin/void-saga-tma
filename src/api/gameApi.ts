@@ -1,16 +1,23 @@
 import type { GameAction, GameEvent, GameSnapshot } from '../game/types';
 import type { PlayerProfile } from '../shared/playerProfile';
+import type { RealmContext, RealmDirectory } from '../shared/realm';
 import { getTelegramInitData } from '../utils/telegram';
 
 export interface PlayerStateResponse {
+  characterId: string;
   playerId: string;
   playerProfile: PlayerProfile;
+  realm: RealmContext;
   snapshot: GameSnapshot;
 }
 
 interface GameActionResponse extends PlayerStateResponse {
   events: GameEvent[];
   replayed: boolean;
+}
+
+interface RealmMutationResponse {
+  realm: RealmContext;
 }
 
 const normalizeBaseUrl = (value: string | undefined) => {
@@ -47,16 +54,44 @@ const requestJson = async <TResponse>(url: string, init?: RequestInit): Promise<
   return response.json() as Promise<TResponse>;
 };
 
-export const fetchGameState = (playerId: string) => {
+export const fetchGameState = (playerId: string, characterId?: string) => {
   const url = new URL(`${GAME_API_BASE_URL}/api/game/state`);
   url.searchParams.set('playerId', playerId);
+  if (characterId) {
+    url.searchParams.set('characterId', characterId);
+  }
 
   return requestJson<PlayerStateResponse>(url.toString());
 };
 
-export const postGameAction = (playerId: string, commandId: string, action: GameAction) => {
+export const fetchRealmDirectory = (playerId: string) => {
+  const url = new URL(`${GAME_API_BASE_URL}/api/game/realms`);
+  url.searchParams.set('playerId', playerId);
+  return requestJson<RealmDirectory>(url.toString());
+};
+
+export const joinRealm = (playerId: string, realmId: string) => {
+  return requestJson<RealmMutationResponse>(`${GAME_API_BASE_URL}/api/game/realms/join`, {
+    method: 'POST',
+    body: JSON.stringify({ playerId, realmId }),
+  });
+};
+
+export const selectRealmCharacter = (playerId: string, characterId: string) => {
+  return requestJson<RealmMutationResponse>(`${GAME_API_BASE_URL}/api/game/realms/select`, {
+    method: 'POST',
+    body: JSON.stringify({ characterId, playerId }),
+  });
+};
+
+export const postGameAction = (
+  playerId: string,
+  characterId: string,
+  commandId: string,
+  action: GameAction,
+) => {
   return requestJson<GameActionResponse>(`${GAME_API_BASE_URL}/api/game/action`, {
     method: 'POST',
-    body: JSON.stringify({ playerId, commandId, action }),
+    body: JSON.stringify({ characterId, playerId, commandId, action }),
   });
 };

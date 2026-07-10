@@ -99,6 +99,52 @@ systemctl enable --now void-saga-backup.timer
 systemctl list-timers void-saga-backup.timer
 ```
 
+## Logical realm operations
+
+Realm CLI bundled у production API image і працює з тією самою SQLite volume. Public admin route не створюється.
+
+Read-only status:
+
+```bash
+docker compose \
+  --env-file /srv/void-saga/env/.env.production \
+  -f docker-compose.prod.yml \
+  exec -T api node /app/realm-admin.mjs list
+```
+
+Ручний запуск нового світу блокує попередній open realm для нових characters:
+
+```bash
+docker compose \
+  --env-file /srv/void-saga/env/.env.production \
+  -f docker-compose.prod.yml \
+  exec -T api node /app/realm-admin.mjs create manual_launch
+```
+
+Приклад policy: новий realm щотижня або після 5000 players не раніше ніж через 24 години; merge кожних десяти locked standard realms:
+
+```bash
+docker compose \
+  --env-file /srv/void-saga/env/.env.production \
+  -f docker-compose.prod.yml \
+  exec -T api node /app/realm-admin.mjs policy \
+  autoLaunchEnabled=true autoMergeEnabled=true \
+  launchIntervalHours=168 minimumOpenHours=24 \
+  softCapacity=5000 hardCapacity=10000 mergeBatchSize=10
+```
+
+Timer встановлюється лише після перевірки policy через `list`:
+
+```bash
+cp deploy/systemd/void-saga-realm-reconcile.service /etc/systemd/system/
+cp deploy/systemd/void-saga-realm-reconcile.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now void-saga-realm-reconcile.timer
+systemctl list-timers void-saga-realm-reconcile.timer
+```
+
+`autoLaunchEnabled=false` та `autoMergeEnabled=false` є production default. Ручний merge найстарішої повної групи: `node /app/realm-admin.mjs merge-next` через той самий `docker compose exec`.
+
 ## Smoke
 
 ```bash

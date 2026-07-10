@@ -8,13 +8,17 @@ import { describe, it } from 'node:test';
 import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameEvent, type GameSnapshot } from '../src/game/types';
 import { gameNumber, subtractGameNumbers } from '../src/game/gameNumber';
 import type { PlayerProfile } from '../src/shared/playerProfile';
+import type { RealmContext, RealmDirectory } from '../src/shared/realm';
 import { createGameRequestHandler } from './app';
 import { openDatabase } from './db';
 import { GameRepository } from './gameRepository';
+import { RealmRepository } from './realmRepository';
 
 interface PlayerStateResponse {
+  characterId: string;
   playerId: string;
   playerProfile: PlayerProfile;
+  realm: RealmContext;
   snapshot: GameSnapshot;
 }
 
@@ -61,7 +65,7 @@ describe('game API persistence', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-'));
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
-    const server = createServer(createGameRequestHandler(repository));
+    const server = createServer(createGameRequestHandler(repository, new RealmRepository(database)));
     let serverStarted = false;
 
     try {
@@ -179,13 +183,15 @@ describe('game API persistence', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-ascension-'));
     const database = openDatabase(join(tempDir, 'game.sqlite'));
     const repository = new GameRepository(database);
-    const server = createServer(createGameRequestHandler(repository));
+    const realmRepository = new RealmRepository(database);
+    const server = createServer(createGameRequestHandler(repository, realmRepository));
     const playerId = 'dev:http-ascension-player';
     let serverStarted = false;
 
     try {
-      const player = repository.getOrCreatePlayer(playerId);
-      repository.savePlayer(playerId, {
+      const realm = realmRepository.resolveActiveCharacter(playerId);
+      const player = repository.getOrCreatePlayer(realm.characterId);
+      repository.savePlayer(realm.characterId, {
         ...player.snapshot,
         gold: gameNumber('1e30'),
         heroes: [{
@@ -257,6 +263,101 @@ describe('game API persistence', () => {
       assert.equal(restored.body.snapshot.heroes[0]?.ascension, 1);
       assert.equal(restored.body.snapshot.heroes[0]?.shards, 0);
       assert.equal(restored.body.snapshot.heroes[0]?.level, 100);
+    } finally {
+      if (serverStarted) {
+        await closeServer(server);
+      }
+      database.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps progression isolated across realm characters and enforces ownership', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-realms-'));
+    const database = openDatabase(join(tempDir, 'game.sqlite'));
+    const repository = new GameRepository(database);
+    const realmRepository = new RealmRepository(database);
+    const server = createServer(createGameRequestHandler(repository, realmRepository));
+    let serverStarted = false;
+
+    try {
+      await listen(server);
+      serverStarted = true;
+      const { port } = server.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const playerId = 'dev:http-realm-player';
+      const initial = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
+      );
+      const s1CharacterId = initial.body.characterId;
+      const initialHealth = initial.body.snapshot.monsterHealth;
+      const s2 = realmRepository.createRealm('test', 'manual', '2026-07-10T12:00:00.000Z');
+
+      const directory = await requestJson<RealmDirectory>(
+        `${baseUrl}/api/game/realms?playerId=${encodeURIComponent(playerId)}`,
+      );
+      assert.equal(directory.body.recommendedRealmId, s2.id);
+      assert.equal(directory.body.realms.find(realm => realm.code === 'S-1')?.characterId, s1CharacterId);
+      assert.equal(directory.body.realms.find(realm => realm.code === 'S-2')?.status, 'open');
+
+      const joined = await requestJson<{ realm: RealmContext }>(`${baseUrl}/api/game/realms/join`, {
+        body: JSON.stringify({ playerId, realmId: s2.id }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(joined.response.status, 200);
+      assert.equal(joined.body.realm.originRealmCode, 'S-2');
+      assert.notEqual(joined.body.realm.characterId, s1CharacterId);
+
+      const s2Action = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          characterId: joined.body.realm.characterId,
+          playerId,
+          commandId: 'cmd:realm-s2-0001',
+          action: { type: 'combat_batch', tapCount: 1, passiveTicks: 0 },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(s2Action.response.status, 200);
+      assert.notEqual(s2Action.body.snapshot.monsterHealth, initialHealth);
+
+      const restoredS1 = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}&characterId=${encodeURIComponent(s1CharacterId)}`,
+      );
+      assert.equal(restoredS1.body.snapshot.monsterHealth, initialHealth);
+
+      const forbidden = await requestJson<{ error: string }>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify({
+          characterId: s1CharacterId,
+          playerId: 'dev:another-account',
+          commandId: 'cmd:realm-forbidden-0001',
+          action: { type: 'combat_batch', tapCount: 1, passiveTicks: 0 },
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(forbidden.response.status, 403);
+      assert.equal(forbidden.body.error, 'character_not_owned');
+
+      const selected = await requestJson<{ realm: RealmContext }>(`${baseUrl}/api/game/realms/select`, {
+        body: JSON.stringify({ characterId: s1CharacterId, playerId }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(selected.body.realm.characterId, s1CharacterId);
+      const active = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
+      );
+      assert.equal(active.body.characterId, s1CharacterId);
+
+      const lockedJoin = await requestJson<{ error: string }>(`${baseUrl}/api/game/realms/join`, {
+        body: JSON.stringify({ playerId: 'dev:new-account', realmId: initial.body.realm.originRealmId }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      assert.equal(lockedJoin.response.status, 409);
+      assert.equal(lockedJoin.body.error, 'realm_not_open');
     } finally {
       if (serverStarted) {
         await closeServer(server);

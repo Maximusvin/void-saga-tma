@@ -11,6 +11,7 @@ describe('game action request validation', () => {
         action: { type: 'combat_batch', tapCount: 12, passiveTicks: 0 },
       }),
       {
+        characterId: null,
         commandId: 'cmd:test-0001',
         requestedPlayerId: 'dev:test',
         action: { type: 'combat_batch', tapCount: 12, passiveTicks: 0 },
@@ -36,6 +37,7 @@ describe('game action request validation', () => {
         action: { type: 'ascend_hero', heroId: 'void-grunt' },
       }),
       {
+        characterId: null,
         commandId: 'cmd:test-ascend',
         requestedPlayerId: null,
         action: { type: 'ascend_hero', heroId: 'void-grunt' },

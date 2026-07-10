@@ -9,7 +9,16 @@ import {
   canDispatchAutomaticGameActions,
   type AutomaticActionBackendStatus,
 } from '../api/automaticActionPolicy';
-import { createGameCommandId, fetchGameState, isGameApiEnabled, postGameAction } from '../api/gameApi';
+import {
+  createGameCommandId,
+  fetchGameState,
+  fetchRealmDirectory,
+  isGameApiEnabled,
+  joinRealm,
+  postGameAction,
+  selectRealmCharacter,
+  type PlayerStateResponse,
+} from '../api/gameApi';
 import {
   GAME_BALANCE,
   getAscensionShardCost,
@@ -37,6 +46,13 @@ import {
   normalizePlayerProfile,
   type PlayerProfile,
 } from '../shared/playerProfile';
+import {
+  normalizeRealmContext,
+  normalizeRealmDirectory,
+  type RealmContext,
+  type RealmDirectory,
+  type RealmSummary,
+} from '../shared/realm';
 import { getLocalPlayerProfilePreview, getTelegramPlayerId } from '../utils/telegram';
 
 export type { Hero } from '../game/types';
@@ -47,6 +63,33 @@ const DEV_PLAYER_STORAGE_KEY = 'void_saga_dev_player_id';
 const LOCAL_SAVE_DEBOUNCE_MS = 250;
 const TAP_BATCH_MAX_SIZE = 20;
 const TAP_BATCH_WINDOW_MS = 80;
+
+const LOCAL_REALM_CONTEXT: RealmContext = {
+  canonicalRealmCode: 'S-1',
+  canonicalRealmId: 'realm:local:1',
+  characterId: 'character:local:1',
+  originRealmCode: 'S-1',
+  originRealmId: 'realm:local:1',
+};
+
+const LOCAL_REALM_DIRECTORY: RealmDirectory = {
+  activeCharacterId: LOCAL_REALM_CONTEXT.characterId,
+  realms: [{
+    canonicalRealmCode: 'S-1',
+    canonicalRealmId: LOCAL_REALM_CONTEXT.canonicalRealmId,
+    characterId: LOCAL_REALM_CONTEXT.characterId,
+    code: 'S-1',
+    hardCapacity: 1,
+    id: LOCAL_REALM_CONTEXT.originRealmId,
+    isRecommended: true,
+    kind: 'standard',
+    openedAt: '2026-07-10T00:00:00.000Z',
+    population: 1,
+    softCapacity: 1,
+    status: 'open',
+  }],
+  recommendedRealmId: LOCAL_REALM_CONTEXT.originRealmId,
+};
 
 interface PendingTap {
   resolve: (events: GameEvent[]) => void;
@@ -127,6 +170,22 @@ const requireSnapshot = (value: unknown) => {
   return snapshot;
 };
 
+const requireRealmContext = (value: unknown) => {
+  const realm = normalizeRealmContext(value);
+  if (!realm) {
+    throw new Error('Game API returned an invalid realm context');
+  }
+  return realm;
+};
+
+const requireRealmDirectory = (value: unknown) => {
+  const directory = normalizeRealmDirectory(value);
+  if (!directory) {
+    throw new Error('Game API returned an invalid realm directory');
+  }
+  return directory;
+};
+
 const getSummonEvent = (events: GameEvent[]) => {
   return events.find((event): event is Extract<GameEvent, { type: 'hero_summoned' }> => (
     event.type === 'hero_summoned'
@@ -177,6 +236,9 @@ export const useGameState = () => {
   const [activeView, setActiveView] = useState<ActiveView>('rift');
   const [comboCount, setComboCount] = useState(() => getActiveComboCount(snapshot));
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(apiEnabled ? 'loading' : 'local');
+  const [realmContext, setRealmContext] = useState<RealmContext>(LOCAL_REALM_CONTEXT);
+  const [realmDirectory, setRealmDirectory] = useState<RealmDirectory>(LOCAL_REALM_DIRECTORY);
+  const [realmSwitching, setRealmSwitching] = useState(false);
   const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
   const [passiveVolleyFeedback, setPassiveVolleyFeedback] = useState<PassiveVolleyFeedback>({
     damage: ZERO_GAME_NUMBER,
@@ -185,6 +247,7 @@ export const useGameState = () => {
   });
   const automaticActionsEnabled = canDispatchAutomaticGameActions(apiEnabled, backendStatus);
   const playerIdRef = useRef<string | null>(null);
+  const realmContextRef = useRef(realmContext);
   const snapshotRef = useRef(snapshot);
   const actionQueueRef = useRef(Promise.resolve());
   const offlineClaimRequestedRef = useRef(false);
@@ -233,26 +296,47 @@ export const useGameState = () => {
     }
   }, []);
 
-  const executePendingCommand = useCallback(async (command: PendingGameCommand) => {
-    const response = await postGameAction(playerId, command.commandId, command.action);
+  const applyServerState = useCallback((response: PlayerStateResponse) => {
     applySnapshot(requireSnapshot(response.snapshot));
     applyPlayerProfile(response.playerProfile);
-    removeActionOutbox(playerId, command.commandId);
-    return response.events;
-  }, [applyPlayerProfile, applySnapshot, playerId]);
+    const nextRealm = requireRealmContext(response.realm);
+    if (nextRealm.characterId !== response.characterId) {
+      throw new Error('Game API returned a mismatched character context');
+    }
+    realmContextRef.current = nextRealm;
+    setRealmContext(nextRealm);
+  }, [applyPlayerProfile, applySnapshot]);
 
-  const replayActionOutbox = useCallback(async (targetCommandId?: string) => {
+  const executePendingCommand = useCallback(async (
+    characterId: string,
+    command: PendingGameCommand,
+  ) => {
+    const response = await postGameAction(
+      playerId,
+      characterId,
+      command.commandId,
+      command.action,
+    );
+    if (response.characterId !== characterId) {
+      throw new Error('Game API applied a command to the wrong character');
+    }
+    applyServerState(response);
+    removeActionOutbox(characterId, command.commandId);
+    return response.events;
+  }, [applyServerState, playerId]);
+
+  const replayActionOutbox = useCallback(async (characterId: string, targetCommandId?: string) => {
     let targetEvents: GameEvent[] = [];
 
-    for (const command of loadActionOutbox(playerId)) {
-      const events = await executePendingCommand(command);
+    for (const command of loadActionOutbox(characterId)) {
+      const events = await executePendingCommand(characterId, command);
       if (command.commandId === targetCommandId) {
         targetEvents = events;
       }
     }
 
     return targetEvents;
-  }, [executePendingCommand, playerId]);
+  }, [executePendingCommand]);
 
   useEffect(() => {
     const flushWhenHidden = () => {
@@ -285,12 +369,14 @@ export const useGameState = () => {
           return;
         }
 
-        applySnapshot(requireSnapshot(response.snapshot));
-        applyPlayerProfile(response.playerProfile);
-        await replayActionOutbox();
+        const initialRealm = requireRealmContext(response.realm);
+        applyServerState(response);
+        await replayActionOutbox(initialRealm.characterId);
+        const directory = requireRealmDirectory(await fetchRealmDirectory(playerId));
         if (isCancelled) {
           return;
         }
+        setRealmDirectory(directory);
         setBackendStatus('synced');
       })
       .catch(error => {
@@ -304,7 +390,7 @@ export const useGameState = () => {
     return () => {
       isCancelled = true;
     };
-  }, [apiEnabled, applyPlayerProfile, applySnapshot, playerId, replayActionOutbox]);
+  }, [apiEnabled, applyServerState, playerId, replayActionOutbox]);
 
   const publishCombatFeedback = useCallback((events: GameEvent[]) => {
     if (events.some(event => event.type === 'boss_enraged')) {
@@ -330,13 +416,19 @@ export const useGameState = () => {
       return Promise.resolve(publishCombatFeedback(result.events));
     }
 
+    if (backendStatus !== 'synced' || realmSwitching) {
+      return Promise.resolve([] as GameEvent[]);
+    }
+
+    const characterId = realmContextRef.current.characterId;
+
     const command: PendingGameCommand = {
       action,
       commandId: createGameCommandId(),
     };
 
     try {
-      appendActionOutbox(playerId, command);
+      appendActionOutbox(characterId, command);
     } catch (error) {
       console.error(error);
       setBackendStatus('error');
@@ -346,7 +438,7 @@ export const useGameState = () => {
     const nextAction = actionQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const events = await replayActionOutbox(command.commandId);
+        const events = await replayActionOutbox(characterId, command.commandId);
         setBackendStatus('synced');
         return publishCombatFeedback(events);
       })
@@ -358,7 +450,7 @@ export const useGameState = () => {
 
     actionQueueRef.current = nextAction.then(() => undefined);
     return nextAction;
-  }, [apiEnabled, applySnapshot, playerId, publishCombatFeedback, replayActionOutbox]);
+  }, [apiEnabled, applySnapshot, backendStatus, publishCombatFeedback, realmSwitching, replayActionOutbox]);
 
   useEffect(() => {
     if (!apiEnabled) {
@@ -369,7 +461,7 @@ export const useGameState = () => {
       const retry = actionQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          await replayActionOutbox();
+          await replayActionOutbox(realmContextRef.current.characterId);
           setBackendStatus('synced');
         })
         .catch(error => {
@@ -382,6 +474,64 @@ export const useGameState = () => {
     window.addEventListener('online', retryPendingCommands);
     return () => window.removeEventListener('online', retryPendingCommands);
   }, [apiEnabled, replayActionOutbox]);
+
+  const refreshRealmDirectory = useCallback(async () => {
+    if (!apiEnabled) {
+      return LOCAL_REALM_DIRECTORY;
+    }
+    try {
+      const directory = requireRealmDirectory(await fetchRealmDirectory(playerId));
+      setRealmDirectory(directory);
+      return directory;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }, [apiEnabled, playerId]);
+
+  const switchRealm = useCallback(async (targetRealm: RealmSummary) => {
+    if (!apiEnabled || backendStatus !== 'synced' || realmSwitching) {
+      return false;
+    }
+    if (targetRealm.characterId === realmContextRef.current.characterId) {
+      return true;
+    }
+
+    setRealmSwitching(true);
+    setBackendStatus('loading');
+    const switchOperation = actionQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const mutation = targetRealm.characterId
+          ? await selectRealmCharacter(playerId, targetRealm.characterId)
+          : await joinRealm(playerId, targetRealm.id);
+        const selectedRealm = requireRealmContext(mutation.realm);
+        const response = await fetchGameState(playerId, selectedRealm.characterId);
+        applyServerState(response);
+        await replayActionOutbox(selectedRealm.characterId);
+        setComboCount(0);
+        setPassiveVolleyFeedback({
+          damage: ZERO_GAME_NUMBER,
+          heroContributions: [],
+          signal: 0,
+        });
+        offlineClaimRequestedRef.current = false;
+
+        await refreshRealmDirectory();
+        setBackendStatus('synced');
+        return true;
+      })
+      .catch(error => {
+        console.error(error);
+        setBackendStatus('error');
+        return false;
+      })
+      .finally(() => {
+        setRealmSwitching(false);
+      });
+    actionQueueRef.current = switchOperation.then(() => undefined);
+    return switchOperation;
+  }, [apiEnabled, applyServerState, backendStatus, playerId, realmSwitching, refreshRealmDirectory, replayActionOutbox]);
 
   useEffect(() => {
     if (!automaticActionsEnabled || offlineClaimRequestedRef.current) {
@@ -562,5 +712,10 @@ export const useGameState = () => {
     backendStatus,
     playerProfile,
     playerId,
+    realmContext,
+    realmDirectory,
+    realmSwitching,
+    refreshRealmDirectory,
+    switchRealm,
   };
 };

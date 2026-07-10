@@ -83,6 +83,7 @@ npm run balance:simulate
 ## Поточна структура
 
 - `server/` - Node API з versioned SQLite migrations, player snapshots та bounded idempotency ledger.
+- `server/realmRepository.ts` - logical realm lifecycle: character isolation, capacity policy, launch, merge та audit.
 - `src/game/content.ts` - versioned content seed: heroes, summon pool, rarity metadata, stage bands і boss rules.
 - `src/game/balance.ts` - формули economy/combat/summon balance: HP scaling, rewards, crit, upgrade cost і helper exports для UI.
 - `src/game/balanceSimulator.ts` - відтворювана TTK/ROI/economy симуляція та CSV-звіти до stage 10 000.
@@ -90,6 +91,7 @@ npm run balance:simulate
 - `src/game/types.ts` - спільні типи гри.
 - `src/store/useGameState.ts` - React state adapter: backend API source of truth через `VITE_GAME_API_URL` або `localStorage` fallback без API.
 - `src/api/actionOutbox.ts` - локальний ordered outbox для retry тієї самої команди після network failure або reload.
+- `src/components/RealmSwitcher.tsx` - backend-driven вибір `S-*`/`M-*` без вигаданих світів у клієнті.
 - `src/views/TheRift.tsx` - основний бойовий екран.
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - список героїв і upgrade.
@@ -117,6 +119,7 @@ npm run balance:simulate
 - Snapshot schema v4 зберігає серверний deadline поточної boss-спроби. Hero progression із v3 лишається незмінною: один герой на content template, duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
 - `upgrade_hero` підтримує `amount: 1 | 10 | "max"`: сервер сам рахує точну сумарну ціну, купує доступні рівні до cap і обмежує одну команду 50 рівнями. Відсутній `amount` backward-compatible означає `1`.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.
+- Telegram account і realm character розділені: кожен `S-*` має окремий snapshot/outbox, а merge змінює canonical realm без переписування прогресу. Рішення описане в [`docs/adr/0002-logical-realm-servers.md`](docs/adr/0002-logical-realm-servers.md).
 - Economy має typed balance-конфіг і versioned content seed, але самі формули ще прототипні й потребують плейтесту.
 - Offline rewards рахуються backend/core action `claim_offline_rewards`: reward залежить від hero passive power, має мінімальний offline window і capped максимум.
 - UI використовує всю доступну площу Telegram WebView, враховує content safe area та запитує fullscreen у Telegram Bot API 8.0+ з безпечним modal fallback для старіших клієнтів. Нижня навігація має окремі DOM-підписи для майбутньої локалізації; іконки не містять вбудованого тексту.
@@ -127,6 +130,9 @@ npm run balance:simulate
 - `GET /api/health`
 - `GET /api/game/content` повертає `contentVersion`, `content`, `balance` і backward-compatible `summonPool`
 - `GET /api/game/state?playerId=<id>` у dev fallback або `GET /api/game/state` з `x-telegram-init-data` у Telegram auth режимі; відповідь містить snapshot і перевірений `playerProfile`
+- `GET /api/game/realms?playerId=<id>` повертає backend directory, active character і рекомендований open realm
+- `POST /api/game/realms/join` ідемпотентно створює чистий character на open realm
+- `POST /api/game/realms/select` перевіряє ownership і змінює active character
 - `POST /api/game/action`
 - `POST /api/client-errors` приймає bounded client telemetry з Telegram auth і записує privacy-safe structured event у backend runtime logs
 
@@ -135,6 +141,7 @@ Action payload:
 ```json
 {
   "playerId": "dev-player-only-without-TELEGRAM_BOT_TOKEN",
+  "characterId": "character:server-owned-id",
   "commandId": "cmd:example-0001",
   "action": { "type": "combat_batch", "tapCount": 8, "passiveTicks": 0 }
 }

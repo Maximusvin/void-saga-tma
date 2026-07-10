@@ -31,6 +31,15 @@
   padding: 3px 9px 3px 3px;
   border-color: rgba(199, 255, 238, 0.3);
   overflow: visible;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-hud:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 .player-avatar-frame {
@@ -125,6 +134,13 @@
   min-width: 0;
   display: grid;
   gap: 2px;
+}
+
+.realm-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: rgba(213, 255, 244, 0.66);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.38));
 }
 
 .player-kicker {

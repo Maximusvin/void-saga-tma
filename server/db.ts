@@ -17,6 +17,7 @@ export const openDatabase = (configuredPath?: string) => {
   database.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
   `);
   applyGameMigrations(database);
 

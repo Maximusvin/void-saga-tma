@@ -37,6 +37,128 @@ export const GAME_MIGRATIONS: readonly Migration[] = [
         ON game_commands(player_id, id DESC);
     `,
   },
+  {
+    version: 3,
+    name: 'create_logical_realms',
+    sql: `
+      CREATE TABLE realms (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('standard', 'consolidated')),
+        status TEXT NOT NULL CHECK (status IN ('open', 'locked', 'merged')),
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        opened_at TEXT NOT NULL,
+        locked_at TEXT,
+        merged_at TEXT,
+        merged_into_realm_id TEXT,
+        soft_capacity INTEGER NOT NULL CHECK (soft_capacity > 0),
+        hard_capacity INTEGER NOT NULL CHECK (hard_capacity >= soft_capacity),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (kind, sequence),
+        FOREIGN KEY (merged_into_realm_id) REFERENCES realms(id)
+      );
+
+      CREATE UNIQUE INDEX realms_single_open_standard_idx
+        ON realms(kind)
+        WHERE kind = 'standard' AND status = 'open';
+
+      INSERT INTO realms (
+        id, code, kind, status, sequence, opened_at,
+        soft_capacity, hard_capacity, created_at, updated_at
+      ) VALUES (
+        'realm:standard:1', 'S-1', 'standard', 'open', 1,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 5000, 10000,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+
+      CREATE TABLE realm_characters (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        origin_realm_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_played_at TEXT NOT NULL,
+        UNIQUE (account_id, origin_realm_id),
+        FOREIGN KEY (id) REFERENCES players(id) ON DELETE CASCADE,
+        FOREIGN KEY (origin_realm_id) REFERENCES realms(id)
+      );
+
+      CREATE INDEX realm_characters_account_idx
+        ON realm_characters(account_id, last_played_at DESC);
+      CREATE INDEX realm_characters_origin_realm_idx
+        ON realm_characters(origin_realm_id, id);
+
+      INSERT INTO realm_characters (id, account_id, origin_realm_id, created_at, last_played_at)
+      SELECT id, id, 'realm:standard:1', created_at, updated_at
+      FROM players;
+
+      CREATE TABLE account_realm_state (
+        account_id TEXT PRIMARY KEY,
+        active_character_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (active_character_id) REFERENCES realm_characters(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO account_realm_state (account_id, active_character_id, created_at, updated_at)
+      SELECT account_id, id, created_at, last_played_at
+      FROM realm_characters;
+
+      CREATE TABLE realm_policy (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        auto_launch_enabled INTEGER NOT NULL CHECK (auto_launch_enabled IN (0, 1)),
+        auto_merge_enabled INTEGER NOT NULL CHECK (auto_merge_enabled IN (0, 1)),
+        launch_interval_hours INTEGER NOT NULL CHECK (launch_interval_hours > 0),
+        minimum_open_hours INTEGER NOT NULL CHECK (minimum_open_hours >= 0),
+        soft_capacity INTEGER NOT NULL CHECK (soft_capacity > 0),
+        hard_capacity INTEGER NOT NULL CHECK (hard_capacity >= soft_capacity),
+        merge_batch_size INTEGER NOT NULL CHECK (merge_batch_size >= 2),
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO realm_policy VALUES (
+        1, 0, 0, 168, 24, 5000, 10000, 10,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+
+      CREATE TABLE realm_merge_sources (
+        target_realm_id TEXT NOT NULL,
+        source_realm_id TEXT NOT NULL UNIQUE,
+        ordinal INTEGER NOT NULL,
+        PRIMARY KEY (target_realm_id, source_realm_id),
+        FOREIGN KEY (target_realm_id) REFERENCES realms(id),
+        FOREIGN KEY (source_realm_id) REFERENCES realms(id)
+      );
+
+      CREATE TABLE realm_operations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_type TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        realm_id TEXT,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (realm_id) REFERENCES realms(id)
+      );
+
+      CREATE INDEX realm_operations_created_at_idx
+        ON realm_operations(created_at DESC, id DESC);
+
+      CREATE TABLE realm_entitlements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        character_id TEXT NOT NULL,
+        realm_id TEXT NOT NULL,
+        sku TEXT NOT NULL,
+        provider_event_id TEXT NOT NULL UNIQUE,
+        grants_json TEXT NOT NULL,
+        granted_at TEXT NOT NULL,
+        expires_at TEXT,
+        UNIQUE (character_id, realm_id, sku),
+        FOREIGN KEY (character_id) REFERENCES realm_characters(id) ON DELETE CASCADE,
+        FOREIGN KEY (realm_id) REFERENCES realms(id)
+      );
+    `,
+  },
 ];
 
 export const applyGameMigrations = (database: DatabaseSync) => {

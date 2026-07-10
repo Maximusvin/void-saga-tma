@@ -1,0 +1,9 @@
+[Unit]
+Description=Void Saga logical realm reconciliation
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/void-saga/repo
+ExecStart=/usr/bin/docker compose --env-file /srv/void-saga/env/.env.production -f docker-compose.prod.yml exec -T api node /app/realm-admin.mjs reconcile

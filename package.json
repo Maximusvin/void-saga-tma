@@ -8,12 +8,13 @@
     "dev": "vite",
     "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
-    "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/components/**/*.test.ts src/game/**/*.test.ts src/observability/**/*.test.ts src/views/**/*.test.ts",
+    "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/components/**/*.test.ts src/game/**/*.test.ts src/observability/**/*.test.ts src/shared/**/*.test.ts src/views/**/*.test.ts",
     "test:e2e": "npm run build && playwright test",
     "preview": "vite preview",
     "prod:compose:check": "node scripts/assert-production-compose.mjs",
+    "realm:admin": "tsx scripts/realm-admin.ts",
     "server:check": "tsc -p tsconfig.server.json",
-    "server:bundle": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/index.mjs",
+    "server:bundle": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/index.mjs && esbuild scripts/realm-admin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist-server/realm-admin.mjs",
     "server:dev": "tsx server/index.ts"
   },
   "dependencies": {
