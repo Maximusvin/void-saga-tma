@@ -53,7 +53,9 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
 });
 
 test('boss attempt exposes phases and resets through the shared engine after enrage', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
+    Math.random = () => 0.5;
     const now = Date.now();
     localStorage.setItem('rift_heroes_save', JSON.stringify({
       schemaVersion: 4,
