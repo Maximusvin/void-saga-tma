@@ -13,6 +13,12 @@
   background-repeat: no-repeat;
 }
 
+.app-shell.view-rift {
+  background:
+    linear-gradient(180deg, rgba(7, 20, 24, 0.08), rgba(5, 10, 16, 0.08) 52%, rgba(3, 7, 12, 0.7) 100%),
+    var(--rift-backdrop-image) center 56% / cover no-repeat;
+}
+
 .app-shell::before {
   content: '';
   position: absolute;
@@ -37,6 +43,26 @@
     radial-gradient(circle at 50% 45%, rgba(80, 255, 235, 0.24), transparent 24%),
     linear-gradient(180deg, transparent 0%, rgba(2, 4, 10, 0.4) 58%, rgba(2, 4, 10, 0.92) 100%);
   pointer-events: none;
+}
+
+.app-shell.view-rift::before {
+  background:
+    linear-gradient(104deg, rgba(245, 204, 116, 0.08), transparent 35% 66%, rgba(66, 221, 208, 0.12)),
+    radial-gradient(ellipse at 50% 58%, rgba(255, 255, 255, 0.13), transparent 38%);
+  mask-image: none;
+  animation: drift-light 14s ease-in-out infinite;
+}
+
+.app-shell.view-rift::after {
+  background:
+    linear-gradient(180deg, rgba(2, 7, 12, 0.24) 0, transparent 18%, transparent 58%, rgba(2, 6, 10, 0.78) 100%),
+    radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(2, 7, 12, 0.12) 76%, rgba(2, 7, 12, 0.34) 100%);
+}
+
+.app-shell.view-rift.rift-boss::after {
+  background:
+    linear-gradient(180deg, rgba(23, 11, 34, 0.24) 0, transparent 20%, transparent 58%, rgba(17, 8, 28, 0.8) 100%),
+    radial-gradient(ellipse at 50% 48%, transparent 22%, rgba(49, 22, 69, 0.16) 72%, rgba(20, 9, 34, 0.38) 100%);
 }
 
 .game-frame {
@@ -86,4 +112,11 @@
 @keyframes breathe-fog {
   0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.62; }
   50% { transform: translateX(-50%) scaleX(1.08); opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell::before,
+  .scene-fog {
+    animation: none;
+  }
 }

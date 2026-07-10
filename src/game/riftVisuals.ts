@@ -1,4 +1,4 @@
-export type RiftEnemyArchetype = 'wisp' | 'stalker' | 'bulwark' | 'overlord';
+export type RiftEnemyArchetype = 'stalker' | 'bulwark' | 'oracle' | 'sovereign';
 
 export interface RiftEnemyPalette {
   core: number;
@@ -10,7 +10,15 @@ export interface RiftEnemyPalette {
 
 export interface RiftEnemyVisualSpec {
   id: string;
+  name: string;
+  title: string;
+  zone: string;
   archetype: RiftEnemyArchetype;
+  asset: string;
+  backdrop: string;
+  artHeight: number;
+  artAnchorY: number;
+  shadowWidth: number;
   palette: RiftEnemyPalette;
   body: {
     width: number;
@@ -25,70 +33,102 @@ export interface RiftEnemyVisualSpec {
 
 const ENEMY_VISUALS = [
   {
-    id: 'rift-wisp',
-    archetype: 'wisp',
-    palette: {
-      core: 0x88fff6,
-      dark: 0x24356f,
-      glow: 0x66fcf1,
-      mid: 0x7a5ee4,
-      wing: 0x21195d,
-    },
-    body: { width: 108, height: 112, radius: 42 },
-    coreRadius: 15,
-    hornHeight: 56,
-    particleCount: 26,
-    wingSpread: 74,
-  },
-  {
-    id: 'void-stalker',
+    id: 'mirefang-stalker',
+    name: 'Mirefang Stalker',
+    title: 'Crystal predator',
+    zone: 'Luminous Verge',
     archetype: 'stalker',
+    asset: '/assets/rift/mirefang-stalker.webp',
+    backdrop: '/assets/rift/luminous-verge.webp',
+    artHeight: 286,
+    artAnchorY: 0.5,
+    shadowWidth: 192,
     palette: {
-      core: 0xb9fbff,
-      dark: 0x1e2558,
-      glow: 0x42d7ff,
-      mid: 0x5d4bc8,
-      wing: 0x17133f,
+      core: 0xa8fff4,
+      dark: 0x152c2d,
+      glow: 0x36e6d4,
+      mid: 0x26786d,
+      wing: 0x163c42,
     },
-    body: { width: 100, height: 128, radius: 34 },
-    coreRadius: 13,
-    hornHeight: 72,
-    particleCount: 30,
-    wingSpread: 88,
+    body: { width: 112, height: 104, radius: 28 },
+    coreRadius: 14,
+    hornHeight: 58,
+    particleCount: 22,
+    wingSpread: 82,
   },
   {
-    id: 'rift-bulwark',
+    id: 'ironroot-marauder',
+    name: 'Ironroot Marauder',
+    title: 'Runebound colossus',
+    zone: 'Luminous Verge',
     archetype: 'bulwark',
+    asset: '/assets/rift/ironroot-marauder.webp',
+    backdrop: '/assets/rift/luminous-verge.webp',
+    artHeight: 320,
+    artAnchorY: 0.52,
+    shadowWidth: 182,
     palette: {
-      core: 0xd4fff4,
-      dark: 0x2d314d,
-      glow: 0x7af7bc,
-      mid: 0x4e88a8,
-      wing: 0x183c54,
+      core: 0xffd36a,
+      dark: 0x263b38,
+      glow: 0x69f0d5,
+      mid: 0x58736a,
+      wing: 0x294943,
     },
-    body: { width: 128, height: 108, radius: 28 },
+    body: { width: 136, height: 122, radius: 30 },
     coreRadius: 18,
     hornHeight: 48,
-    particleCount: 24,
-    wingSpread: 66,
+    particleCount: 19,
+    wingSpread: 68,
+  },
+  {
+    id: 'ashveil-oracle',
+    name: 'Ashveil Oracle',
+    title: 'Keeper of the veil',
+    zone: 'Luminous Verge',
+    archetype: 'oracle',
+    asset: '/assets/rift/ashveil-oracle.webp',
+    backdrop: '/assets/rift/luminous-verge.webp',
+    artHeight: 332,
+    artAnchorY: 0.51,
+    shadowWidth: 134,
+    palette: {
+      core: 0xe6d8ff,
+      dark: 0x18224f,
+      glow: 0x9374ff,
+      mid: 0x4d5796,
+      wing: 0x252b68,
+    },
+    body: { width: 104, height: 136, radius: 26 },
+    coreRadius: 15,
+    hornHeight: 72,
+    particleCount: 28,
+    wingSpread: 86,
   },
 ] as const satisfies readonly RiftEnemyVisualSpec[];
 
 const BOSS_VISUAL = {
-  id: 'rift-overlord',
-  archetype: 'overlord',
+  id: 'crowned-rift-sovereign',
+  name: 'Crowned Rift Sovereign',
+  title: 'Astral dominion boss',
+  zone: 'Sovereign Gate',
+  archetype: 'sovereign',
+  asset: '/assets/rift/rift-sovereign.webp',
+  backdrop: '/assets/rift/sovereign-gate.webp',
+  artHeight: 350,
+  artAnchorY: 0.5,
+  shadowWidth: 188,
   palette: {
-    core: 0xffd36a,
-    dark: 0x521455,
-    glow: 0xff4fa3,
-    mid: 0xb52675,
-    wing: 0x6e1d58,
+    core: 0xffd97d,
+    dark: 0x27113c,
+    glow: 0xc865ff,
+    mid: 0x6e397f,
+    wing: 0x432058,
   },
-  body: { width: 138, height: 132, radius: 34 },
-  coreRadius: 20,
-  hornHeight: 82,
-  particleCount: 36,
-  wingSpread: 104,
+  body: { width: 142, height: 138, radius: 34 },
+  coreRadius: 22,
+  hornHeight: 84,
+  particleCount: 38,
+  wingSpread: 108,
 } as const satisfies RiftEnemyVisualSpec;
 
 export const getRiftEnemyVisual = (stage: number, isBoss: boolean): RiftEnemyVisualSpec => {

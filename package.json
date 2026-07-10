@@ -9,7 +9,7 @@
     "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
     "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/components/**/*.test.ts src/game/**/*.test.ts src/observability/**/*.test.ts src/views/**/*.test.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "preview": "vite preview",
     "prod:compose:check": "node scripts/assert-production-compose.mjs",
     "server:check": "tsc -p tsconfig.server.json",

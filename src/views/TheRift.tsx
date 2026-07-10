@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, Crosshair, Zap } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { Activity, Crown, Crosshair, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { formatNumber } from '../utils/formatNumber';
 import { GAME_BALANCE, isBossStage } from '../game/balance';
@@ -12,6 +12,7 @@ import {
   type GameNumber,
 } from '../game/gameNumber';
 import type { GameEvent } from '../game/types';
+import { getRiftEnemyVisual } from '../game/riftVisuals';
 import './TheRift.css';
 
 const RiftPixiScene = lazy(async () => {
@@ -87,6 +88,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const [isHit, setIsHit] = useState(false);
   const [impactState, setImpactState] = useState({ id: 0, isCrit: false });
   const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
+  const prefersReducedMotion = useReducedMotion();
   const previousStageRef = useRef(stage);
   const previousBossRef = useRef(isBoss);
   const lastDefeatStageRef = useRef<number | null>(null);
@@ -294,6 +296,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
   const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
+  const enemyVisual = getRiftEnemyVisual(stage, isBoss);
+  const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
 
   return (
     <motion.section
@@ -304,7 +308,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
       <div className="rift-skyline" />
-      {sparks.map(spark => (
+      {!prefersReducedMotion && sparks.map(spark => (
         <motion.span
           key={spark.id}
           className="rift-spark"
@@ -315,25 +319,30 @@ export const TheRift: React.FC<TheRiftProps> = ({
       ))}
 
       <header className="rift-stage-hud">
-        <div className="stage-kicker">{isBoss ? 'Boss Rift' : 'Void Rift'}</div>
-        <h1>Stage {stage}</h1>
-        {isBoss && (
-          <motion.div
-            className="boss-alert"
-            animate={{ opacity: [0.72, 1, 0.72] }}
-            transition={{ duration: 1.2, repeat: Infinity }}
-          >
-            Epic boss breach
-          </motion.div>
-        )}
-      </header>
-
-      <div className="combat-dashboard">
-        <div className="combat-chip">
-          <Activity size={16} />
+        <div className="stage-mark" aria-label={`Stage ${stage}`}>
+          <span className="stage-mark-value">
+            {isBoss && <Crown size={16} aria-hidden="true" />}
+            <strong>{stage}</strong>
+          </span>
+          <span>{isBoss ? 'Boss' : `Rift ${String(riftIndex).padStart(2, '0')}`}</span>
+        </div>
+        <div className="stage-location">
+          <span>{enemyVisual.zone}</span>
+          <strong>{isBoss ? 'Sovereign breach' : 'Hunt in progress'}</strong>
+        </div>
+        <div className="combat-chip auto-chip">
+          <Activity size={15} />
           <span>Auto</span>
           <strong>{formatNumber(passivePower)}/s</strong>
         </div>
+      </header>
+
+      <div className="rift-arena">
+        <div className="combat-dashboard">
+          <div className={`encounter-rank ${isBoss ? 'boss' : ''}`}>
+            {isBoss && <Crown size={14} aria-hidden="true" />}
+            <span>{enemyVisual.title}</span>
+          </div>
         <AnimatePresence>
           {comboCount > 0 && (
             <motion.div
@@ -347,23 +356,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-
-      <div className="health-panel">
-        <div className="health-meta">
-          <span>Enemy integrity</span>
-          <strong>{formatNumber(ceilGameNumber(monsterHealth))} / {formatNumber(monsterMaxHealth)}</strong>
         </div>
-        <div className="health-track">
-          <motion.div
-            className="health-fill"
-            animate={{ width: `${healthPercent}%` }}
-            transition={{ duration: 0.14, ease: 'easeOut' }}
-          />
-        </div>
-      </div>
-
-      <div className="rift-arena">
         <AnimatePresence>
           {projectiles.map(projectile => (
             <motion.span
@@ -379,19 +372,23 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
         <motion.button
           type="button"
-          aria-label="Attack rift monster"
+          aria-label={`Attack ${enemyVisual.name}`}
           className={`monster-button ${isHit ? 'hit' : ''}`}
           onPointerDown={handleAttack}
           onKeyDown={handleAttackKeyDown}
-          animate={{ y: [0, -16, 0] }}
-          transition={{ duration: isBoss ? 3.1 : 2.35, repeat: Infinity, ease: 'easeInOut' }}
         >
           <span className="monster-ring outer" />
           <span className="monster-ring inner" />
           <motion.span
             className="rift-beast-shell"
-            animate={isHit ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] } : { scale: [1, 1.035, 1] }}
-            transition={{ duration: isHit ? 0.18 : 2.2, repeat: isHit ? 0 : Infinity, ease: 'easeInOut' }}
+            animate={isHit
+              ? { scale: [1, 0.88, 1.05, 1], rotate: [0, -5, 5, 0] }
+              : (prefersReducedMotion ? { scale: 1 } : { scale: [1, 1.035, 1] })}
+            transition={{
+              duration: isHit ? 0.18 : 2.2,
+              repeat: isHit || prefersReducedMotion ? 0 : Infinity,
+              ease: 'easeInOut',
+            }}
           >
             <Suspense fallback={<span className="rift-pixi-loading" />}>
               <RiftPixiScene
@@ -406,6 +403,35 @@ export const TheRift: React.FC<TheRiftProps> = ({
             </Suspense>
           </motion.span>
         </motion.button>
+
+        <div className="enemy-panel">
+          <div className="enemy-title-row">
+            <div>
+              <span>{isBoss ? 'Mythic encounter' : enemyVisual.title}</span>
+              <h2>{enemyVisual.name}</h2>
+            </div>
+            <strong className="health-percent">{Math.round(healthPercent)}%</strong>
+          </div>
+          <div
+            className="health-track"
+            role="progressbar"
+            aria-label={`${enemyVisual.name} health`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(healthPercent)}
+          >
+            <motion.div
+              className="health-fill"
+              animate={{ width: `${healthPercent}%` }}
+              transition={{ duration: 0.14, ease: 'easeOut' }}
+            />
+            <span className="health-sheen" />
+          </div>
+          <div className="health-meta">
+            <span>{isBoss ? 'Boss integrity' : 'Enemy integrity'}</span>
+            <strong>{formatNumber(ceilGameNumber(monsterHealth))} / {formatNumber(monsterMaxHealth)}</strong>
+          </div>
+        </div>
 
         <AnimatePresence>
           {defeatTransition && (
