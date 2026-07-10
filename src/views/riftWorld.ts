@@ -10,9 +10,14 @@ import { createShardPool, type ShardPool } from './shardPool';
  * frame, so the tuned combat scene above it stays untouched.
  */
 
-const SAMPLE_STEP = 18;
-const SKY_BANDS = 10;
+const SAMPLE_STEP = 16;
+const SKY_BANDS = 14;
 const PROP_MARGIN = 120;
+
+// Atmospheric perspective: far layers wash toward the sky so distance reads as
+// haze; the ridge of each layer catches a rim of light for volume.
+const LAYER_HAZE = [0.44, 0.26, 0.08] as const;
+const RIDGE_WIDTH = [1.4, 1.8, 2.4] as const;
 
 // Nearer layers scroll faster to sell depth.
 const LAYERS = [
@@ -73,9 +78,17 @@ export const createRiftWorld = (profile: RiftWorldProfile): RiftWorld => {
   const propsContainer = new Container();
   const propPool: ShardPool<Graphics> = createShardPool<Graphics>(
     propsContainer,
+    // A faceted crystal cluster with a soft glow halo behind it; the pool tints
+    // the whole thing per biome and scales it per slot.
     () => new Graphics()
-      .poly([0, -14, 5, -2, 3, 12, -3, 12, -5, -2])
-      .fill({ color: 0xffffff, alpha: 0.9 }),
+      .ellipse(0, -4, 16, 20)
+      .fill({ color: 0xffffff, alpha: 0.12 })
+      .poly([-1, -22, 5, -6, 2, 13, -3, 13, -6, -5])
+      .fill({ color: 0xffffff, alpha: 0.95 })
+      .poly([4, -14, 9, -3, 6, 11, 2, 11])
+      .fill({ color: 0xffffff, alpha: 0.6 })
+      .poly([-6, -10, -2, -3, -3, 10, -8, 8])
+      .fill({ color: 0xffffff, alpha: 0.7 }),
     graphic => graphic.destroy(),
   );
   const activeProps = new Map<number, Graphics>();
@@ -98,22 +111,36 @@ export const createRiftWorld = (profile: RiftWorldProfile): RiftWorld => {
     });
   };
 
-  const drawTerrain = (layer: Graphics, spec: BiomeSpec, from: BiomeSpec, to: BiomeSpec, blend: number, layerIndex: number, cameraX: number) => {
+  const drawTerrain = (layer: Graphics, from: BiomeSpec, to: BiomeSpec, blend: number, layerIndex: number, cameraX: number) => {
     const { parallax, baseline, amplitude } = LAYERS[layerIndex];
     const baselineY = height * baseline;
-    const color = lerpColor(from.terrain[layerIndex], to.terrain[layerIndex], blend);
+    const base = lerpColor(from.terrain[layerIndex], to.terrain[layerIndex], blend);
+    const haze = lerpColor(from.skyBottom, to.skyBottom, blend);
+    const fill = lerpColor(base, haze, LAYER_HAZE[layerIndex] ?? 0.1);
+    const ridge = lerpColor(fill, 0xffffff, 0.34);
 
-    layer.clear();
-    layer.moveTo(0, height);
+    // Sample the silhouette once and reuse it for the fill and the ridge light.
+    const top: number[] = [];
     for (let x = 0; x <= width; x += SAMPLE_STEP) {
       const worldX = cameraX * parallax + x;
       const offset = terrainOffsetAt(worldX, from) * (1 - blend) + terrainOffsetAt(worldX, to) * blend;
-      layer.lineTo(x, baselineY - offset * amplitude);
+      top.push(x, baselineY - offset * amplitude);
+    }
+
+    layer.clear();
+    layer.moveTo(0, height);
+    for (let index = 0; index < top.length; index += 2) {
+      layer.lineTo(top[index], top[index + 1]);
     }
     layer.lineTo(width, height);
     layer.lineTo(0, height);
-    layer.fill({ color, alpha: 1 });
-    void spec;
+    layer.fill({ color: fill, alpha: 1 });
+
+    layer.moveTo(top[0], top[1]);
+    for (let index = 2; index < top.length; index += 2) {
+      layer.lineTo(top[index], top[index + 1]);
+    }
+    layer.stroke({ color: ridge, width: RIDGE_WIDTH[layerIndex] ?? 1.5, alpha: 0.5 });
   };
 
   const render = (frame: RiftWorldFrame) => {
@@ -127,7 +154,7 @@ export const createRiftWorld = (profile: RiftWorldProfile): RiftWorld => {
     });
 
     terrainLayers.forEach((layer, index) => {
-      drawTerrain(layer, to, from, to, blend, index, cameraX);
+      drawTerrain(layer, from, to, blend, index, cameraX);
     });
 
     // Props ride the nearest layer. Recycle slots leaving the window, spawn ones entering it.
