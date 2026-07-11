@@ -15,6 +15,7 @@ import { HeroPortrait } from '../components/HeroPortrait';
 import {
   RARITY_ORDER,
   getAscensionShardCost,
+  getHeroCombatFocus,
   getHeroLevelCap,
   getHeroTemplateById,
   getHeroUpgradeQuote,
@@ -116,7 +117,7 @@ const HeroCard = memo(function HeroCard({
         <div className="hero-title-row">
           <div>
             <h3>{hero.name}</h3>
-            <p>{template?.combatRole ?? 'Riftbound'}</p>
+            <p>{template?.combatRole ?? 'Riftbound'} · {getHeroCombatFocus(hero)}</p>
           </div>
           <strong><Zap size={12} />{formatNumber(hero.power)}</strong>
         </div>

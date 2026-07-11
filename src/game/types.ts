@@ -5,7 +5,14 @@ export type HeroUpgradeAmount = 1 | 10 | 'max';
 export type ActiveView = 'rift' | 'summon' | 'leagues' | 'roster';
 export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
 export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
-export type HeroCombatRole = 'Vanguard' | 'Arcanist' | 'Spellblade' | 'Sovereign';
+export type HeroCombatRole =
+  | 'Vanguard'
+  | 'Ranger'
+  | 'Arcanist'
+  | 'Spellblade'
+  | 'Oracle'
+  | 'Celestial'
+  | 'Sovereign';
 export type HeroPortraitMotion = 'still' | 'aura' | 'embers' | 'mythic';
 
 export const GAME_SNAPSHOT_SCHEMA_VERSION = 7;
@@ -24,6 +31,7 @@ export interface Hero {
 export interface SummonHeroTemplate {
   accentColor: string;
   attackStyle: HeroAttackStyle;
+  combatProfile: HeroCombatProfile;
   combatRole: HeroCombatRole;
   id: string;
   name: string;
@@ -35,6 +43,11 @@ export interface SummonHeroTemplate {
   power: number;
   summonWeight: number;
   icon: string;
+}
+
+export interface HeroCombatProfile {
+  passivePowerMultiplier: number;
+  tapPowerMultiplier: number;
 }
 
 export interface HeroShowcaseSpec {

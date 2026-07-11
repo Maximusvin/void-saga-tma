@@ -277,12 +277,33 @@ describe('hero summons', () => {
     assert.deepEqual(unlocked.snapshot.activeHeroIds, ['void-grunt']);
     assert.equal(duplicateEvent.type, 'hero_summoned');
     assert.equal(duplicateEvent.isDuplicate, true);
-    assert.equal(duplicateEvent.shardsGranted, 1);
+    assert.equal(duplicateEvent.shardsGranted, 2);
     assert.equal(duplicate.snapshot.heroes.length, 1);
-    assert.equal(duplicate.snapshot.heroes[0]?.shards, 1);
+    assert.equal(duplicate.snapshot.heroes[0]?.shards, 2);
     assert.equal(duplicate.snapshot.gems, 10);
     assert.equal(duplicate.snapshot.summonPity, 2);
     assert.equal(duplicateEvent.summonsUntilLegendaryPity, 78);
+  });
+
+  it('compensates a newly unlocked template for rarity-pool dilution', () => {
+    const ownedCommon = {
+      ...createSnapshot('2026-07-09T11:59:00.000Z'),
+      heroes: [{
+        ...hero(5),
+        id: 'rift-scavenger',
+        name: 'Rift Scavenger',
+        rarity: 'Common' as const,
+        templateId: 'rift-scavenger',
+      }],
+    };
+    const result = summonHeroAction(ownedCommon, 0);
+    const event = result.events[0];
+
+    assert.equal(event.type, 'hero_summoned');
+    assert.equal(event.isDuplicate, false);
+    assert.equal(event.hero.templateId, 'void-grunt');
+    assert.equal(event.shardsGranted, 1);
+    assert.equal(result.snapshot.heroes.find(hero => hero.templateId === 'void-grunt')?.shards, 1);
   });
 
   it('forces a server-authoritative Legendary on the eightieth summon', () => {

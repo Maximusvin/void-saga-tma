@@ -25,6 +25,8 @@ import {
   HERO_RARITIES,
   RARITY_COLORS,
   RARITY_ORDER,
+  getHeroCombatFocus,
+  getHeroTemplateById,
   getSummonDropPercent,
   getSummonsUntilLegendaryPity,
 } from '../game/balance';
@@ -180,6 +182,8 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
   const resultStyle = summonedHero
     ? { '--summon-rarity': RARITY_COLORS[summonedHero.rarity] } as CSSProperties
     : undefined;
+  const summonedTemplate = summonedHero ? getHeroTemplateById(summonedHero.templateId) : null;
+  const summonedCombatFocus = summonedHero ? getHeroCombatFocus(summonedHero) : null;
 
   return (
     <motion.section
@@ -320,7 +324,11 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
               <div className="summon-result-copy">
                 <span>{duplicateShards > 0 ? 'Echo recovered' : `${summonedHero.rarity} champion`}</span>
                 <h3 id="summon-result-title">{summonedHero.name}</h3>
-                <p>{duplicateShards > 0 ? 'Duplicate converted into ascension progress' : 'A new hero has joined your warband'}</p>
+                <p>
+                  {duplicateShards > 0
+                    ? 'Duplicate converted into ascension progress'
+                    : `${summonedTemplate?.combatRole ?? 'Riftbound'} · ${summonedCombatFocus}${summonedCombatFocus === 'Balanced' ? '' : ' specialist'}`}
+                </p>
               </div>
               <div className="summon-result-stat">
                 {duplicateShards > 0 ? <Sparkles aria-hidden="true" size={20} /> : <Zap aria-hidden="true" size={20} />}
