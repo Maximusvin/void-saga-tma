@@ -13,5 +13,10 @@ assert.match(
   /location\s+\/\s*\{[^}]*try_files\s+\$uri\s+\$uri\/\s+\/index\.html\s*;/s,
   'production SPA fallback must continue routing to index.html',
 );
+assert.match(
+  config,
+  /location\s+\/assets\/rift\/ironroot-3d\/\s*\{[^}]*max-age=31536000,\s*immutable[^}]*try_files\s+\$uri\s+=404\s*;/s,
+  'versioned Ironroot binaries must use immutable caching without SPA fallback',
+);
 
 process.stdout.write('Production nginx cache checks passed.\n');

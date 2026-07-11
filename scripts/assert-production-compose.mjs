@@ -9,13 +9,21 @@ const command = spawnSync(
     '.env.production.example',
     '-f',
     'docker-compose.prod.yml',
+    '-f',
+    'docker-compose.backup.yml',
     '--profile',
     'backup',
     'config',
     '--format',
     'json',
   ],
-  { encoding: 'utf8' },
+  {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      VOID_SAGA_BACKUP_IMAGE: 'void-saga-api:ci-backup-sha',
+    },
+  },
 );
 
 if (command.status !== 0) {
@@ -42,6 +50,12 @@ for (const serviceName of ['api', 'backup', 'web']) {
 }
 
 const backupService = config.services.backup;
+assert.equal(
+  backupService.image,
+  'void-saga-api:ci-backup-sha',
+  'backup must render the exact deployed API image instead of latest',
+);
+assert.ok(!backupService.image.endsWith(':latest'), 'backup must never resolve to the latest tag');
 assert.deepEqual(backupService.profiles, ['backup'], 'backup must require the explicit backup profile');
 assert.equal(backupService.network_mode, 'none', 'backup must not have network access');
 assert.ok(!backupService.ports || backupService.ports.length === 0, 'backup must not publish host ports');

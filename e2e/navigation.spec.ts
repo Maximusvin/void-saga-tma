@@ -1013,6 +1013,13 @@ test('animates the skinned Ironroot model without rebuilding the Three.js scene'
 });
 
 test('plays Ironroot death before handing the canvas to the next enemy', async ({ page }) => {
+  await page.addInitScript(() => {
+    const releases: unknown[] = [];
+    Reflect.set(window, '__ironrootRuntimeReleases', releases);
+    window.addEventListener('rift-three-runtime-released', event => {
+      releases.push((event as CustomEvent).detail);
+    });
+  });
   await seedIronrootEncounter(page, '1');
   await page.goto('/');
 
@@ -1030,7 +1037,107 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
   await expect(nextScene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
   await expect(nextScene).toHaveAttribute('data-enemy-rig', 'static-sprite');
   await expect(nextScene.locator('canvas')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__ironrootRuntimeReleases'))).toEqual([
+    { canvasAttached: false, contextLossRequested: true },
+  ]);
+  await expect(page.locator('canvas')).toHaveCount(1);
 });
+
+test('preloads the versioned Ironroot runtime before its encounter', async ({ page }) => {
+  const modelRequests: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('/assets/rift/ironroot-3d/ironroot-')) {
+      modelRequests.push(request.url());
+    }
+  });
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 7,
+      activeHeroIds: [],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      enemyIndex: 0,
+      gems: 50,
+      gold: '1000',
+      heroes: [],
+      lastPassiveTickAt: now,
+      lastSeenAt: now,
+      monsterHealth: '120',
+      monsterMaxHealth: '120',
+      stage: 1,
+      summonPity: 0,
+      updatedAt: now,
+    }));
+  });
+  await page.goto('/');
+
+  await expect(page.locator('.rift-pixi-scene')).toHaveAttribute('data-enemy-id', 'mirefang-stalker');
+  await expect.poll(() => modelRequests.length).toBe(1);
+  expect(modelRequests[0]).toMatch(/ironroot-(?:high|low)\.glb\?v=[a-f0-9]{12}$/);
+  await expect(page.locator('canvas')).toHaveCount(1);
+});
+
+for (const profile of [
+  { telegramClass: 'LOW', quality: 'low', model: 'ironroot-low.glb', maxTextureBytes: 3_200_000 },
+  { telegramClass: 'AVERAGE', quality: 'balanced', model: 'ironroot-low.glb', maxTextureBytes: 3_200_000 },
+  { telegramClass: 'HIGH', quality: 'high', model: 'ironroot-high.glb', maxTextureBytes: 12_600_000 },
+] as const) {
+  test.describe(`${profile.telegramClass} Telegram Android Ironroot profile`, () => {
+    test.use({
+      deviceScaleFactor: 2,
+      userAgent: 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 Mobile '
+        + `Telegram-Android/11.3.3 (Test Device; Android 14; SDK 34; ${profile.telegramClass})`,
+    });
+
+    test('keeps first load, long tasks, canvas, and GPU proxy within budget', async ({ page }) => {
+      await page.addInitScript(() => {
+        const durations: number[] = [];
+        Reflect.set(window, '__ironrootLongTasks', durations);
+        new PerformanceObserver(entries => {
+          entries.getEntries().forEach(entry => durations.push(entry.duration));
+        }).observe({ type: 'longtask', buffered: true });
+      });
+      await seedIronrootEncounter(page);
+      await page.goto('/');
+
+      const scene = page.locator('.rift-three-scene');
+      await expect(scene).toHaveAttribute('data-art-loaded', 'true');
+      const metrics = await scene.evaluate(element => ({
+        canvasBufferBytes: Number((element as HTMLElement).dataset.canvasBufferBytes),
+        gpuMemoryProxyBytes: Number((element as HTMLElement).dataset.gpuMemoryProxyBytes),
+        loadMs: Number((element as HTMLElement).dataset.loadMs),
+        modelUrl: (element as HTMLElement).dataset.modelUrl,
+        renderProfile: (element as HTMLElement).dataset.renderProfile,
+        rendererGeometries: Number((element as HTMLElement).dataset.rendererGeometries),
+        rendererTextures: Number((element as HTMLElement).dataset.rendererTextures),
+        textureBufferBytes: Number((element as HTMLElement).dataset.textureBufferBytes),
+        maxLongTaskMs: Math.max(0, ...(Reflect.get(window, '__ironrootLongTasks') as number[])),
+      }));
+      console.info(
+        `Ironroot ${profile.telegramClass}: load=${metrics.loadMs}ms, longtask=${metrics.maxLongTaskMs}ms, `
+        + `canvas=${metrics.canvasBufferBytes}B, texture=${metrics.textureBufferBytes}B, `
+        + `gpu-proxy=${metrics.gpuMemoryProxyBytes}B`,
+      );
+
+      expect(metrics.renderProfile).toBe(profile.quality);
+      expect(metrics.modelUrl).toContain(profile.model);
+      expect(metrics.modelUrl).toMatch(/\?v=[a-f0-9]{12}$/);
+      expect(metrics.loadMs).toBeGreaterThan(0);
+      expect(metrics.loadMs).toBeLessThan(5_000);
+      expect(metrics.canvasBufferBytes).toBeGreaterThan(0);
+      expect(metrics.textureBufferBytes).toBeGreaterThan(0);
+      expect(metrics.textureBufferBytes).toBeLessThanOrEqual(profile.maxTextureBytes);
+      expect(metrics.gpuMemoryProxyBytes).toBe(metrics.canvasBufferBytes + metrics.textureBufferBytes);
+      expect(metrics.gpuMemoryProxyBytes).toBeLessThanOrEqual(17_000_000);
+      expect(metrics.rendererGeometries).toBeGreaterThanOrEqual(2);
+      expect(metrics.rendererTextures).toBeGreaterThanOrEqual(3);
+      expect(metrics.rendererTextures).toBeLessThanOrEqual(4);
+      expect(metrics.maxLongTaskMs).toBeLessThan(1_000);
+    });
+  });
+}
 
 test('falls back to the static Ironroot sprite when its GLB cannot load', async ({ page }) => {
   await page.route('**/assets/rift/ironroot-3d/**', route => route.abort());

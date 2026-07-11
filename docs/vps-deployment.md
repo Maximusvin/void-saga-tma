@@ -81,13 +81,12 @@ cloudflared tunnel route dns --overwrite-dns \
 Перед увімкненням таймера створити й перевірити перший consistent SQLite backup:
 
 ```bash
-docker compose \
-  --env-file /srv/void-saga/env/.env.production \
-  -f docker-compose.prod.yml \
-  --profile backup run --rm backup
+/srv/void-saga/repo/deploy/run-backup.sh
 ```
 
-Backup service не має network access, монтує gameplay volume read-only, виконує SQLite online backup і `PRAGMA quick_check`, після чого лишає останні `VOID_SAGA_BACKUP_RETENTION` копій.
+Команда працює з чистого shell: знаходить рівно один запущений Compose service `api`, читає його фактичний SHA-tag через Docker metadata й передає повний image reference у backup overlay. Запуск використовує `--pull never`, тому не може непомітно перейти на неіснуючий `void-saga-api:latest` або інший образ.
+
+Backup service не має network access, монтує gameplay volume read-only, виконує SQLite online backup і `PRAGMA quick_check`, після чого лишає останні `VOID_SAGA_BACKUP_RETENTION` копій. Якщо API-контейнер не запущений, їх декілька, image має tag `latest` або локальний image відсутній, команда завершується до створення backup-контейнера.
 
 Для щоденного запуску:
 
