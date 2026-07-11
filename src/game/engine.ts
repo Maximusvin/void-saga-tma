@@ -8,6 +8,7 @@ import {
   getDuplicateShardReward,
   getHeroLevelCap,
   getHeroUpgradeQuote,
+  getNewHeroShardReward,
   getEncounterMaxHealth,
   getEnemiesInStage,
   getPassivePower,
@@ -433,6 +434,10 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
     };
   }
 
+  const shardsGranted = getNewHeroShardReward(
+    template.rarity,
+    snapshot.heroes.some(currentHero => currentHero.rarity === template.rarity),
+  );
   const hero: Hero = {
     ascension: 0,
     id: template.id,
@@ -440,7 +445,7 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
     rarity: template.rarity,
     level: 1,
     power: gameNumber(template.power),
-    shards: 0,
+    shards: shardsGranted,
     templateId: template.id,
   };
 
@@ -462,7 +467,7 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
       costGems: GAME_BALANCE.summonCostGems,
       isDuplicate: false,
       legendaryPityTriggered,
-      shardsGranted: 0,
+      shardsGranted,
       summonsUntilLegendaryPity,
     }],
   };

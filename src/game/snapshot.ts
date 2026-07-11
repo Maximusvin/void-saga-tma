@@ -2,7 +2,7 @@ import {
   GAME_BALANCE,
   HERO_RARITIES,
   SUMMON_POOL,
-  getDuplicateShardReward,
+  getBaseDuplicateShardReward,
   getEncounterMaxHealth,
   getEnemiesInStage,
   getSummonsUntilLegendaryPity,
@@ -131,7 +131,7 @@ const mergeDuplicateHeroes = (heroes: readonly Hero[]) => {
       ascension: Math.max(existing.ascension, hero.ascension, minimumAscension),
       level,
       power: addGameNumbers(existing.power, hero.power),
-      shards: existing.shards + hero.shards + getDuplicateShardReward(hero.rarity),
+      shards: existing.shards + hero.shards + getBaseDuplicateShardReward(hero.rarity),
     });
   }
 

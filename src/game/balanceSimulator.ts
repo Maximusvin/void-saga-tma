@@ -7,6 +7,9 @@ import {
   getEnemiesInStage,
   getDuplicateShardReward,
   getHeroLevelCap,
+  getNewHeroShardReward,
+  getHeroPassivePower,
+  getHeroTapPower,
   getNextHeroPower,
   getPassivePower,
   getStageBandForStage,
@@ -28,6 +31,7 @@ import {
   type GameNumberInput,
 } from './gameNumber';
 import type { Hero, HeroRarity } from './types';
+import { MAX_ACTIVE_WARBAND_HEROES } from './warband';
 
 export interface SimulationHeroSeed {
   ascension?: number;
@@ -161,7 +165,7 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   initialSummonsConsumed: 3,
   // This is a simulator safety bound, not a gameplay purchase cap. Late-game
   // shard stockpiles can unlock several 50-level ascension bands at once.
-  maxUpgradesPerStage: 500,
+  maxUpgradesPerStage: 1_000,
   normalTargetTtkSeconds: 14,
   bossTargetTtkSeconds: 55,
   sustainedComboMultiplier: 1,
@@ -220,11 +224,12 @@ interface CombatProjection {
 interface UpgradeCandidate {
   cost: GameNumber;
   heroIndex: number;
-  nextPower: GameNumber;
   roi: GameNumber;
 }
 
 const EQUIVALENT_ROI_MULTIPLIER = 1.001;
+const heroProjectedDpsCaches = new WeakMap<BalanceSimulationConfig, WeakMap<Hero, GameNumber>>();
+const heroUpgradeCostCache = new WeakMap<Hero, GameNumber>();
 
 const normalizePositiveInteger = (value: number, label: string) => {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -267,15 +272,96 @@ const createSimulationHeroes = (seeds: readonly SimulationHeroSeed[]): Hero[] =>
   }));
 };
 
+const getHeroProjectedDps = (hero: Hero, config: BalanceSimulationConfig) => {
+  let configCache = heroProjectedDpsCaches.get(config);
+  if (!configCache) {
+    configCache = new WeakMap<Hero, GameNumber>();
+    heroProjectedDpsCaches.set(config, configCache);
+  }
+
+  const cachedDps = configCache.get(hero);
+  if (cachedDps) {
+    return cachedDps;
+  }
+
+  const expectedCritMultiplier = 1 + GAME_BALANCE.critChance * (GAME_BALANCE.critMultiplier - 1);
+  const projectedDps = addGameNumbers(
+    getHeroPassivePower(hero),
+    multiplyGameNumbers(
+      getHeroTapPower(hero),
+      config.tapsPerSecond,
+      expectedCritMultiplier,
+      config.sustainedComboMultiplier,
+    ),
+  );
+  configCache.set(hero, projectedDps);
+  return projectedDps;
+};
+
+const getSimulationUpgradeCost = (hero: Hero) => {
+  const cachedCost = heroUpgradeCostCache.get(hero);
+  if (cachedCost) {
+    return cachedCost;
+  }
+
+  const cost = getUpgradeCost(hero);
+  heroUpgradeCostCache.set(hero, cost);
+  return cost;
+};
+
+const selectSimulationWarband = (
+  heroes: readonly Hero[],
+  config: BalanceSimulationConfig,
+) => {
+  return [...heroes]
+    .sort((left, right) => (
+      compareGameNumbers(getHeroProjectedDps(right, config), getHeroProjectedDps(left, config)) ||
+      left.id.localeCompare(right.id)
+    ))
+    .slice(0, MAX_ACTIVE_WARBAND_HEROES);
+};
+
+const getHeroInvestmentPriority = (hero: Hero, config: BalanceSimulationConfig) => {
+  const template = SUMMON_POOL.find(entry => entry.id === hero.templateId);
+  if (!template) {
+    return 0;
+  }
+
+  const expectedCritMultiplier = 1 + GAME_BALANCE.critChance * (GAME_BALANCE.critMultiplier - 1);
+  const combatFactor = template.combatProfile.passivePowerMultiplier +
+    template.combatProfile.tapPowerMultiplier * GAME_BALANCE.clickHeroPowerMultiplier *
+    config.tapsPerSecond * expectedCritMultiplier * config.sustainedComboMultiplier;
+  return template.power * combatFactor /
+    GAME_BALANCE.upgradeRarityCostMultiplier[hero.rarity];
+};
+
+const selectSimulationInvestmentRoster = (
+  heroes: readonly Hero[],
+  config: BalanceSimulationConfig,
+) => {
+  return heroes
+    .filter(hero => (
+      !isHeroAtLevelCap(hero) || hero.shards >= getAscensionShardCost(hero)
+    ))
+    .sort((left, right) => (
+      getHeroInvestmentPriority(right, config) - getHeroInvestmentPriority(left, config) ||
+      compareGameNumbers(right.power, left.power) ||
+      right.shards - left.shards ||
+      left.id.localeCompare(right.id)
+    ))
+    .slice(0, MAX_ACTIVE_WARBAND_HEROES);
+};
+
 const projectCombat = (
   heroes: readonly Hero[],
   monsterHealth: GameNumber,
   config: BalanceSimulationConfig,
 ): CombatProjection => {
-  const teamPower = getPassivePower([...heroes]);
+  const activeHeroes = selectSimulationWarband(heroes, config);
+  const teamPower = getPassivePower(activeHeroes);
   const expectedCritMultiplier = 1 + GAME_BALANCE.critChance * (GAME_BALANCE.critMultiplier - 1);
   const tapDps = multiplyGameNumbers(
-    getBaseClickPower([...heroes]),
+    getBaseClickPower(activeHeroes),
     config.tapsPerSecond,
     expectedCritMultiplier,
     config.sustainedComboMultiplier,
@@ -290,22 +376,31 @@ const projectCombat = (
   };
 };
 
-const getBestUpgradeCandidate = (heroes: readonly Hero[], gold: GameNumber): UpgradeCandidate | null => {
+const getBestUpgradeCandidate = (
+  heroes: readonly Hero[],
+  gold: GameNumber,
+  config: BalanceSimulationConfig,
+): UpgradeCandidate | null => {
   let bestCandidate: UpgradeCandidate | null = null;
+  const investmentHeroIds = new Set(
+    selectSimulationInvestmentRoster(heroes, config).map(hero => hero.id),
+  );
 
   heroes.forEach((hero, heroIndex) => {
-    if (isHeroAtLevelCap(hero)) {
+    if (!investmentHeroIds.has(hero.id) || isHeroAtLevelCap(hero)) {
       return;
     }
 
-    const cost = getUpgradeCost(hero);
+    const cost = getSimulationUpgradeCost(hero);
     if (compareGameNumbers(gold, cost) < 0) {
       return;
     }
 
-    const nextPower = getNextHeroPower(hero);
-    const powerGain = subtractGameNumbers(nextPower, hero.power);
-    const roi = divideGameNumbers(powerGain, cost);
+    const projectedDpsGain = multiplyGameNumbers(
+      getHeroProjectedDps(hero, config),
+      GAME_BALANCE.upgradePowerMultiplier - 1,
+    );
+    const roi = divideGameNumbers(projectedDpsGain, cost);
     const isBetterRoi = !bestCandidate || compareGameNumbers(
       roi,
       multiplyGameNumbers(bestCandidate.roi, EQUIVALENT_ROI_MULTIPLIER),
@@ -321,18 +416,28 @@ const getBestUpgradeCandidate = (heroes: readonly Hero[], gold: GameNumber): Upg
     );
 
     if (isBetterRoi || isStableTieBreak) {
-      bestCandidate = { cost, heroIndex, nextPower, roi };
+      bestCandidate = { cost, heroIndex, roi };
     }
   });
 
   return bestCandidate;
 };
 
-const getReadyAscensionHeroIndex = (heroes: readonly Hero[]) => {
+const getReadyAscensionHeroIndex = (
+  heroes: readonly Hero[],
+  config: BalanceSimulationConfig,
+) => {
   let candidateIndex: number | null = null;
+  const investmentHeroIds = new Set(
+    selectSimulationInvestmentRoster(heroes, config).map(hero => hero.id),
+  );
 
   heroes.forEach((hero, heroIndex) => {
-    if (!isHeroAtLevelCap(hero) || hero.shards < getAscensionShardCost(hero)) {
+    if (
+      !investmentHeroIds.has(hero.id) ||
+      !isHeroAtLevelCap(hero) ||
+      hero.shards < getAscensionShardCost(hero)
+    ) {
       return;
     }
 
@@ -373,6 +478,11 @@ const applySimulationSummon = (
     return;
   }
 
+  const shards = getNewHeroShardReward(
+    template.rarity,
+    heroes.some(hero => hero.rarity === template.rarity),
+  );
+
   heroes.push({
     ascension: 0,
     id: template.id,
@@ -380,7 +490,7 @@ const applySimulationSummon = (
     name: template.name,
     power: gameNumber(template.power),
     rarity: template.rarity,
-    shards: 0,
+    shards,
     templateId: template.id,
   });
 };
@@ -488,9 +598,9 @@ export const runBalanceSimulation = (
         compareGameNumbers(projection.ttkSeconds, targetTtkPerEncounter) > 0 &&
         upgradesPurchased < maxUpgradesPerStage
       ) {
-        const candidate = getBestUpgradeCandidate(heroes, gold);
+        const candidate = getBestUpgradeCandidate(heroes, gold, config);
         if (!candidate) {
-          const ascensionHeroIndex = getReadyAscensionHeroIndex(heroes);
+          const ascensionHeroIndex = getReadyAscensionHeroIndex(heroes, config);
           if (ascensionHeroIndex === null) {
             break;
           }
@@ -510,7 +620,7 @@ export const runBalanceSimulation = (
         heroes[candidate.heroIndex] = {
           ...hero,
           level: hero.level + 1,
-          power: candidate.nextPower,
+          power: getNextHeroPower(hero),
         };
         gold = subtractGameNumbers(gold, candidate.cost);
         upgradeSpend = addGameNumbers(upgradeSpend, candidate.cost);
@@ -524,8 +634,8 @@ export const runBalanceSimulation = (
         targetTtkPerEncounter,
       ) > 0;
       const hasUncappedHero = heroes.some(hero => !isHeroAtLevelCap(hero));
-      const hasAffordableUpgrade = getBestUpgradeCandidate(heroes, gold) !== null;
-      const hasReadyAscension = getReadyAscensionHeroIndex(heroes) !== null;
+      const hasAffordableUpgrade = getBestUpgradeCandidate(heroes, gold, config) !== null;
+      const hasReadyAscension = getReadyAscensionHeroIndex(heroes, config) !== null;
       targetMissed ||= encounterTargetMissed;
       blockedByGold ||= encounterTargetMissed && hasUncappedHero && !hasAffordableUpgrade;
       blockedByProgression ||= encounterTargetMissed && !hasUncappedHero && !hasReadyAscension;

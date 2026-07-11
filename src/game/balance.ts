@@ -14,7 +14,7 @@ import {
   getHeroTemplateById,
   getStageBandForStage,
 } from './content';
-import type { Hero, HeroRarity, HeroUpgradeAmount } from './types';
+import type { Hero, HeroCombatProfile, HeroRarity, HeroUpgradeAmount } from './types';
 import {
   ONE_GAME_NUMBER,
   ZERO_GAME_NUMBER,
@@ -172,15 +172,50 @@ export const getEncounterMaxHealth = (stage: number, enemyIndex: number) => {
   );
 };
 
+const DEFAULT_HERO_COMBAT_PROFILE: Readonly<HeroCombatProfile> = {
+  passivePowerMultiplier: 1,
+  tapPowerMultiplier: 1,
+};
+
+export const getHeroCombatProfile = (hero: Pick<Hero, 'templateId'>) => {
+  return getHeroTemplateById(hero.templateId)?.combatProfile ?? DEFAULT_HERO_COMBAT_PROFILE;
+};
+
+export const getHeroCombatFocus = (hero: Pick<Hero, 'templateId'>): 'Balanced' | 'Idle' | 'Tap' => {
+  const profile = getHeroCombatProfile(hero);
+  if (profile.tapPowerMultiplier > 1) {
+    return 'Tap';
+  }
+  if (profile.passivePowerMultiplier > 1) {
+    return 'Idle';
+  }
+  return 'Balanced';
+};
+
+export const getHeroTapPower = (hero: Pick<Hero, 'power' | 'templateId'>) => {
+  return multiplyGameNumbers(
+    hero.power,
+    GAME_BALANCE.clickHeroPowerMultiplier,
+    getHeroCombatProfile(hero).tapPowerMultiplier,
+  );
+};
+
+export const getHeroPassivePower = (hero: Pick<Hero, 'power' | 'templateId'>) => {
+  return multiplyGameNumbers(
+    hero.power,
+    getHeroCombatProfile(hero).passivePowerMultiplier,
+  );
+};
+
 export const getBaseClickPower = (heroes: Hero[]) => {
   return addGameNumbers(
     ONE_GAME_NUMBER,
-    ...heroes.map(hero => multiplyGameNumbers(hero.power, GAME_BALANCE.clickHeroPowerMultiplier)),
+    ...heroes.map(getHeroTapPower),
   );
 };
 
 export const getPassivePower = (heroes: Hero[]) => {
-  return addGameNumbers(...heroes.map(hero => hero.power));
+  return addGameNumbers(...heroes.map(getHeroPassivePower));
 };
 
 export const getComboMultiplier = (comboCount: number) => {
@@ -206,8 +241,17 @@ export const getAscensionShardCost = (hero: Pick<Hero, 'ascension' | 'rarity'>) 
   return GAME_BALANCE.ascensionShardCostByRarity[hero.rarity];
 };
 
-export const getDuplicateShardReward = (rarity: HeroRarity) => {
+export const getBaseDuplicateShardReward = (rarity: HeroRarity) => {
   return GAME_BALANCE.duplicateShardsByRarity[rarity];
+};
+
+export const getDuplicateShardReward = (rarity: HeroRarity) => {
+  const templatesInRarity = SUMMON_POOL.filter(template => template.rarity === rarity).length;
+  return getBaseDuplicateShardReward(rarity) * Math.max(1, templatesInRarity);
+};
+
+export const getNewHeroShardReward = (rarity: HeroRarity, ownsHeroInRarity: boolean) => {
+  return ownsHeroInRarity ? getBaseDuplicateShardReward(rarity) : 0;
 };
 
 export const isHeroAtLevelCap = (hero: Pick<Hero, 'ascension' | 'level'>) => {

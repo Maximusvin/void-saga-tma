@@ -11,6 +11,7 @@ import {
   getStageBandForStage,
 } from './content';
 import {
+  GAME_BALANCE,
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
   getEncounterMaxHealth,
@@ -39,7 +40,17 @@ describe('game content invariants', () => {
     assert.equal(SUMMON_RARITY_RATES.Legendary, 0.008);
 
     for (const rarity of HERO_RARITIES) {
-      assert.ok(SUMMON_POOL.some(hero => hero.rarity === rarity), `${rarity} summon pool is empty`);
+      const rarityTemplates = SUMMON_POOL.filter(hero => hero.rarity === rarity);
+      assert.equal(
+        rarityTemplates.length,
+        2,
+        `${rarity} must have two live templates`,
+      );
+      assert.equal(
+        new Set(rarityTemplates.map(hero => hero.summonWeight)).size,
+        1,
+        `${rarity} standard templates must keep equal weights for pool-scaled shards`,
+      );
     }
 
     for (const hero of SUMMON_POOL) {
@@ -52,6 +63,14 @@ describe('game content invariants', () => {
       assert.match(hero.accentColor, /^#[0-9a-f]{6}$/i);
       assert.ok(hero.attackStyle.length > 0);
       assert.ok(hero.combatRole.length > 0);
+      assert.ok(hero.combatProfile.passivePowerMultiplier > 0);
+      assert.ok(hero.combatProfile.tapPowerMultiplier > 0);
+      const expectedCritMultiplier = 1 +
+        GAME_BALANCE.critChance * (GAME_BALANCE.critMultiplier - 1);
+      const fourTapPowerFactor = hero.combatProfile.passivePowerMultiplier +
+        hero.combatProfile.tapPowerMultiplier * GAME_BALANCE.clickHeroPowerMultiplier *
+        4 * expectedCritMultiplier;
+      assert.ok(Math.abs(fourTapPowerFactor - 1.44) < RATE_TOTAL_EPSILON);
       assert.match(hero.portrait, /^\/assets\/heroes\/[a-z-]+\.webp$/);
       assert.ok(['still', 'aura', 'embers', 'mythic'].includes(hero.portraitMotion));
       if (hero.showcase) {
@@ -122,15 +141,16 @@ describe('game content invariants', () => {
   });
 
   it('keeps deterministic summon roll boundaries stable', () => {
-    assert.equal(rollSummonTemplate(0).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.649999).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.65).id, 'void-mage');
-    assert.equal(rollSummonTemplate(0.911999).id, 'void-mage');
-    assert.equal(rollSummonTemplate(0.912).id, 'void-knight');
-    assert.equal(rollSummonTemplate(0.991999).id, 'void-knight');
-    assert.equal(rollSummonTemplate(0.992).id, 'void-lord');
-    assert.equal(rollSummonTemplate(1).id, 'void-lord');
+    assert.equal(rollSummonTemplate(0, 0).id, 'void-grunt');
+    assert.equal(rollSummonTemplate(0.649999, 0.999999).id, 'rift-scavenger');
+    assert.equal(rollSummonTemplate(0.65, 0).id, 'void-mage');
+    assert.equal(rollSummonTemplate(0.911999, 0.999999).id, 'storm-ranger');
+    assert.equal(rollSummonTemplate(0.912, 0).id, 'void-knight');
+    assert.equal(rollSummonTemplate(0.991999, 0.999999).id, 'ember-oracle');
+    assert.equal(rollSummonTemplate(0.992, 0).id, 'void-lord');
+    assert.equal(rollSummonTemplate(1, 0.999999).id, 'seraph-aurelia');
     assert.equal(rollSummonTemplate(0, 0, 0, 'Legendary').id, 'void-lord');
+    assert.equal(rollSummonTemplate(0, 1, 0, 'Legendary').id, 'seraph-aurelia');
   });
 
   it('raises only the Legendary chance during soft pity and guarantees pull 80', () => {

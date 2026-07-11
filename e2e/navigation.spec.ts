@@ -557,9 +557,13 @@ test('Heroes builds and persists a four-slot Warband without overflowing mobile 
       gold: '1000000000',
       heroes: [
         { ascension: 1, id: 'void-grunt', name: 'Void Grunt', rarity: 'Common', level: 62, power: '9000000', shards: 4, templateId: 'void-grunt' },
+        { ascension: 1, id: 'rift-scavenger', name: 'Rift Scavenger', rarity: 'Common', level: 54, power: '750000', shards: 3, templateId: 'rift-scavenger' },
         { ascension: 1, id: 'void-mage', name: 'Void Mage', rarity: 'Rare', level: 58, power: '41000', shards: 7, templateId: 'void-mage' },
+        { ascension: 1, id: 'storm-ranger', name: 'Storm Ranger', rarity: 'Rare', level: 66, power: '800000', shards: 5, templateId: 'storm-ranger' },
         { ascension: 2, id: 'void-knight', name: 'Void Knight', rarity: 'Epic', level: 91, power: '283000', shards: 11, templateId: 'void-knight' },
+        { ascension: 2, id: 'ember-oracle', name: 'Ember Oracle', rarity: 'Epic', level: 88, power: '1200000', shards: 8, templateId: 'ember-oracle' },
         { ascension: 3, id: 'void-lord', name: 'Void Lord', rarity: 'Legendary', level: 137, power: '3300000', shards: 18, templateId: 'void-lord' },
+        { ascension: 2, id: 'seraph-aurelia', name: 'Seraph Aurelia', rarity: 'Legendary', level: 99, power: '2100000', shards: 9, templateId: 'seraph-aurelia' },
       ],
       stage: 150,
       monsterMaxHealth: '1000000000',
@@ -572,7 +576,10 @@ test('Heroes builds and persists a four-slot Warband without overflowing mobile 
   await page.getByRole('button', { name: 'Heroes', exact: true }).click();
 
   await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(4);
-  await expect(page.locator('.hero-card')).toHaveCount(4);
+  await expect(page.locator('.hero-card')).toHaveCount(8);
+  await expect(page.getByText('Ranger · Tap', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('Oracle · Idle', { exact: true })).toBeVisible();
+  await expect(page.getByText('Celestial · Idle', { exact: true })).toBeVisible();
   await expect.poll(() => page.locator('.hero-portrait-art img').evaluateAll(images => (
     images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth === 512)
   ))).toBe(true);
@@ -1393,9 +1400,10 @@ test.describe('average Telegram Android performance profile', () => {
 
     await summonAction.click();
     await expect(summonView).toHaveAttribute('data-summon-phase', 'charging');
-    const resultDialog = page.getByRole('dialog', { name: 'Void Lord' });
+    const resultDialog = page.getByRole('dialog', { name: 'Seraph Aurelia' });
     await expect(resultDialog).toBeVisible({ timeout: 5_000 });
     await expect(resultDialog.getByText('Legendary champion', { exact: true })).toBeVisible();
+    await expect(resultDialog.getByText('Celestial · Idle specialist', { exact: true })).toBeVisible();
     await expect(resultDialog.getByText('Starting power', { exact: true })).toBeVisible();
     const claimButton = resultDialog.getByRole('button', { name: 'Claim champion' });
     const repeatButton = resultDialog.getByRole('button', { name: 'Summon again for 10 gems' });

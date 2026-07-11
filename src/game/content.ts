@@ -1,6 +1,6 @@
 import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-008';
+export const GAME_CONTENT_VERSION = 'void-saga-content-009';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
@@ -15,6 +15,7 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
   {
     accentColor: '#79d9c4',
     attackStyle: 'slash',
+    combatProfile: { passivePowerMultiplier: 1, tapPowerMultiplier: 1 },
     combatRole: 'Vanguard',
     id: 'void-grunt',
     name: 'Void Grunt',
@@ -26,8 +27,23 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     icon: '🛡️',
   },
   {
+    accentColor: '#90b7a2',
+    attackStyle: 'bolt',
+    combatProfile: { passivePowerMultiplier: 0.648, tapPowerMultiplier: 1.8 },
+    combatRole: 'Ranger',
+    id: 'rift-scavenger',
+    name: 'Rift Scavenger',
+    portrait: '/assets/heroes/rift-scavenger.webp',
+    portraitMotion: 'still',
+    rarity: 'Common',
+    power: 5,
+    summonWeight: 1,
+    icon: '🏹',
+  },
+  {
     accentColor: '#63d9ff',
     attackStyle: 'bolt',
+    combatProfile: { passivePowerMultiplier: 1, tapPowerMultiplier: 1 },
     combatRole: 'Arcanist',
     id: 'void-mage',
     name: 'Void Mage',
@@ -45,8 +61,23 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     icon: '✨',
   },
   {
+    accentColor: '#58a6ff',
+    attackStyle: 'bolt',
+    combatProfile: { passivePowerMultiplier: 0.714, tapPowerMultiplier: 1.65 },
+    combatRole: 'Ranger',
+    id: 'storm-ranger',
+    name: 'Storm Ranger',
+    portrait: '/assets/heroes/storm-ranger.webp',
+    portraitMotion: 'aura',
+    rarity: 'Rare',
+    power: 10,
+    summonWeight: 1,
+    icon: '⚡',
+  },
+  {
     accentColor: '#d27cff',
     attackStyle: 'hex',
+    combatProfile: { passivePowerMultiplier: 1, tapPowerMultiplier: 1 },
     combatRole: 'Spellblade',
     id: 'void-knight',
     name: 'Void Knight',
@@ -58,8 +89,23 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     icon: '⚔️',
   },
   {
+    accentColor: '#ff7247',
+    attackStyle: 'hex',
+    combatProfile: { passivePowerMultiplier: 1.198, tapPowerMultiplier: 0.55 },
+    combatRole: 'Oracle',
+    id: 'ember-oracle',
+    name: 'Ember Oracle',
+    portrait: '/assets/heroes/ember-oracle.webp',
+    portraitMotion: 'embers',
+    rarity: 'Epic',
+    power: 20,
+    summonWeight: 1,
+    icon: '🔥',
+  },
+  {
     accentColor: '#ffd36f',
     attackStyle: 'nova',
+    combatProfile: { passivePowerMultiplier: 1, tapPowerMultiplier: 1 },
     combatRole: 'Sovereign',
     id: 'void-lord',
     name: 'Void Lord',
@@ -78,6 +124,20 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     power: 50,
     summonWeight: 1,
     icon: '👑',
+  },
+  {
+    accentColor: '#f2d99b',
+    attackStyle: 'nova',
+    combatProfile: { passivePowerMultiplier: 1.242, tapPowerMultiplier: 0.45 },
+    combatRole: 'Celestial',
+    id: 'seraph-aurelia',
+    name: 'Seraph Aurelia',
+    portrait: '/assets/heroes/seraph-aurelia.webp',
+    portraitMotion: 'mythic',
+    rarity: 'Legendary',
+    power: 50,
+    summonWeight: 1,
+    icon: '🪽',
   },
 ] as const;
 
