@@ -21,6 +21,21 @@ export interface RealmLeaderboard {
   totalPlayers: number;
 }
 
+export interface LeagueProgress {
+  division: LeagueDivision;
+  nextDivision: LeagueDivision | null;
+  nextStage: number | null;
+  progressPercent: number;
+  stagesRemaining: number;
+}
+
+const LEAGUE_THRESHOLDS = [
+  { division: 'bronze', minimumStage: 1 },
+  { division: 'silver', minimumStage: 50 },
+  { division: 'gold', minimumStage: 200 },
+  { division: 'mythic', minimumStage: 1_000 },
+] as const satisfies readonly { division: LeagueDivision; minimumStage: number }[];
+
 const MAX_LEADERBOARD_ENTRIES = 50;
 const MAX_DISPLAY_NAME_LENGTH = 72;
 
@@ -30,16 +45,42 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 export const getLeagueDivision = (stage: number): LeagueDivision => {
   const normalizedStage = Number.isFinite(stage) ? Math.max(1, Math.floor(stage)) : 1;
-  if (normalizedStage >= 1_000) {
-    return 'mythic';
+  let division: LeagueDivision = 'bronze';
+  for (const threshold of LEAGUE_THRESHOLDS) {
+    if (normalizedStage < threshold.minimumStage) {
+      break;
+    }
+    division = threshold.division;
   }
-  if (normalizedStage >= 200) {
-    return 'gold';
+  return division;
+};
+
+export const getLeagueProgress = (stage: number): LeagueProgress => {
+  const normalizedStage = Number.isFinite(stage) ? Math.max(1, Math.floor(stage)) : 1;
+  const divisionIndex = LEAGUE_THRESHOLDS.findIndex(
+    threshold => threshold.division === getLeagueDivision(normalizedStage),
+  );
+  const current = LEAGUE_THRESHOLDS[divisionIndex] ?? LEAGUE_THRESHOLDS[0];
+  const next = LEAGUE_THRESHOLDS[divisionIndex + 1];
+  if (!next) {
+    return {
+      division: current.division,
+      nextDivision: null,
+      nextStage: null,
+      progressPercent: 100,
+      stagesRemaining: 0,
+    };
   }
-  if (normalizedStage >= 50) {
-    return 'silver';
-  }
-  return 'bronze';
+
+  const divisionSpan = next.minimumStage - current.minimumStage;
+  const completedStages = normalizedStage - current.minimumStage;
+  return {
+    division: current.division,
+    nextDivision: next.division,
+    nextStage: next.minimumStage,
+    progressPercent: Math.min(100, Math.max(0, completedStages / divisionSpan * 100)),
+    stagesRemaining: Math.max(0, next.minimumStage - normalizedStage),
+  };
 };
 
 const normalizePhotoUrl = (value: unknown) => {

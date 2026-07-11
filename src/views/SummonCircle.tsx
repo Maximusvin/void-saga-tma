@@ -14,6 +14,7 @@ import {
   Shield,
   Sparkles,
   Swords,
+  Users,
   WandSparkles,
   Zap,
   type LucideIcon,
@@ -31,14 +32,19 @@ import {
   getSummonsUntilLegendaryPity,
 } from '../game/balance';
 import type { GameEvent, Hero, HeroRarity } from '../game/types';
+import { MAX_ACTIVE_WARBAND_HEROES } from '../game/warband';
 import { formatNumber } from '../utils/formatNumber';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import './SummonCircle.css';
 
 interface SummonCircleProps {
+  activeHeroIds: readonly string[];
   gems: number;
+  onOpenHeroes: () => void;
+  ownedHeroCount: number;
   summonPity: number;
   summonHero: () => Promise<Extract<GameEvent, { type: 'hero_summoned' }> | null>;
+  totalHeroCount: number;
 }
 
 type SummonPhase = 'idle' | 'charging' | 'silhouette' | 'result';
@@ -55,7 +61,15 @@ const SummonHeroGlyph = ({ rarity, size = 56 }: { rarity: HeroRarity; size?: num
   return <Icon aria-hidden="true" size={size} strokeWidth={1.65} />;
 };
 
-export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps) => {
+export const SummonCircle = ({
+  activeHeroIds,
+  gems,
+  onOpenHeroes,
+  ownedHeroCount,
+  summonPity,
+  summonHero,
+  totalHeroCount,
+}: SummonCircleProps) => {
   const [phase, setPhase] = useState<SummonPhase>('idle');
   const [summonedHero, setSummonedHero] = useState<Hero | null>(null);
   const [duplicateShards, setDuplicateShards] = useState(0);
@@ -176,6 +190,11 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
     triggerHaptic('light');
   };
 
+  const openHeroes = () => {
+    claimHero();
+    onOpenHeroes();
+  };
+
   const canSummon = phase === 'idle' && gems >= GAME_BALANCE.summonCostGems;
   const canSummonAgain = phase === 'result' && gems >= GAME_BALANCE.summonCostGems;
   const summonsUntilLegendaryPity = getSummonsUntilLegendaryPity(summonPity);
@@ -184,6 +203,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
     : undefined;
   const summonedTemplate = summonedHero ? getHeroTemplateById(summonedHero.templateId) : null;
   const summonedCombatFocus = summonedHero ? getHeroCombatFocus(summonedHero) : null;
+  const activeWarbandSlot = summonedHero ? activeHeroIds.indexOf(summonedHero.id) : -1;
 
   return (
     <motion.section
@@ -196,7 +216,7 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
       initial={{ opacity: 0 }}
     >
       <header className="summon-heading">
-        <span>Rift sanctuary</span>
+        <span>Rift sanctuary · {ownedHeroCount}/{totalHeroCount} collected</span>
         <h2>Void Summon</h2>
         <p>Call a champion through the celestial gate</p>
       </header>
@@ -331,19 +351,31 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
                 </p>
               </div>
               <div className="summon-result-stat">
-                {duplicateShards > 0 ? <Sparkles aria-hidden="true" size={20} /> : <Zap aria-hidden="true" size={20} />}
-                <span>{duplicateShards > 0 ? 'Ascension shards' : 'Starting power'}</span>
-                <strong>{duplicateShards > 0 ? `+${duplicateShards}` : formatNumber(summonedHero.power)}</strong>
+                {duplicateShards > 0
+                  ? <Sparkles aria-hidden="true" size={20} />
+                  : activeWarbandSlot >= 0
+                    ? <Users aria-hidden="true" size={20} />
+                    : <Zap aria-hidden="true" size={20} />}
+                <span>{duplicateShards > 0
+                  ? 'Ascension shards'
+                  : activeWarbandSlot >= 0 ? 'Joined Warband' : 'Starting power'}</span>
+                <strong>{duplicateShards > 0
+                  ? `+${duplicateShards}`
+                  : activeWarbandSlot >= 0
+                    ? `Slot ${activeWarbandSlot + 1}/${MAX_ACTIVE_WARBAND_HEROES}`
+                    : formatNumber(summonedHero.power)}</strong>
               </div>
               <div className="summon-result-actions" ref={resultActionsRef}>
                 <motion.button
                   className="summon-claim"
-                  onClick={claimHero}
+                  onClick={duplicateShards > 0 ? claimHero : openHeroes}
                   ref={claimButtonRef}
                   type="button"
                   whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
                 >
-                  <span>Claim champion</span>
+                  <span>{duplicateShards > 0
+                    ? 'Claim shards'
+                    : activeWarbandSlot >= 0 ? 'View Warband' : 'Manage Warband'}</span>
                 </motion.button>
                 <motion.button
                   aria-label={`Summon again for ${GAME_BALANCE.summonCostGems} gems`}

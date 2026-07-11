@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getLeagueDivision, normalizeRealmLeaderboard } from './leaderboard';
+import { getLeagueDivision, getLeagueProgress, normalizeRealmLeaderboard } from './leaderboard';
 
 const entry = {
   displayName: 'Maksym Kozlov',
@@ -20,6 +20,26 @@ describe('realm leaderboard contract', () => {
     assert.equal(getLeagueDivision(50), 'silver');
     assert.equal(getLeagueDivision(200), 'gold');
     assert.equal(getLeagueDivision(1_000), 'mythic');
+  });
+
+  it('projects exact progress to the next campaign division', () => {
+    assert.deepEqual(getLeagueProgress(1), {
+      division: 'bronze',
+      nextDivision: 'silver',
+      nextStage: 50,
+      progressPercent: 0,
+      stagesRemaining: 49,
+    });
+    assert.equal(getLeagueProgress(49).stagesRemaining, 1);
+    assert.equal(getLeagueProgress(50).division, 'silver');
+    assert.equal(getLeagueProgress(199).stagesRemaining, 1);
+    assert.deepEqual(getLeagueProgress(1_000), {
+      division: 'mythic',
+      nextDivision: null,
+      nextStage: null,
+      progressPercent: 100,
+      stagesRemaining: 0,
+    });
   });
 
   it('accepts a bounded privacy-safe leaderboard', () => {
