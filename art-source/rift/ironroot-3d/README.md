@@ -20,7 +20,7 @@
 
 1. Blender експортує один GLB з armature, skinning і всіма actions.
 2. glTF Transform стискає geometry через Meshopt.
-3. KTX-Software кодує texture maps у KTX2.
+3. glTF Transform кодує texture maps у browser-native WebP.
 4. High profile обмежує texture до 1024 px; low — до 512 px.
 5. `src/game/enemyRigAssets.test.ts` перевіряє контейнер, кліпи, extensions і вагові бюджети.
 
@@ -37,5 +37,11 @@ blender `
 ```
 
 Скрипт не змінює `.blend`: він перевіряє цілісний renderable mesh, armature, weights, actions і object scale, повторно експортує raw GLB та створює кадри для contact-sheet gate.
+
+Після перевірки raw GLB обидва runtime-профілі відтворюються однією version-pinned командою:
+
+```powershell
+npm run asset:ironroot:optimize -- "$env:TEMP/ironroot-raw.glb"
+```
 
 Не редагувати файли в `public/assets/rift/ironroot-3d/` вручну: вони є похідним runtime-експортом із цього `.blend`.

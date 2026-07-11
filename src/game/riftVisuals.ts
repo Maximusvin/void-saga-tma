@@ -105,10 +105,10 @@ const ENEMY_VISUALS = [
         idle: 'Idle',
       },
       high: {
-        model: '/assets/rift/ironroot-3d/ironroot-high.glb',
+        model: '/assets/rift/ironroot-3d/ironroot-high.glb?v=1e95e50de5b7',
       },
       low: {
-        model: '/assets/rift/ironroot-3d/ironroot-low.glb',
+        model: '/assets/rift/ironroot-3d/ironroot-low.glb?v=db1d253b7f0f',
       },
     },
   },

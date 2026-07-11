@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyImpactSignals';
 import type { RiftEnemyThreeRigSpec, RiftEnemyVisualSpec } from '../game/riftVisuals';
 import { getGameRenderProfile } from '../utils/renderQuality';
 
-interface RiftThreeEnemySceneProps {
+export interface RiftThreeEnemySceneProps {
   critSignal: EnemyCritSignal;
   defeatSignal: number;
   impactSignal: EnemyImpactSignal;
@@ -44,6 +43,28 @@ const disposeObject = (root: THREE.Object3D) => {
       material.dispose();
     });
   });
+};
+
+const estimateTextureBytes = (root: THREE.Object3D) => {
+  const textures = new Set<THREE.Texture>();
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) {
+      return;
+    }
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach(material => {
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture) {
+          textures.add(value);
+        }
+      }
+    });
+  });
+
+  return [...textures].reduce((total, texture) => {
+    const image = texture.source.data as { height?: number; width?: number } | null;
+    return total + Math.max(0, image?.width ?? 0) * Math.max(0, image?.height ?? 0) * 4;
+  }, 0);
 };
 
 const findRequiredClip = (clips: THREE.AnimationClip[], name: string) => {
@@ -141,13 +162,9 @@ export const RiftThreeEnemyScene = ({
     shadow.position.set(0, -1.76, 0.12);
     scene.add(shadow);
 
-    const ktx2Loader = new KTX2Loader()
-      .setTranscoderPath('/assets/three/basis/')
-      .detectSupport(renderer);
-    const loader = new GLTFLoader()
-      .setKTX2Loader(ktx2Loader)
-      .setMeshoptDecoder(MeshoptDecoder);
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const modelUrl = profile.quality === 'high' ? visual.rig.high.model : visual.rig.low.model;
+    const loadStartedAt = performance.now();
     let animationFrame = 0;
     let disposed = false;
     let rendererActive = true;
@@ -191,7 +208,7 @@ export const RiftThreeEnemyScene = ({
       renderer.forceContextLoss();
     };
 
-    void loader.loadAsync(modelUrl).then(gltf => {
+    void loader.loadAsync(modelUrl).then(async gltf => {
       if (disposed) {
         disposeObject(gltf.scene);
         return;
@@ -334,7 +351,22 @@ export const RiftThreeEnemyScene = ({
         mixer.update(deltaSeconds);
         renderer.render(scene, camera);
       };
+      await renderer.compileAsync(scene, camera);
+      if (disposed) {
+        return;
+      }
+      renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(animate);
+      const canvasBufferBytes = canvas.width * canvas.height * 4;
+      const textureBufferBytes = estimateTextureBytes(gltf.scene);
+      host.dataset.canvasBufferBytes = String(canvasBufferBytes);
+      host.dataset.gpuMemoryProxyBytes = String(canvasBufferBytes + textureBufferBytes);
+      host.dataset.loadMs = (performance.now() - loadStartedAt).toFixed(1);
+      host.dataset.modelUrl = modelUrl;
+      host.dataset.renderProfile = profile.quality;
+      host.dataset.rendererGeometries = String(renderer.info.memory.geometries);
+      host.dataset.rendererTextures = String(renderer.info.memory.textures);
+      host.dataset.textureBufferBytes = String(textureBufferBytes);
       setArtLoaded(true);
     }).catch(() => {
       if (!disposed) {
@@ -351,7 +383,6 @@ export const RiftThreeEnemyScene = ({
       window.cancelAnimationFrame(animationFrame);
       intersectionObserver.disconnect();
       resizeObserver.disconnect();
-      ktx2Loader.dispose();
       if (loadedRoot) {
         disposeObject(loadedRoot);
         scene.remove(loadedRoot);
@@ -359,6 +390,12 @@ export const RiftThreeEnemyScene = ({
       shadow.geometry.dispose();
       (shadow.material as THREE.Material).dispose();
       releaseRenderer();
+      window.dispatchEvent(new CustomEvent('rift-three-runtime-released', {
+        detail: {
+          canvasAttached: canvas.isConnected,
+          contextLossRequested: true,
+        },
+      }));
     };
   }, [reduceMotion, visual]);
 

@@ -10,6 +10,7 @@ const REQUIRED_CLIPS = ['Death', 'HitLeft', 'HitRight', 'Idle'] as const;
 interface GlbJson {
   animations?: Array<{ name?: string }>;
   extensionsRequired?: string[];
+  images?: Array<{ mimeType?: string }>;
   meshes?: unknown[];
   skins?: unknown[];
 }
@@ -74,11 +75,11 @@ describe('Ironroot 3D assets', () => {
     const high = statSync(assetPath('ironroot-high.glb')).size;
     const low = statSync(assetPath('ironroot-low.glb')).size;
 
-    assert.ok(high > 0 && high <= 2_300_000, `high GLB is ${high} bytes`);
-    assert.ok(low > 0 && low <= 1_000_000, `low GLB is ${low} bytes`);
+    assert.ok(high > 0 && high <= 750_000, `high GLB is ${high} bytes`);
+    assert.ok(low > 0 && low <= 550_000, `low GLB is ${low} bytes`);
   });
 
-  it('contains one skinned mesh, all runtime clips, Meshopt, and KTX2', () => {
+  it('contains one skinned mesh, all runtime clips, Meshopt, and browser-native WebP', () => {
     for (const variant of ['high', 'low'] as const) {
       const glb = readGlbJson(`ironroot-${variant}.glb`);
       const clipNames = glb.animations?.map(animation => animation.name) ?? [];
@@ -87,7 +88,9 @@ describe('Ironroot 3D assets', () => {
       assert.equal(glb.skins?.length, 1);
       assert.deepEqual([...clipNames].sort(), [...REQUIRED_CLIPS].sort());
       assert.ok(glb.extensionsRequired?.includes('EXT_meshopt_compression'));
-      assert.ok(glb.extensionsRequired?.includes('KHR_texture_basisu'));
+      assert.ok(glb.extensionsRequired?.includes('EXT_texture_webp'));
+      assert.ok(glb.images?.length);
+      assert.ok(glb.images?.every(image => image.mimeType === 'image/webp'));
     }
   });
 
@@ -99,6 +102,8 @@ describe('Ironroot 3D assets', () => {
     assert.ok(hasSkinnedThreeRig(ironroot));
     assert.equal(ironroot.rig.kind, 'skinned-three');
     assert.equal(ironroot.asset, '/assets/rift/ironroot-marauder.webp');
+    assert.match(ironroot.rig.high.model, /ironroot-high\.glb\?v=[a-f0-9]{12}$/);
+    assert.match(ironroot.rig.low.model, /ironroot-low\.glb\?v=[a-f0-9]{12}$/);
     assert.equal(mirefang.rig, undefined);
   });
 });
