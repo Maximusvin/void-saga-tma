@@ -8,15 +8,20 @@ export interface RiftEnemyPalette {
   wing: number;
 }
 
-export interface RiftEnemyRigVariant {
-  atlas: string;
-  manifest: string;
+export interface RiftEnemyThreeRigVariant {
+  model: string;
 }
 
-export interface RiftEnemyRigSpec {
-  high: RiftEnemyRigVariant;
-  kind: 'layered-pixi';
-  low: RiftEnemyRigVariant;
+export interface RiftEnemyThreeRigSpec {
+  clips: {
+    death: string;
+    hitLeft: string;
+    hitRight: string;
+    idle: string;
+  };
+  high: RiftEnemyThreeRigVariant;
+  kind: 'skinned-three';
+  low: RiftEnemyThreeRigVariant;
 }
 
 export interface RiftEnemyVisualSpec {
@@ -40,7 +45,7 @@ export interface RiftEnemyVisualSpec {
   hornHeight: number;
   particleCount: number;
   wingSpread: number;
-  rig?: RiftEnemyRigSpec;
+  rig?: RiftEnemyThreeRigSpec;
 }
 
 const ENEMY_VISUALS = [
@@ -92,14 +97,18 @@ const ENEMY_VISUALS = [
     particleCount: 19,
     wingSpread: 68,
     rig: {
-      kind: 'layered-pixi',
+      kind: 'skinned-three',
+      clips: {
+        death: 'Death',
+        hitLeft: 'HitLeft',
+        hitRight: 'HitRight',
+        idle: 'Idle',
+      },
       high: {
-        atlas: '/assets/rift/ironroot-rig/ironroot-atlas-high.webp',
-        manifest: '/assets/rift/ironroot-rig/ironroot-atlas-high.json',
+        model: '/assets/rift/ironroot-3d/ironroot-high.glb',
       },
       low: {
-        atlas: '/assets/rift/ironroot-rig/ironroot-atlas-low.webp',
-        manifest: '/assets/rift/ironroot-rig/ironroot-atlas-low.json',
+        model: '/assets/rift/ironroot-3d/ironroot-low.glb',
       },
     },
   },
@@ -162,3 +171,7 @@ export const getRiftEnemyVisual = (stage: number, isBoss: boolean): RiftEnemyVis
   const normalizedStage = Math.max(1, Math.floor(stage));
   return ENEMY_VISUALS[(normalizedStage - 1) % ENEMY_VISUALS.length];
 };
+
+export const hasSkinnedThreeRig = (
+  visual: RiftEnemyVisualSpec,
+): visual is RiftEnemyVisualSpec & { rig: RiftEnemyThreeRigSpec } => visual.rig?.kind === 'skinned-three';
