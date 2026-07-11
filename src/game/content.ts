@@ -1,6 +1,13 @@
-import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
+import type {
+  BossPhaseRule,
+  EnemyTraitRule,
+  GameContent,
+  HeroRarity,
+  StageBand,
+  SummonHeroTemplate,
+} from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-009';
+export const GAME_CONTENT_VERSION = 'void-saga-content-010';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
 
@@ -165,10 +172,55 @@ export const RARITY_GRADIENTS: Record<HeroRarity, string> = {
 export const MONSTER_EMOJIS = ['👾', '👻', '💀', '👽', '👿', '🧌', '🕷️', '🦂', '🦇'] as const;
 export const BOSS_EMOJI = '👹';
 
+export const ENEMY_TRAITS = [
+  {
+    hint: 'Balanced',
+    id: 'unbound',
+    label: 'Unbound',
+    passiveDamageMultiplier: 1,
+    tapDamageMultiplier: 1,
+  },
+  {
+    hint: 'Tap +20%',
+    id: 'carapace',
+    label: 'Cracked carapace',
+    passiveDamageMultiplier: 0.8,
+    tapDamageMultiplier: 1.2,
+  },
+  {
+    hint: 'Auto +20%',
+    id: 'phaseborn',
+    label: 'Phaseborn',
+    passiveDamageMultiplier: 1.2,
+    tapDamageMultiplier: 0.8,
+  },
+] as const satisfies readonly EnemyTraitRule[];
+
 export const BOSS_PHASES = [
-  { id: 'dominion', label: 'Dominion', minimumHealthPercent: 67 },
-  { id: 'fracture', label: 'Fracture', minimumHealthPercent: 34 },
-  { id: 'cataclysm', label: 'Cataclysm', minimumHealthPercent: 0 },
+  {
+    hint: 'Auto +15%',
+    id: 'dominion',
+    label: 'Dominion veil',
+    minimumHealthPercent: 67,
+    passiveDamageMultiplier: 1.15,
+    tapDamageMultiplier: 0.85,
+  },
+  {
+    hint: 'Tap +30%',
+    id: 'fracture',
+    label: 'Fracture breach',
+    minimumHealthPercent: 34,
+    passiveDamageMultiplier: 0.7,
+    tapDamageMultiplier: 1.3,
+  },
+  {
+    hint: 'Auto +15%',
+    id: 'cataclysm',
+    label: 'Cataclysm flux',
+    minimumHealthPercent: 0,
+    passiveDamageMultiplier: 1.15,
+    tapDamageMultiplier: 0.85,
+  },
 ] as const satisfies readonly BossPhaseRule[];
 
 export const STAGE_BANDS = [
@@ -180,6 +232,7 @@ export const STAGE_BANDS = [
     monsterHealthGrowth: 1.2,
     normalEnemiesPerStage: 4,
     normalEnemyHealthGrowth: 1.18,
+    normalEnemyTraitIds: ['unbound', 'carapace', 'phaseborn'],
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
       attemptSeconds: 60,
@@ -199,6 +252,7 @@ export const STAGE_BANDS = [
     monsterHealthGrowth: 1.2,
     normalEnemiesPerStage: 5,
     normalEnemyHealthGrowth: 1.15,
+    normalEnemyTraitIds: ['unbound', 'carapace', 'phaseborn'],
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
       attemptSeconds: 65,
@@ -218,6 +272,7 @@ export const STAGE_BANDS = [
     monsterHealthGrowth: 1.2,
     normalEnemiesPerStage: 6,
     normalEnemyHealthGrowth: 1.12,
+    normalEnemyTraitIds: ['unbound', 'carapace', 'phaseborn'],
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
       attemptSeconds: 75,
@@ -233,6 +288,7 @@ export const STAGE_BANDS = [
 
 export const GAME_CONTENT = {
   version: GAME_CONTENT_VERSION,
+  enemyTraits: ENEMY_TRAITS,
   heroRarities: HERO_RARITIES,
   summonRarityRates: SUMMON_RARITY_RATES,
   summonPool: SUMMON_POOL,
@@ -248,4 +304,8 @@ export const getStageBandForStage = (stage: number) => {
 
 export const getHeroTemplateById = (templateId: string): SummonHeroTemplate | null => {
   return SUMMON_POOL.find(template => template.id === templateId) ?? null;
+};
+
+export const getEnemyTraitById = (traitId: string): EnemyTraitRule => {
+  return ENEMY_TRAITS.find(trait => trait.id === traitId) ?? ENEMY_TRAITS[0];
 };

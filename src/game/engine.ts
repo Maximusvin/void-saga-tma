@@ -6,7 +6,9 @@ import {
   getBaseClickPower,
   getComboMultiplier,
   getDuplicateShardReward,
+  getEncounterCombatRule,
   getHeroLevelCap,
+  getHeroPassivePower,
   getHeroUpgradeQuote,
   getNewHeroShardReward,
   getEncounterMaxHealth,
@@ -24,6 +26,7 @@ import {
   compareGameNumbers,
   floorGameNumber,
   gameNumber,
+  gameNumberToPercent,
   isPositiveGameNumber,
   minGameNumbers,
   multiplyGameNumbers,
@@ -47,7 +50,7 @@ const touchSnapshot = (snapshot: GameSnapshot, now = nowIso()): GameSnapshot => 
   return { ...snapshot, lastSeenAt: now, updatedAt: now };
 };
 
-const getHeroPassivePower = (snapshot: Pick<GameSnapshot, 'activeHeroIds' | 'heroes'>) => {
+const getWarbandPassivePower = (snapshot: Pick<GameSnapshot, 'activeHeroIds' | 'heroes'>) => {
   return getPassivePower(getActiveWarbandHeroes(snapshot));
 };
 
@@ -195,14 +198,26 @@ export const applyDamageAction = (
 
   const actionNow = options.now ?? nowIso();
 
-  const appliedDamage = minGameNumbers(snapshot.monsterHealth, damage);
+  const combatRule = getEncounterCombatRule(
+    snapshot.stage,
+    snapshot.enemyIndex,
+    gameNumberToPercent(snapshot.monsterHealth, snapshot.monsterMaxHealth),
+  );
+  const damageMultiplier = source === 'tap'
+    ? combatRule.tapDamageMultiplier
+    : combatRule.passiveDamageMultiplier;
+  const modifiedDamage = multiplyGameNumbers(damage, damageMultiplier);
+  const appliedDamage = minGameNumbers(snapshot.monsterHealth, modifiedDamage);
   const nextMonsterHealth = subtractGameNumbers(snapshot.monsterHealth, appliedDamage);
   const hitEvent = {
     type: 'monster_hit' as const,
     comboCount: options.comboCount ?? snapshot.comboCount,
     damage: appliedDamage,
     heroContributions: source === 'passive'
-      ? [...(options.heroContributions ?? [])]
+      ? (options.heroContributions ?? []).map(contribution => ({
+          ...contribution,
+          damage: multiplyGameNumbers(contribution.damage, damageMultiplier),
+        }))
       : [],
     isCrit: options.isCrit ?? false,
     monsterHealth: nextMonsterHealth,
@@ -338,7 +353,7 @@ export const applyCombatBatchAction = (
 
   const passiveContributions = activeHeroes
     .filter(hero => isPositiveGameNumber(hero.power))
-    .map(hero => ({ damage: hero.power, heroId: hero.id }));
+    .map(hero => ({ damage: getHeroPassivePower(hero), heroId: hero.id }));
   const passivePower = addGameNumbers(...passiveContributions.map(contribution => contribution.damage));
   for (let index = 0; index < passiveGrant.granted && isPositiveGameNumber(passivePower); index += 1) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
@@ -585,7 +600,7 @@ export const claimOfflineRewardsAction = (snapshot: GameSnapshot, nowMs = Date.n
   const elapsedSeconds = getOfflineElapsedSeconds(snapshot.lastSeenAt, nowMs);
   const cappedSeconds = Math.min(elapsedSeconds, GAME_BALANCE.offlineRewardMaxSeconds);
   const rewardedSeconds = cappedSeconds >= GAME_BALANCE.offlineRewardMinSeconds ? cappedSeconds : 0;
-  const passivePower = getHeroPassivePower(snapshot);
+  const passivePower = getWarbandPassivePower(snapshot);
   const goldReward = floorGameNumber(
     multiplyGameNumbers(passivePower, rewardedSeconds, GAME_BALANCE.offlineGoldPerPowerSecond),
   );

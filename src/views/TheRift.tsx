@@ -7,6 +7,7 @@ import {
   GAME_BALANCE,
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
+  getEncounterCombatRule,
   getEnemiesInStage,
   getHeroTemplateById,
   getStageBandForStage,
@@ -471,6 +472,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const bossPhases = getStageBandForStage(stage).boss.phases;
   const bossPhase = getBossPhaseForHealthPercent(stage, healthPercent);
   const bossPhaseIndex = Math.max(1, bossPhases.findIndex(phase => phase.id === bossPhase.id) + 1);
+  const encounterRule = getEncounterCombatRule(stage, enemyIndex, healthPercent);
+  const hasSpecialRule = isBoss || encounterRule.id !== 'unbound';
 
   useEffect(() => {
     if (usesSkinnedRig) {
@@ -497,7 +500,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
   return (
     <motion.section
-      className={`rift-view ${combatTone} ${isBoss ? `boss-phase-${bossPhaseIndex}` : ''}`}
+      className={`rift-view ${combatTone} encounter-${encounterRule.id} ${isBoss ? `boss-phase-${bossPhaseIndex}` : ''}`}
       data-render-quality={renderProfile.quality}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
@@ -528,12 +531,15 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
       <div className="rift-arena">
         <div className="combat-dashboard">
-          <div className={`encounter-rank ${isBoss ? 'boss' : ''} ${stageRole === 'mini-boss' ? 'elite' : ''}`}>
+          <div className={`encounter-rank rule-${encounterRule.id} ${isBoss ? 'boss' : ''} ${stageRole === 'mini-boss' && !isBoss ? 'elite' : ''}`}>
             {isBoss && <Crown size={14} aria-hidden="true" />}
-            {stageRole === 'mini-boss' && <em className="elite-tag">Elite</em>}
+            {stageRole === 'mini-boss' && !isBoss && <em className="elite-tag">Elite</em>}
             <span>{isBoss
-              ? `Phase ${bossPhaseIndex} · ${bossPhase.label}`
-              : `Rift ${String(riftIndex).padStart(2, '0')} · ${enemyVisual.title}`}</span>
+              ? `P${bossPhaseIndex} · ${bossPhase.label}`
+              : hasSpecialRule
+                ? encounterRule.label
+                : `Rift ${String(riftIndex).padStart(2, '0')} · ${enemyVisual.title}`}</span>
+            {hasSpecialRule && <em className="combat-rule-tag">{encounterRule.hint}</em>}
           </div>
           <div className="combat-status-right">
             {isBoss && (

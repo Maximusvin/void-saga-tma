@@ -6,6 +6,7 @@ import {
   getEncounterMaxHealth,
   getEnemiesInStage,
   getDuplicateShardReward,
+  getEncounterCombatRule,
   getHeroLevelCap,
   getNewHeroShardReward,
   getHeroPassivePower,
@@ -215,6 +216,7 @@ export const DEFAULT_BALANCE_SIMULATION_SCENARIOS = [
 ] as const;
 
 interface CombatProjection {
+  tapDamageShare: GameNumber;
   tapDps: GameNumber;
   teamPower: GameNumber;
   totalDps: GameNumber;
@@ -355,6 +357,8 @@ const selectSimulationInvestmentRoster = (
 const projectCombat = (
   heroes: readonly Hero[],
   monsterHealth: GameNumber,
+  stage: number,
+  enemyIndex: number,
   config: BalanceSimulationConfig,
 ): CombatProjection => {
   const activeHeroes = selectSimulationWarband(heroes, config);
@@ -366,13 +370,46 @@ const projectCombat = (
     expectedCritMultiplier,
     config.sustainedComboMultiplier,
   );
-  const totalDps = addGameNumbers(teamPower, tapDps);
+  const stageBand = getStageBandForStage(stage);
+  const combatSegments = isBossStage(stage)
+    ? stageBand.boss.phases.map((phase, index, phases) => ({
+        healthFraction: ((index === 0 ? 100 : phases[index - 1].minimumHealthPercent) -
+          phase.minimumHealthPercent) / 100,
+        rule: phase,
+      }))
+    : [{
+        healthFraction: 1,
+        rule: getEncounterCombatRule(stage, enemyIndex, 100),
+      }];
+  let tapDamage = ZERO_GAME_NUMBER;
+  let ttkSeconds = ZERO_GAME_NUMBER;
+
+  for (const segment of combatSegments) {
+    const segmentHealth = multiplyGameNumbers(monsterHealth, segment.healthFraction);
+    const effectiveTapDps = multiplyGameNumbers(tapDps, segment.rule.tapDamageMultiplier);
+    const effectivePassiveDps = multiplyGameNumbers(
+      teamPower,
+      segment.rule.passiveDamageMultiplier,
+    );
+    const segmentTotalDps = addGameNumbers(effectiveTapDps, effectivePassiveDps);
+    ttkSeconds = addGameNumbers(
+      ttkSeconds,
+      divideGameNumbers(segmentHealth, segmentTotalDps),
+    );
+    tapDamage = addGameNumbers(
+      tapDamage,
+      multiplyGameNumbers(segmentHealth, divideGameNumbers(effectiveTapDps, segmentTotalDps)),
+    );
+  }
+
+  const totalDps = divideGameNumbers(monsterHealth, ttkSeconds);
 
   return {
+    tapDamageShare: divideGameNumbers(tapDamage, monsterHealth),
     tapDps,
     teamPower,
     totalDps,
-    ttkSeconds: divideGameNumbers(monsterHealth, totalDps),
+    ttkSeconds,
   };
 };
 
@@ -511,15 +548,13 @@ const resolveSimulationSummon = (
 const getStageReward = (
   stage: number,
   monsterHealth: GameNumber,
-  tapDps: GameNumber,
-  totalDps: GameNumber,
+  tapDamageShare: GameNumber,
 ) => {
   const stageBand = getStageBandForStage(stage);
   const killReward = multiplyGameNumbers(
     monsterHealth,
     isBossStage(stage) ? stageBand.boss.goldMultiplier : GAME_BALANCE.killGoldMultiplier,
   );
-  const tapDamageShare = divideGameNumbers(tapDps, totalDps);
   const tapGold = multiplyGameNumbers(monsterHealth, tapDamageShare, GAME_BALANCE.clickGoldMultiplier);
 
   return addGameNumbers(killReward, tapGold);
@@ -578,7 +613,7 @@ export const runBalanceSimulation = (
     const targetTtkPerEncounter = isBossStage(stage)
       ? config.bossTargetTtkSeconds
       : config.normalTargetTtkSeconds;
-    let projection = projectCombat(heroes, getEncounterMaxHealth(stage, 0), config);
+    let projection = projectCombat(heroes, getEncounterMaxHealth(stage, 0), stage, 0, config);
     let ascensionsPurchased = 0;
     let blockedByGold = false;
     let blockedByProgression = false;
@@ -592,7 +627,7 @@ export const runBalanceSimulation = (
     for (let enemyIndex = 0; enemyIndex < enemiesInStage; enemyIndex += 1) {
       const encounterHealth = getEncounterMaxHealth(stage, enemyIndex);
       monsterHealth = addGameNumbers(monsterHealth, encounterHealth);
-      projection = projectCombat(heroes, encounterHealth, config);
+      projection = projectCombat(heroes, encounterHealth, stage, enemyIndex, config);
 
       while (
         compareGameNumbers(projection.ttkSeconds, targetTtkPerEncounter) > 0 &&
@@ -626,7 +661,7 @@ export const runBalanceSimulation = (
         upgradeSpend = addGameNumbers(upgradeSpend, candidate.cost);
         upgradesPurchased += 1;
         totalUpgrades += 1;
-        projection = projectCombat(heroes, encounterHealth, config);
+        projection = projectCombat(heroes, encounterHealth, stage, enemyIndex, config);
       }
 
       const encounterTargetMissed = compareGameNumbers(
@@ -643,8 +678,7 @@ export const runBalanceSimulation = (
       const encounterReward = getStageReward(
         stage,
         encounterHealth,
-        projection.tapDps,
-        projection.totalDps,
+        projection.tapDamageShare,
       );
       stageReward = addGameNumbers(stageReward, encounterReward);
       gold = addGameNumbers(gold, encounterReward);
