@@ -1,45 +1,42 @@
-# ADR 0004: багатошарова анімація противників у PixiJS
+# ADR 0004: цілісний skinned 3D-противник у браузерній сцені
 
 ## Статус
 
-Прийнято, 2026-07-10.
+Прийнято, 2026-07-11. Попереднє рішення про багатошаровий Pixi-rig відхилено після візуальної перевірки: межі частин і неприродні суглоби були помітні в русі.
 
 ## Контекст
 
-Противник у Telegram Mini App має постійно виглядати живим, реагувати на точку удару без затримки та не створювати відео-пакет на кілька мегабайт. Водночас деформація єдиного PNG дає «гумовий» силует, а покадровий sprite sheet погано масштабується на десятки противників. У грі вже є один PixiJS canvas із керованим ticker lifecycle, тому окремий WebGL context або skeleton runtime для першої вертикалі додав би зайву складність.
+Ironroot Marauder має постійно виглядати живим, за один кадр реагувати на напрямок тапу та помирати перед переходом до наступного ворога. Відео й покадрові sprite sheets створюють завеликий payload, а розкладення однієї ілюстрації на 2D-частини не відновлює приховану геометрію та дає видимі шви. Для прийнятної якості потрібен цілісний об’ємний персонаж зі шкірою, скелетом і vertex weights.
 
 ## Рішення
 
-1. `Ironroot Marauder` на stage 2 використовує внутрішній adapter `EnemyRig` із реалізаціями `layered-pixi` та `static-sprite`. Інші противники зберігають чинний статичний pipeline.
-2. Layered rig складається з 21 перекривного елемента: корпус, таз, голова, борода, плечі, сегменти рук і ніг, кисті, стопи, кристали, glow та три локальні mesh-смуги моху. Приховані ділянки під суглобами присутні в authoring source; runtime не ріже готовий PNG.
-3. Великі тверді форми рухаються ієрархічними Pixi containers. Локальний `MeshPlane` застосовується лише до моху, де вигин природний; камінь і суглоби не розтягуються.
-4. `idle` поєднує несинхронні частоти дихання, перенесення ваги, голови, бороди, моху та glow. `prefers-reduced-motion` вимикає idle, але залишає короткий малий recoil.
-5. `EnemyImpactSignal` несе унікальний id і нормалізовану точку удару. Пружинний solver додає обмежений імпульс до поточного стану, тому до 10 тапів за секунду не перезапускають кліп і не накопичують необмежений рух. `EnemyCritSignal` підсилює світло й частинки, але не створює другий recoil.
-6. Смерть Ironroot триває 700 мс: старий rig лишається в canvas, коліна підкошуються, корпус і вторинні елементи запізнюються, після чого canvas переходить до наступного противника. Серверний `monster_hit`, batching, damage та economy не змінюються.
-7. `RiftEnemyVisualSpec.rig` містить high/low atlas, manifest і чинний `asset` як fallback. Runtime завантажує один варіант за render profile та повертається до `static-sprite`, якщо atlas або manifest невалидний.
-8. Root rig має постійний нормалізований scale `1`. Розмір у сцені задається одноразовим fit-scale, а не анімацією всього силуету. Глобальні squash, skew і shake `.rift-beast-shell` для Ironroot вимкнені.
+1. `Ironroot Marauder` на stage 2 використовує цілісний skinned GLB: один mesh, один PBR material, один skeleton і кліпи `Idle`, `HitLeft`, `HitRight`, `Death`.
+2. Модель отримана через image-to-3D pipeline Tripo P1 із чинного дизайн-референсу. Автоматичні preset-анімації відхилено через надмірний root motion. Фінальні кліпи вручну поставлено в Blender зі стабільними стопами, компенсацією таза, запізненням голови та рук.
+3. Three.js завантажується через `React.lazy` лише коли поточний scene-enemy має `rig.kind = skinned-three`. Pixi-сцена на цей час демонтована, тому одночасно існує рівно один canvas і один WebGL context.
+4. `Idle` працює циклічно. `HitLeft` і `HitRight` переводяться у additive clips та граються з пулу з чотирьох actions; часті тапи додають обмежену реакцію без скидання всього skeleton у rest pose. `EnemyCritSignal` підсилює локальне світло, але не додає другого recoil.
+5. `Death` є one-shot clip із `clampWhenFinished`; чинна затримка scene handoff лишає Ironroot на екрані до завершення падіння. Backend, `monster_hit`, batching, damage та economy не змінюються.
+6. `prefers-reduced-motion` вимикає idle, зменшує вагу hit і пришвидшує короткий death feedback.
+7. Якщо WebGL, GLB, Meshopt або KTX2 не завантажуються, компонент показує чинний `ironroot-marauder.webp`. Інші противники залишаються на статичному Pixi pipeline.
 
 ## Арт-пайплайн і бюджети
 
-- Authoring source: `art-source/rift/ironroot/ironroot-rig-source.ora`; файл не потрапляє в `public`.
-- High atlas: `1024x1024 WebP`, 285 814 байтів при бюджеті до 450 КБ.
-- Low atlas: `512x512 WebP`, 106 274 байти при бюджеті до 200 КБ.
-- Обидва manifests містять однаковий набір із 21 frame та перевіряються asset-тестом.
-- Тонкі краї моху й бороди проходять alpha-перевірку; magenta-key source не постачається в runtime.
+- Authoring source: `art-source/rift/ironroot-3d/ironroot-marauder.blend`, поза `public`.
+- Геометрія: 11 881 triangles, 55 bones, один skinned mesh, один material.
+- High runtime: `1024px KTX2 + Meshopt`, 2 197 444 байти.
+- Low runtime: `512px KTX2 + Meshopt`, 954 684 байти.
+- Runtime animation payload усередині GLB: `Idle`, два directional hit clips і `Death`; окремі відео або sprite sheets не постачаються.
+- Basis transcoder постачається локально, без зовнішнього CDN і без runtime-залежності від Tripo.
 
 ## Верифікація
 
-- Unit-тести перевіряють напрямок recoil, bounded rapid taps, повернення до rest pose, delta-time clamp, reduced-motion, crit без другого імпульсу та death progress.
-- Asset-тест перевіряє frame set, межі atlas, ненульові розміри, high/low parity і вагові бюджети.
-- Playwright перевіряє один canvas, відсутність scene rebuild на тапах, лівий/правий recoil, 10 rapid taps, нормалізований scale `1`, death handoff та static fallback.
-
-## Коли переходити на Spine
-
-Spine стає виправданим, коли щонайменше кілька противників потребуватимуть спільного authoring pipeline, складних constraints, skin swapping або довших наборів `idle/hit/attack/death`. Adapter `EnemyRig` є точкою заміни: зовнішні impact/crit/death сигнали та `RiftEnemyVisualSpec` не повинні змінитися. До появи реального `.skel/.atlas` bundle і підтвердженої ліцензії залежність `spine-pixi-v8` не додаємо.
+- Blender contact sheets перевіряють silhouette stability, planted feet, відсутність root scale та читабельність ключових поз.
+- Asset-тест читає GLB container, перевіряє один mesh/skin, точний набір кліпів, `EXT_meshopt_compression`, `KHR_texture_basisu` та high/low бюджети.
+- Playwright перевіряє один canvas, `skinned-three`, різний hit для лівого/правого тапу, 10 rapid taps без scene rebuild, death handoff і static fallback.
+- Фінальний gate — реальне декодування KTX2/Meshopt і screenshot review у мобільних viewport, бо статичний glTF validator не декодує ці розширення.
 
 ## Наслідки
 
-- Перший противник отримує живу реакцію без відео, sprite sheet і деформації цілісного PNG.
-- Один canvas і чинний lifecycle зберігають GPU/CPU бюджет Telegram WebView.
-- Ціна якості переноситься в одноразову підготовку перекривних шарів, а не в runtime payload.
-- Для наступного противника можна повторити той самий adapter і solver або обґрунтовано перейти на Spine, не переписуючи бойовий контракт.
+- Силует більше не складається з видимих 2D-частин; рух задає skeleton усередині цілісного mesh.
+- Разова ціна — складніший authoring і приблизно 0,95–2,20 МБ на противника замість сотень кілобайт 2D-atlas.
+- Three.js chunk великий, але lazy і не потрапляє в початковий маршрут до появи Ironroot.
+- Перед масштабуванням на десятки ворогів потрібні спільний Blender export profile, LOD policy та перевірка ліцензійних умов кожного генеративного постачальника.

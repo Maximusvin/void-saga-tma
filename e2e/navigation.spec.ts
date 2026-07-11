@@ -912,16 +912,16 @@ test('rift loads production art without overflowing narrow Telegram viewports', 
   }
 });
 
-test('animates the layered Ironroot rig without rebuilding the Pixi scene', async ({ page }) => {
+test('animates the skinned Ironroot model without rebuilding the Three.js scene', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await seedIronrootEncounter(page);
   await page.goto('/');
 
-  const scene = page.locator('.rift-pixi-scene');
+  const scene = page.locator('.rift-three-scene');
   const monster = page.locator('.monster-button');
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
-  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'skinned-three');
   await expect(scene).toHaveAttribute('data-art-loaded', 'true');
   await expect(scene.locator('canvas')).toHaveCount(1);
   await expect(scene).toHaveAttribute('data-scene-build-count', '1');
@@ -929,7 +929,7 @@ test('animates the layered Ironroot rig without rebuilding the Pixi scene', asyn
   const triggerObservedImpact = async (horizontalPosition: number, expectedDirection: 'left' | 'right') => (
     page.evaluate(async ({ direction, position }) => {
       const button = document.querySelector<HTMLButtonElement>('.monster-button')!;
-      const rig = document.querySelector<HTMLElement>('.rift-pixi-scene')!;
+      const rig = document.querySelector<HTMLElement>('.rift-three-scene')!;
       const bounds = button.getBoundingClientRect();
       const startedAt = performance.now();
 
@@ -999,7 +999,7 @@ test('animates the layered Ironroot rig without rebuilding the Pixi scene', asyn
   await expect(scene).toHaveAttribute('data-scene-build-count', initialSceneBuilds ?? '1');
   await expect(scene.locator('canvas')).toHaveCount(1);
   await expect(scene).toHaveAttribute('data-rig-root-scale', '1.0000');
-  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'skinned-three');
   await page.waitForTimeout(700);
   await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'idle');
   expect(pageErrors).toEqual([]);
@@ -1009,8 +1009,8 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
   await seedIronrootEncounter(page, '1');
   await page.goto('/');
 
-  const scene = page.locator('.rift-pixi-scene');
-  await expect(scene).toHaveAttribute('data-enemy-rig', 'layered-pixi');
+  const scene = page.locator('.rift-three-scene');
+  await expect(scene).toHaveAttribute('data-enemy-rig', 'skinned-three');
   await page.locator('.monster-button').click({ position: { x: 90, y: 180 } });
 
   await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'death', { timeout: 1_000 });
@@ -1018,20 +1018,24 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
   await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
   await page.waitForTimeout(720);
-  await expect(scene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
-  await expect(scene).toHaveAttribute('data-enemy-rig', 'static-sprite');
+  await expect(scene).toHaveCount(0);
+  const nextScene = page.locator('.rift-pixi-scene');
+  await expect(nextScene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
+  await expect(nextScene).toHaveAttribute('data-enemy-rig', 'static-sprite');
+  await expect(nextScene.locator('canvas')).toHaveCount(1);
 });
 
-test('falls back to the static Ironroot sprite when its atlas cannot load', async ({ page }) => {
-  await page.route('**/assets/rift/ironroot-rig/**', route => route.abort());
+test('falls back to the static Ironroot sprite when its GLB cannot load', async ({ page }) => {
+  await page.route('**/assets/rift/ironroot-3d/**', route => route.abort());
   await seedIronrootEncounter(page);
   await page.goto('/');
 
-  const scene = page.locator('.rift-pixi-scene');
+  const scene = page.locator('.rift-three-scene');
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
   await expect(scene).toHaveAttribute('data-enemy-rig', 'static-sprite');
   await expect(scene).toHaveAttribute('data-art-loaded', 'true');
-  await expect(scene.locator('canvas')).toHaveCount(1);
+  await expect(scene.locator('canvas')).toHaveCount(0);
+  await expect(scene.locator('.rift-three-fallback')).toHaveCount(1);
 });
 
 test('advances through enemy waves before increasing the campaign stage', async ({ page }) => {

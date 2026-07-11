@@ -2,58 +2,61 @@ import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEnemyAtlasManifest } from './enemyRigManifest';
-import { getRiftEnemyVisual } from './riftVisuals';
+import { getRiftEnemyVisual, hasSkinnedThreeRig } from './riftVisuals';
 
-const REQUIRED_FRAMES = [
-  'back', 'torso', 'head', 'neck_beard', 'pelvis',
-  'left_shoulder', 'left_upper_arm', 'left_forearm', 'left_hand',
-  'right_shoulder', 'right_upper_arm', 'right_forearm', 'right_hand',
-  'left_thigh', 'left_shin_foot', 'right_thigh', 'right_shin_foot',
-  'moss_left', 'moss_center', 'moss_right', 'chest_glow',
-] as const;
+const REQUIRED_CLIPS = ['Death', 'HitLeft', 'HitRight', 'Idle'] as const;
+
+interface GlbJson {
+  animations?: Array<{ name?: string }>;
+  extensionsRequired?: string[];
+  meshes?: unknown[];
+  skins?: unknown[];
+}
 
 const assetPath = (filename: string) => fileURLToPath(new URL(
-  `../../public/assets/rift/ironroot-rig/${filename}`,
+  `../../public/assets/rift/ironroot-3d/${filename}`,
   import.meta.url,
 ));
 
-const readManifest = (variant: 'high' | 'low') => parseEnemyAtlasManifest(JSON.parse(
-  readFileSync(assetPath(`ironroot-atlas-${variant}.json`), 'utf8'),
-) as unknown);
+const readGlbJson = (filename: string): GlbJson => {
+  const bytes = readFileSync(assetPath(filename));
+  assert.equal(bytes.readUInt32LE(0), 0x46546c67, `${filename} has an invalid GLB header`);
+  assert.equal(bytes.readUInt32LE(4), 2, `${filename} is not glTF 2.0`);
+  assert.equal(bytes.readUInt32LE(8), bytes.length, `${filename} reports the wrong byte length`);
+  const jsonLength = bytes.readUInt32LE(12);
+  assert.equal(bytes.readUInt32LE(16), 0x4e4f534a, `${filename} has no JSON chunk`);
+  return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8').trim()) as GlbJson;
+};
 
-describe('Ironroot rig assets', () => {
-  it('publishes non-empty high and low atlases within the mobile budgets', () => {
-    const high = statSync(assetPath('ironroot-atlas-high.webp')).size;
-    const low = statSync(assetPath('ironroot-atlas-low.webp')).size;
+describe('Ironroot 3D assets', () => {
+  it('publishes non-empty high and low GLBs within the mobile budgets', () => {
+    const high = statSync(assetPath('ironroot-high.glb')).size;
+    const low = statSync(assetPath('ironroot-low.glb')).size;
 
-    assert.ok(high > 0 && high <= 450_000, `high atlas is ${high} bytes`);
-    assert.ok(low > 0 && low <= 200_000, `low atlas is ${low} bytes`);
+    assert.ok(high > 0 && high <= 2_300_000, `high GLB is ${high} bytes`);
+    assert.ok(low > 0 && low <= 1_000_000, `low GLB is ${low} bytes`);
   });
 
-  it('contains every rig component inside both atlas bounds', () => {
+  it('contains one skinned mesh, all runtime clips, Meshopt, and KTX2', () => {
     for (const variant of ['high', 'low'] as const) {
-      const manifest = readManifest(variant);
-      assert.equal(manifest.variant, variant);
-      assert.equal(manifest.size.width, variant === 'high' ? 1024 : 512);
-      assert.equal(manifest.size.height, variant === 'high' ? 1024 : 512);
-      assert.equal(Object.keys(manifest.frames).length, REQUIRED_FRAMES.length);
+      const glb = readGlbJson(`ironroot-${variant}.glb`);
+      const clipNames = glb.animations?.map(animation => animation.name) ?? [];
 
-      for (const frameName of REQUIRED_FRAMES) {
-        const frame = manifest.frames[frameName];
-        assert.ok(frame, `${variant} atlas misses ${frameName}`);
-        assert.ok(frame.x + frame.width <= manifest.size.width);
-        assert.ok(frame.y + frame.height <= manifest.size.height);
-      }
+      assert.equal(glb.meshes?.length, 1);
+      assert.equal(glb.skins?.length, 1);
+      assert.deepEqual([...clipNames].sort(), [...REQUIRED_CLIPS].sort());
+      assert.ok(glb.extensionsRequired?.includes('EXT_meshopt_compression'));
+      assert.ok(glb.extensionsRequired?.includes('KHR_texture_basisu'));
     }
   });
 
-  it('routes only Ironroot through the layered rig with a static fallback', () => {
+  it('routes only Ironroot through the skinned Three.js rig with a static fallback', () => {
     const ironroot = getRiftEnemyVisual(2, false);
     const mirefang = getRiftEnemyVisual(1, false);
 
     assert.equal(ironroot.id, 'ironroot-marauder');
-    assert.equal(ironroot.rig?.kind, 'layered-pixi');
+    assert.ok(hasSkinnedThreeRig(ironroot));
+    assert.equal(ironroot.rig.kind, 'skinned-three');
     assert.equal(ironroot.asset, '/assets/rift/ironroot-marauder.webp');
     assert.equal(mirefang.rig, undefined);
   });
