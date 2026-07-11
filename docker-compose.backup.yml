@@ -1,0 +1,20 @@
+services:
+  backup:
+    profiles: ["backup"]
+    image: ${VOID_SAGA_BACKUP_IMAGE:?VOID_SAGA_BACKUP_IMAGE must match the deployed API image}
+    command: ["node", "backup-sqlite.mjs"]
+    environment:
+      VOID_SAGA_DB_PATH: /data/void-saga.sqlite
+      VOID_SAGA_BACKUP_PATH: /backup
+      VOID_SAGA_BACKUP_RETENTION: ${VOID_SAGA_BACKUP_RETENTION:-14}
+    volumes:
+      - game_data:/data:ro
+      - ${VOID_SAGA_BACKUP_DIR:-/srv/void-saga/backups}:/backup
+    network_mode: none
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
