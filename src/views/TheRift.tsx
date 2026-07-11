@@ -19,13 +19,15 @@ import {
   type GameNumber,
 } from '../game/gameNumber';
 import type { EnemyCritSignal, EnemyImpactSignal } from '../game/enemyImpactSignals';
+import type { EncounterTransition } from '../game/encounterTransition';
 import type { GameEvent, Hero, HeroAttackStyle, HeroDamageContribution } from '../game/types';
 import { getBiomeForStage, getBiomeIndexForStage, getStageRole } from '../game/biome';
 import { getGameRenderProfile } from '../utils/renderQuality';
 import { getRiftEnemyVisual, hasSkinnedThreeRig } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
 import { RiftWarband } from './RiftWarband';
-import { loadRiftThreeEnemyRuntime, scheduleRiftThreePreload } from './riftThreeRuntime';
+import { scheduleRiftEncounterPreload } from './riftEncounterPreload';
+import { loadRiftThreeEnemyRuntime } from './riftThreeRuntime';
 import './TheRift.css';
 
 const RiftPixiScene = lazy(async () => {
@@ -44,6 +46,7 @@ interface TheRiftProps {
   dealDamage: () => Promise<GameEvent[]>;
   clickPower: GameNumber;
   enemyIndex: number;
+  encounterTransition: EncounterTransition | null;
   stage: number;
   isBoss: boolean;
   comboCount: number;
@@ -80,19 +83,6 @@ interface Projectile {
   volleySignal: number;
 }
 
-interface DefeatTransition {
-  id: number;
-  defeatedStage: number;
-  enemiesInStage: number;
-  nextEnemyIndex: number;
-  nextStage: number;
-  stageCleared: boolean;
-  wasBoss: boolean;
-  goldReward: GameNumber | null;
-  gemReward: number | null;
-}
-
-type MonsterDefeatedEvent = Extract<GameEvent, { type: 'monster_defeated' }>;
 type MonsterHitEvent = Extract<GameEvent, { type: 'monster_hit' }>;
 
 const RiftAmbientSparks = memo(function RiftAmbientSparks({ count }: { count: number }) {
@@ -122,10 +112,6 @@ const RiftAmbientSparks = memo(function RiftAmbientSparks({ count }: { count: nu
   ));
 });
 
-const getMonsterDefeatedEvent = (events: GameEvent[]) => {
-  return events.find((event): event is MonsterDefeatedEvent => event.type === 'monster_defeated') ?? null;
-};
-
 const getTapHitEvent = (events: GameEvent[]) => {
   return events.find(
     (event): event is MonsterHitEvent => event.type === 'monster_hit' && event.source === 'tap',
@@ -138,6 +124,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
   dealDamage,
   clickPower,
   enemyIndex,
+  encounterTransition,
   stage,
   isBoss,
   comboCount,
@@ -162,20 +149,16 @@ export const TheRift: React.FC<TheRiftProps> = ({
     source: 'tap',
   });
   const [critState, setCritState] = useState<EnemyCritSignal>({ id: 0, impactId: 0 });
-  const [defeatTransition, setDefeatTransition] = useState<DefeatTransition | null>(null);
-  const [enemySceneEncounter, setEnemySceneEncounter] = useState({ enemyIndex, stage });
   const [biomeEnter, setBiomeEnter] = useState<{ id: string; name: string } | null>(null);
   const [visiblePassiveVolleySignal, setVisiblePassiveVolleySignal] = useState<number | null>(null);
   const bossAttemptDurationMs = getBossAttemptDurationMs(stage);
   const [visibleBossEnrageSignal, setVisibleBossEnrageSignal] = useState<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const renderProfile = useMemo(getGameRenderProfile, []);
-  const previousStageRef = useRef(stage);
-  const previousBossRef = useRef(isBoss);
   const previousBiomeIndexRef = useRef(getBiomeIndexForStage(stage));
   const lastHandledBossEnrageSignalRef = useRef(bossEnrageSignal);
   const lastHandledPassiveVolleySignalRef = useRef(passiveVolleySignal);
-  const lastDefeatStageRef = useRef<number | null>(null);
+  const encounterTransitionRef = useRef(encounterTransition);
   const clickCounterRef = useRef(0);
   const impactCounterRef = useRef(0);
   const hitResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -211,6 +194,17 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, []);
 
   useEffect(() => {
+    encounterTransitionRef.current = encounterTransition;
+    if (!encounterTransition) {
+      return;
+    }
+
+    setProjectiles([]);
+    setVisiblePassiveVolleySignal(null);
+    setIsHit(false);
+  }, [encounterTransition]);
+
+  useEffect(() => {
     if (bossEnrageSignal === lastHandledBossEnrageSignalRef.current) {
       return;
     }
@@ -223,31 +217,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
   }, [bossEnrageSignal, scheduleTimeout]);
 
   useEffect(() => {
-    if (enemySceneEncounter.stage === stage && enemySceneEncounter.enemyIndex === enemyIndex) {
-      return;
-    }
-
-    const defeatedVisualStage = enemySceneEncounter.stage + enemySceneEncounter.enemyIndex;
-    const defeatedVisual = getRiftEnemyVisual(
-      defeatedVisualStage,
-      isBossStage(enemySceneEncounter.stage),
-    );
-    const progressed = stage > enemySceneEncounter.stage
-      || (stage === enemySceneEncounter.stage && enemyIndex > enemySceneEncounter.enemyIndex);
-    if (progressed && hasSkinnedThreeRig(defeatedVisual)) {
-      const activeTimeouts = timeoutsRef.current;
-      const timeout = scheduleTimeout(() => setEnemySceneEncounter({ enemyIndex, stage }), 700);
-      return () => {
-        clearTimeout(timeout);
-        activeTimeouts.delete(timeout);
-      };
-    }
-
-    setEnemySceneEncounter({ enemyIndex, stage });
-  }, [enemyIndex, enemySceneEncounter, scheduleTimeout, stage]);
-
-  useEffect(() => {
     if (
+      encounterTransition ||
       passiveVolleySignal === lastHandledPassiveVolleySignalRef.current ||
       passiveVolleyHeroContributions.length === 0
     ) {
@@ -281,6 +252,9 @@ export const TheRift: React.FC<TheRiftProps> = ({
     setVisiblePassiveVolleySignal(passiveVolleySignal);
 
     scheduleTimeout(() => {
+      if (encounterTransitionRef.current) {
+        return;
+      }
       setProjectiles(current => current.filter(projectile => projectile.volleySignal !== passiveVolleySignal));
       flashHit();
       impactCounterRef.current += 1;
@@ -296,73 +270,12 @@ export const TheRift: React.FC<TheRiftProps> = ({
     }, GAME_BALANCE.passiveVolleyFeedbackMs);
   }, [
     flashHit,
+    encounterTransition,
     heroes,
     passiveVolleyHeroContributions,
     passiveVolleySignal,
     scheduleTimeout,
   ]);
-
-  const triggerDefeatTransition = (
-    defeatedStage: number,
-    nextStage: number,
-    wasBoss: boolean,
-    rewards?: Pick<MonsterDefeatedEvent, 'goldReward' | 'gemReward'>,
-  ) => {
-    lastDefeatStageRef.current = defeatedStage;
-    setDefeatTransition(current => ({
-      id: (current?.id ?? 0) + 1,
-      defeatedStage,
-      enemiesInStage: getEnemiesInStage(defeatedStage),
-      nextEnemyIndex: 0,
-      nextStage,
-      stageCleared: true,
-      wasBoss,
-      goldReward: rewards?.goldReward ?? null,
-      gemReward: rewards?.gemReward ?? null,
-    }));
-  };
-
-  const applyDefeatRewardEvent = (defeatedEvent: MonsterDefeatedEvent) => {
-    lastDefeatStageRef.current = defeatedEvent.stage;
-    setDefeatTransition(current => {
-      if (current?.defeatedStage === defeatedEvent.stage) {
-        return {
-          ...current,
-          enemiesInStage: defeatedEvent.enemiesInStage,
-          nextEnemyIndex: defeatedEvent.nextEnemyIndex,
-          nextStage: defeatedEvent.nextStage,
-          stageCleared: defeatedEvent.stageCleared,
-          wasBoss: isBossStage(defeatedEvent.stage),
-          goldReward: defeatedEvent.goldReward,
-          gemReward: defeatedEvent.gemReward,
-        };
-      }
-
-      return {
-        id: (current?.id ?? 0) + 1,
-        defeatedStage: defeatedEvent.stage,
-        enemiesInStage: defeatedEvent.enemiesInStage,
-        nextEnemyIndex: defeatedEvent.nextEnemyIndex,
-        nextStage: defeatedEvent.nextStage,
-        stageCleared: defeatedEvent.stageCleared,
-        wasBoss: isBossStage(defeatedEvent.stage),
-        goldReward: defeatedEvent.goldReward,
-        gemReward: defeatedEvent.gemReward,
-      };
-    });
-  };
-
-  useEffect(() => {
-    const previousStage = previousStageRef.current;
-    const previousWasBoss = previousBossRef.current;
-
-    if (stage > previousStage && lastDefeatStageRef.current !== previousStage) {
-      triggerDefeatTransition(previousStage, stage, previousWasBoss);
-    }
-
-    previousStageRef.current = stage;
-    previousBossRef.current = isBoss;
-  }, [isBoss, stage]);
 
   useEffect(() => {
     const biomeIndex = getBiomeIndexForStage(stage);
@@ -381,23 +294,11 @@ export const TheRift: React.FC<TheRiftProps> = ({
     return () => clearTimeout(timeout);
   }, [biomeEnter, scheduleTimeout]);
 
-  useEffect(() => {
-    if (!defeatTransition) {
+  const attackAt = (clientX: number, clientY: number, bounds: DOMRect) => {
+    if (encounterTransitionRef.current) {
       return;
     }
 
-    const activeTimeouts = timeoutsRef.current;
-    const timeout = scheduleTimeout(
-      () => setDefeatTransition(null),
-      defeatTransition.wasBoss ? 2100 : defeatTransition.stageCleared ? 1450 : 850,
-    );
-    return () => {
-      clearTimeout(timeout);
-      activeTimeouts.delete(timeout);
-    };
-  }, [defeatTransition, scheduleTimeout]);
-
-  const attackAt = (clientX: number, clientY: number, bounds: DOMRect) => {
     const clickId = clickCounterRef.current;
     clickCounterRef.current += 1;
     impactCounterRef.current += 1;
@@ -410,7 +311,6 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
     void dealDamage().then(events => {
       const hitEvent = getTapHitEvent(events);
-      const defeatedEvent = getMonsterDefeatedEvent(events);
       if (hitEvent) {
         const nextClick = {
           id: clickId,
@@ -429,9 +329,6 @@ export const TheRift: React.FC<TheRiftProps> = ({
           triggerHaptic('heavy');
           setCritState(current => ({ id: current.id + 1, impactId: impactSignal.id }));
         }
-      }
-      if (defeatedEvent) {
-        applyDefeatRewardEvent(defeatedEvent);
       }
     });
     registerHit();
@@ -457,15 +354,13 @@ export const TheRift: React.FC<TheRiftProps> = ({
     attackAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2, bounds);
   };
 
-  const healthPercent = gameNumberToPercent(monsterHealth, monsterMaxHealth);
+  const healthPercent = encounterTransition
+    ? 0
+    : gameNumberToPercent(monsterHealth, monsterMaxHealth);
   const combatTone = isBoss ? 'boss' : 'normal';
   const enemiesInStage = getEnemiesInStage(stage);
   const enemyVisual = getRiftEnemyVisual(stage + enemyIndex, isBoss);
-  const enemySceneIsBoss = isBossStage(enemySceneEncounter.stage);
-  const sceneEnemyVisual = getRiftEnemyVisual(
-    enemySceneEncounter.stage + enemySceneEncounter.enemyIndex,
-    enemySceneIsBoss,
-  );
+  const sceneEnemyVisual = enemyVisual;
   const usesSkinnedRig = hasSkinnedThreeRig(sceneEnemyVisual);
   const stageRole = getStageRole(stage);
   const riftIndex = Math.floor((Math.max(1, stage) - 1) / 3) + 1;
@@ -476,32 +371,21 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const hasSpecialRule = isBoss || encounterRule.id !== 'unbound';
 
   useEffect(() => {
-    if (usesSkinnedRig) {
-      return;
-    }
-
-    const currentEnemies = getEnemiesInStage(enemySceneEncounter.stage);
-    const nextStage = enemySceneEncounter.enemyIndex + 1 < currentEnemies
-      ? enemySceneEncounter.stage
-      : enemySceneEncounter.stage + 1;
-    const nextEnemyIndex = nextStage === enemySceneEncounter.stage
-      ? enemySceneEncounter.enemyIndex + 1
+    const nextStage = enemyIndex + 1 < enemiesInStage
+      ? stage
+      : stage + 1;
+    const nextEnemyIndex = nextStage === stage
+      ? enemyIndex + 1
       : 0;
     const nextVisual = getRiftEnemyVisual(nextStage + nextEnemyIndex, isBossStage(nextStage));
-    if (!hasSkinnedThreeRig(nextVisual)) {
-      return;
-    }
-
-    const modelUrl = renderProfile.quality === 'high'
-      ? nextVisual.rig.high.model
-      : nextVisual.rig.low.model;
-    return scheduleRiftThreePreload(modelUrl);
-  }, [enemySceneEncounter, renderProfile.quality, usesSkinnedRig]);
+    return scheduleRiftEncounterPreload(nextVisual, renderProfile.quality);
+  }, [enemyIndex, enemiesInStage, renderProfile.quality, stage]);
 
   return (
     <motion.section
       className={`rift-view ${combatTone} encounter-${encounterRule.id} ${isBoss ? `boss-phase-${bossPhaseIndex}` : ''}`}
       data-render-quality={renderProfile.quality}
+      data-encounter-transition={encounterTransition ? 'death' : 'active'}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
@@ -542,7 +426,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
             {hasSpecialRule && <em className="combat-rule-tag">{encounterRule.hint}</em>}
           </div>
           <div className="combat-status-right">
-            {isBoss && (
+            {isBoss && !encounterTransition && (
               <BossClock
                 attemptDurationMs={bossAttemptDurationMs}
                 attemptEndsAt={bossEncounterEndsAt}
@@ -599,8 +483,9 @@ export const TheRift: React.FC<TheRiftProps> = ({
 
         <motion.button
           type="button"
-          aria-label={`Attack ${enemyVisual.name}`}
+          aria-label={encounterTransition ? `${enemyVisual.name} defeated` : `Attack ${enemyVisual.name}`}
           className={`monster-button ${isHit && !usesSkinnedRig ? 'hit' : ''}`}
+          disabled={Boolean(encounterTransition)}
           onPointerDown={handleAttack}
           onKeyDown={handleAttackKeyDown}
         >
@@ -621,7 +506,7 @@ export const TheRift: React.FC<TheRiftProps> = ({
               {usesSkinnedRig ? (
                 <RiftThreeEnemyScene
                   critSignal={critState}
-                  defeatSignal={defeatTransition?.id ?? 0}
+                  defeatSignal={encounterTransition?.id ?? 0}
                   impactSignal={impactState}
                   reduceMotion={prefersReducedMotion ?? false}
                   visual={sceneEnemyVisual}
@@ -629,14 +514,14 @@ export const TheRift: React.FC<TheRiftProps> = ({
               ) : (
                 <RiftPixiScene
                   critSignal={critState}
-                  defeatSignal={defeatTransition?.id ?? 0}
+                  defeatSignal={encounterTransition?.id ?? 0}
                   enrageSignal={bossEnrageSignal}
                   impactSignal={impactState}
                   bossPhase={bossPhaseIndex}
-                  enemyIndex={enemySceneEncounter.enemyIndex}
-                  isBoss={enemySceneIsBoss}
-                  isBossDefeat={defeatTransition?.wasBoss ?? false}
-                  stage={enemySceneEncounter.stage}
+                  enemyIndex={enemyIndex}
+                  isBoss={isBoss}
+                  isBossDefeat={encounterTransition?.wasBoss ?? false}
+                  stage={stage}
                 />
               )}
             </Suspense>
@@ -696,10 +581,10 @@ export const TheRift: React.FC<TheRiftProps> = ({
         </div>
 
         <AnimatePresence>
-          {defeatTransition && (
+          {encounterTransition && (
             <motion.div
-              key={defeatTransition.id}
-              className={`rift-clear-banner ${defeatTransition.wasBoss ? 'boss' : 'normal'} ${defeatTransition.stageCleared ? '' : 'encounter'}`}
+              key={encounterTransition.id}
+              className={`rift-clear-banner ${encounterTransition.wasBoss ? 'boss' : 'normal'} ${encounterTransition.stageCleared ? '' : 'encounter'}`}
               initial={{ opacity: 0, x: '-50%', y: 20, scale: 0.86 }}
               animate={{ opacity: 1, x: '-50%', y: 0, scale: 1 }}
               exit={{ opacity: 0, x: '-50%', y: -22, scale: 0.94 }}
@@ -712,21 +597,17 @@ export const TheRift: React.FC<TheRiftProps> = ({
                 <span className="reward-chest-shine" />
               </div>
               <div className="rift-clear-copy">
-                <span>{defeatTransition.wasBoss
+                <span>{encounterTransition.wasBoss
                   ? 'Boss Rift Cleared'
-                  : defeatTransition.stageCleared ? 'Stage Cleared' : 'Enemy Defeated'}</span>
-                <strong>{defeatTransition.stageCleared
-                  ? `Stage ${defeatTransition.nextStage}`
-                  : `Wave ${defeatTransition.nextEnemyIndex + 1}/${defeatTransition.enemiesInStage}`}</strong>
+                  : encounterTransition.stageCleared ? 'Stage Cleared' : 'Enemy Defeated'}</span>
+                <strong>{encounterTransition.stageCleared
+                  ? `Stage ${encounterTransition.nextStage}`
+                  : `Wave ${encounterTransition.nextEnemyIndex + 1}/${encounterTransition.enemiesInStage}`}</strong>
               </div>
               <div className="rift-reward-row">
-                {defeatTransition.goldReward === null ? (
-                  <span className="reward-pill claimed">Rewards claimed</span>
-                ) : (
-                  <span className="reward-pill gold">+{formatNumber(defeatTransition.goldReward)} Gold</span>
-                )}
-                {(defeatTransition.gemReward ?? 0) > 0 && (
-                  <span className="reward-pill gem">+{formatNumber(defeatTransition.gemReward ?? 0)} Gems</span>
+                <span className="reward-pill gold">+{formatNumber(encounterTransition.goldReward)} Gold</span>
+                {encounterTransition.gemReward > 0 && (
+                  <span className="reward-pill gem">+{formatNumber(encounterTransition.gemReward)} Gems</span>
                 )}
               </div>
             </motion.div>
@@ -743,8 +624,8 @@ export const TheRift: React.FC<TheRiftProps> = ({
               exit={{ opacity: 0, x: '-50%', y: -18, scale: 0.94 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             >
-              <span className="biome-enter-kicker">Нова зона</span>
-              <strong className="biome-enter-name">Входимо в {biomeEnter.name}</strong>
+              <span className="biome-enter-kicker">New zone</span>
+              <strong className="biome-enter-name">Entering {biomeEnter.name}</strong>
             </motion.div>
           )}
         </AnimatePresence>

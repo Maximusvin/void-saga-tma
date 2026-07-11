@@ -1013,6 +1013,8 @@ test('animates the skinned Ironroot model without rebuilding the Three.js scene'
 });
 
 test('plays Ironroot death before handing the canvas to the next enemy', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
   await page.addInitScript(() => {
     const releases: unknown[] = [];
     Reflect.set(window, '__ironrootRuntimeReleases', releases);
@@ -1029,9 +1031,13 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
 
   await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'death', { timeout: 1_000 });
   await expect(page.locator('.stage-mark strong')).toHaveText('2');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 1/4');
+  await expect(page.locator('.health-percent')).toHaveText('0%');
+  await expect(page.locator('.health-track')).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.locator('.monster-button')).toBeDisabled();
+  await expect(page.locator('.warband-projectile')).toHaveCount(0);
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
-  await page.waitForTimeout(720);
+  await page.waitForTimeout(950);
   await expect(scene).toHaveCount(0);
   const nextScene = page.locator('.rift-pixi-scene');
   await expect(nextScene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
@@ -1041,6 +1047,50 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
     { canvasAttached: false, contextLossRequested: true },
   ]);
   await expect(page.locator('canvas')).toHaveCount(1);
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
+  await expect(page.locator('.monster-button')).toBeEnabled();
+  expect(pageErrors).toEqual([]);
+});
+
+test('stops automatic combat at a lethal hit and tears Pixi down cleanly', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const now = new Date().toISOString();
+    localStorage.setItem('rift_heroes_save', JSON.stringify({
+      schemaVersion: 7,
+      activeHeroIds: ['auto-hero'],
+      bossEncounterEndsAt: null,
+      comboCount: 0,
+      comboExpiresAt: null,
+      enemyIndex: 3,
+      gems: 50,
+      gold: '1000',
+      heroes: [{ ascension: 0, id: 'auto-hero', name: 'Auto Hero', rarity: 'Rare', level: 3, power: '1000', shards: 0, templateId: 'void-mage' }],
+      lastPassiveTickAt: now,
+      lastSeenAt: now,
+      monsterHealth: '1',
+      monsterMaxHealth: '120',
+      stage: 1,
+      summonPity: 0,
+      updatedAt: now,
+    }));
+  });
+  await page.goto('/');
+
+  const defeatedScene = page.locator('.rift-pixi-scene');
+  await expect(defeatedScene).toHaveAttribute('data-enemy-id', 'mirefang-stalker');
+  await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'death', { timeout: 3_000 });
+  await expect(page.locator('.health-percent')).toHaveText('0%');
+  await expect(page.locator('.monster-button')).toBeDisabled();
+  await expect(page.locator('.warband-projectile')).toHaveCount(0);
+  await expect(page.locator('.warband-damage-pop')).toHaveCount(0);
+  await expect(defeatedScene).toHaveAttribute('data-enemy-id', 'mirefang-stalker');
+
+  await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'active', { timeout: 2_000 });
+  await expect(page.locator('.rift-three-scene')).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
+  await expect(page.locator('canvas')).toHaveCount(1);
+  expect(pageErrors).toEqual([]);
 });
 
 test('preloads the versioned Ironroot runtime before its encounter', async ({ page }) => {
@@ -1181,10 +1231,14 @@ test('advances through enemy waves before increasing the campaign stage', async 
   await expect(page.locator('.stage-mark')).toContainText('Wave 1/4');
   await page.locator('.monster-button').click();
 
+  await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'death');
   await expect(page.locator('.stage-mark strong')).toHaveText('1');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 1/4');
+  await expect(page.locator('.health-percent')).toHaveText('0%');
   await expect(page.locator('.rift-clear-banner')).toContainText('Enemy Defeated');
   await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/4');
+  await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'active');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   expect(pageErrors).toEqual([]);
 });
 
@@ -1254,6 +1308,11 @@ test.describe('average Telegram Android performance profile', () => {
     // test-controlled event rather than a timer racing asset loads.
     await page.locator('.monster-button').click();
 
+    await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'death');
+    await expect(page.locator('.stage-mark strong')).toHaveText('149');
+    await expect(page.locator('.health-percent')).toHaveText('0%');
+    await expect(page.locator('.app-shell')).not.toHaveClass(/rift-boss/);
+    await expect(preBossScene).toHaveAttribute('data-hit-reaction-phase', 'death');
     await expect(page.locator('.stage-mark strong')).toHaveText('150', { timeout: 4_000 });
     await expect(preBossScene).toHaveCount(0);
     const bossScene = page.locator('.rift-pixi-scene');
@@ -1535,10 +1594,11 @@ test('welcomes the player back with the offline reward after a long absence', as
 
   const modal = page.locator('.welcome-back-modal');
   await expect(modal).toBeVisible();
-  await expect(modal).toContainText(/хв|г/); // away duration label
+  await expect(modal).toContainText(/m|h/); // away duration label
+  await expect(modal).toContainText('Your Warband earned');
   await expect(page.locator('.welcome-back-gold')).toContainText('+');
 
-  await page.getByRole('button', { name: 'Забрати' }).click();
+  await page.getByRole('button', { name: 'Collect' }).click();
   await expect(modal).toHaveCount(0);
 });
 

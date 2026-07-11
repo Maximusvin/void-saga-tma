@@ -36,6 +36,12 @@ import {
   isBossStage,
 } from '../game/balance';
 import { applyGameAction, createInitialGameSnapshot } from '../game/engine';
+import {
+  createEncounterTransition,
+  getEncounterTransitionDurationMs,
+  getEncounterTransitionKey,
+  type EncounterTransition,
+} from '../game/encounterTransition';
 import { summarizeOfflineReward, type OfflineRewardSummary } from '../game/offlineReward';
 import { ZERO_GAME_NUMBER, multiplyGameNumbers, type GameNumber } from '../game/gameNumber';
 import { normalizeGameSnapshot } from '../game/snapshot';
@@ -290,6 +296,7 @@ export const useGameState = () => {
   const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>('idle');
   const [bossEnrageSignal, setBossEnrageSignal] = useState(0);
   const [offlineReward, setOfflineReward] = useState<OfflineRewardSummary | null>(null);
+  const [encounterTransition, setEncounterTransition] = useState<EncounterTransition | null>(null);
   const [passiveVolleyFeedback, setPassiveVolleyFeedback] = useState<PassiveVolleyFeedback>({
     damage: ZERO_GAME_NUMBER,
     heroContributions: [],
@@ -304,6 +311,10 @@ export const useGameState = () => {
   const pendingLocalSnapshotRef = useRef<GameSnapshot | null>(null);
   const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comboResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const encounterTransitionRef = useRef<EncounterTransition | null>(null);
+  const encounterTransitionCounterRef = useRef(0);
+  const encounterTransitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDefeatedEncounterKeyRef = useRef<string | null>(null);
   const pendingTapsRef = useRef<PendingTap[]>([]);
   // Ticks predicted locally but not yet acknowledged by the server. Losing these
   // costs nothing: the server's watermark still owes them on the next batch.
@@ -445,9 +456,55 @@ export const useGameState = () => {
     };
   }, [apiEnabled, applyServerState, playerId, replayActionOutbox]);
 
+  const beginEncounterTransition = useCallback((events: readonly GameEvent[]) => {
+    const candidate = createEncounterTransition(events, encounterTransitionCounterRef.current + 1);
+    if (!candidate) {
+      return false;
+    }
+
+    const encounterKey = `${realmContextRef.current.characterId}:${getEncounterTransitionKey(candidate)}`;
+    if (lastDefeatedEncounterKeyRef.current === encounterKey) {
+      return true;
+    }
+
+    lastDefeatedEncounterKeyRef.current = encounterKey;
+    encounterTransitionCounterRef.current = candidate.id;
+    encounterTransitionRef.current = candidate;
+    setEncounterTransition(candidate);
+    setPassiveVolleyFeedback(current => ({
+      ...current,
+      damage: ZERO_GAME_NUMBER,
+      heroContributions: [],
+    }));
+
+    if (encounterTransitionTimeoutRef.current) {
+      clearTimeout(encounterTransitionTimeoutRef.current);
+    }
+    encounterTransitionTimeoutRef.current = setTimeout(() => {
+      if (encounterTransitionRef.current?.id === candidate.id) {
+        encounterTransitionRef.current = null;
+        setEncounterTransition(null);
+      }
+      encounterTransitionTimeoutRef.current = null;
+    }, getEncounterTransitionDurationMs(candidate));
+    return true;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (encounterTransitionTimeoutRef.current) {
+        clearTimeout(encounterTransitionTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const publishCombatFeedback = useCallback((events: GameEvent[], options: CombatFeedbackOptions = {}) => {
     if (events.some(event => event.type === 'boss_enraged')) {
       setBossEnrageSignal(current => current + 1);
+    }
+
+    if (beginEncounterTransition(events)) {
+      return events;
     }
 
     // A batched flush replays idle ticks the predicted volley already showed.
@@ -466,7 +523,7 @@ export const useGameState = () => {
     }
 
     return events;
-  }, []);
+  }, [beginEncounterTransition]);
 
   const runGameAction = useCallback((action: GameAction, feedbackOptions: CombatFeedbackOptions = {}) => {
     if (!apiEnabled) {
@@ -753,6 +810,10 @@ export const useGameState = () => {
   }, [dispatchCombatBatch]);
 
   const dealDamage = useCallback(() => {
+    if (encounterTransitionRef.current) {
+      return Promise.resolve([] as GameEvent[]);
+    }
+
     return new Promise<GameEvent[]>(resolve => {
       pendingTapsRef.current.push({ resolve });
 
@@ -786,6 +847,7 @@ export const useGameState = () => {
       if (
         document.visibilityState !== 'visible' ||
         activeView !== 'rift' ||
+        encounterTransitionRef.current !== null ||
         snapshotRef.current.activeHeroIds.length === 0
       ) {
         return;
@@ -818,6 +880,10 @@ export const useGameState = () => {
       if (!predicted.events.some(event => event.type === 'action_rejected')) {
         applySnapshot(predicted.snapshot);
         publishCombatFeedback(predicted.events);
+        if (predicted.events.some(event => event.type === 'monster_defeated')) {
+          void dispatchCombatBatch(0);
+          return;
+        }
       }
 
       if (pendingPassiveTicksRef.current >= PASSIVE_FLUSH_TICKS) {
@@ -937,6 +1003,7 @@ export const useGameState = () => {
     summonPity: snapshot.summonPity,
     bossEncounterEndsAt: snapshot.bossEncounterEndsAt,
     bossEnrageSignal,
+    encounterTransition,
     offlineReward,
     dismissOfflineReward: () => setOfflineReward(null),
     snapshotUpdatedAt: snapshot.updatedAt,

@@ -722,12 +722,13 @@ export const RiftPixiScene = ({
       // Live shards are children of the scene and die with it; the free list is
       // detached, so it needs an explicit sweep to avoid leaking GPU buffers
       // across every stage rebuild.
-      shardPool.destroy();
-      if (enemyRig) {
-        beast.removeChild(enemyRig.container);
-        enemyRig.destroy();
-      }
-      cleanupOwnedPixiScene(appRef.current, app, scene, animateScene);
+      cleanupOwnedPixiScene(appRef.current, app, scene, animateScene, () => {
+        shardPool.destroy();
+        if (enemyRig) {
+          beast.removeChild(enemyRig.container);
+          enemyRig.destroy();
+        }
+      });
       if (runtimeAssetUrl) {
         void Assets.unload(runtimeAssetUrl).catch(() => undefined);
       }
