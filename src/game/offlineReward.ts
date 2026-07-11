@@ -6,7 +6,7 @@ export interface OfflineRewardSummary {
   goldReward: GameNumber;
   /** The paid window in seconds — the capped absence, not the raw one. */
   awaySeconds: number;
-  /** Human label for that window, e.g. "2г 14хв". */
+  /** Human label for that window, e.g. "2h 14m". */
   awayLabel: string;
   /** Active warband income per second, shown as context. */
   passivePower: GameNumber;
@@ -20,10 +20,10 @@ export const formatAwayDuration = (seconds: number): string => {
   const minutes = totalMinutes % 60;
 
   if (hours === 0) {
-    return `${minutes}хв`;
+    return `${minutes}m`;
   }
 
-  return minutes === 0 ? `${hours}г` : `${hours}г ${minutes}хв`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 };
 
 /**

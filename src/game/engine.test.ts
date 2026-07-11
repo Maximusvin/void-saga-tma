@@ -365,7 +365,7 @@ describe('active Warband', () => {
 });
 
 describe('server-authoritative combat batches', () => {
-  it('keeps hit and defeat events ordered while a batch crosses an encounter', () => {
+  it('stops a tap batch at the first defeated encounter', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
       monsterHealth: gameNumber(2),
@@ -379,15 +379,28 @@ describe('server-authoritative combat batches', () => {
       'monster_hit',
       'monster_hit',
       'monster_defeated',
-      'monster_hit',
     ]);
     assert.equal(result.snapshot.stage, 1);
     assert.equal(result.snapshot.enemyIndex, 1);
     const defeat = result.events.find(event => event.type === 'monster_defeated');
     assert.equal(defeat?.type === 'monster_defeated' ? defeat.stageCleared : null, false);
-    assert.equal(result.snapshot.comboCount, 3);
+    assert.equal(result.snapshot.comboCount, 2);
     assert.equal(result.snapshot.comboExpiresAt, '2026-07-09T12:00:01.500Z');
-    assert.ok(compareGameNumbers(result.snapshot.monsterHealth, result.snapshot.monsterMaxHealth) < 0);
+    assert.equal(result.snapshot.monsterHealth, result.snapshot.monsterMaxHealth);
+  });
+
+  it('stops passive ticks after a kill and preserves the unspent watermark', () => {
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(-3_000), [hero(200)]),
+      lastPassiveTickAt: atOffsetMs(-3_000),
+    };
+
+    const result = applyCombatBatchAction(snapshot, 0, 3, { nowMs: NOW_MS, random: NEVER_CRIT });
+
+    assert.deepEqual(result.events.map(event => event.type), ['monster_hit', 'monster_defeated']);
+    assert.equal(countPassiveHits(result.events), 1);
+    assert.equal(result.snapshot.monsterHealth, result.snapshot.monsterMaxHealth);
+    assert.equal(result.snapshot.lastPassiveTickAt, atOffsetMs(-2_000));
   });
 
   it('advances the stage only after the final normal encounter', () => {

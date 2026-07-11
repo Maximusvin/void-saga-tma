@@ -42,7 +42,7 @@ describe('summarizeOfflineReward', () => {
     assert.deepEqual(summary, {
       goldReward: gameNumber(5000),
       awaySeconds: 3600,
-      awayLabel: '1г',
+      awayLabel: '1h',
       passivePower: gameNumber(12),
       cappedAt: false,
     });
@@ -54,7 +54,7 @@ describe('summarizeOfflineReward', () => {
 
     assert.ok(summary);
     assert.equal(summary.cappedAt, true);
-    assert.equal(summary.awayLabel, '8г');
+    assert.equal(summary.awayLabel, '8h');
   });
 
   it('finds the offline event among other events', () => {
@@ -63,24 +63,24 @@ describe('summarizeOfflineReward', () => {
       offlineEvent({ cappedSeconds: 1800, goldReward: 900 }),
     ];
     const summary = summarizeOfflineReward(events, MODAL_MIN_SECONDS);
-    assert.equal(summary?.awayLabel, '30хв');
+    assert.equal(summary?.awayLabel, '30m');
   });
 });
 
 describe('formatAwayDuration', () => {
   it('formats whole-minute absences', () => {
-    assert.equal(formatAwayDuration(45 * 60), '45хв');
+    assert.equal(formatAwayDuration(45 * 60), '45m');
   });
 
   it('formats a round hour without trailing minutes', () => {
-    assert.equal(formatAwayDuration(3600), '1г');
+    assert.equal(formatAwayDuration(3600), '1h');
   });
 
   it('formats hours with remaining minutes', () => {
-    assert.equal(formatAwayDuration(2 * 3600 + 14 * 60), '2г 14хв');
+    assert.equal(formatAwayDuration(2 * 3600 + 14 * 60), '2h 14m');
   });
 
   it('formats the 8h ceiling', () => {
-    assert.equal(formatAwayDuration(8 * 3600), '8г');
+    assert.equal(formatAwayDuration(8 * 3600), '8h');
   });
 });

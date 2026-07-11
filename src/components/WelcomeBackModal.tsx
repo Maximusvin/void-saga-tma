@@ -36,26 +36,26 @@ export function WelcomeBackModal({ reward, onCollect }: WelcomeBackModalProps) {
       >
         <span className="welcome-back-glimmer" aria-hidden="true" />
         <span className="welcome-back-kicker">
-          <Sparkles size={14} aria-hidden="true" /> Rift не спав
+          <Sparkles size={14} aria-hidden="true" /> The Rift kept moving
         </span>
-        <h2 className="welcome-back-title text-gradient">З поверненням</h2>
+        <h2 className="welcome-back-title text-gradient">Welcome back</h2>
         <p className="welcome-back-away">
-          Тебе не було <strong>{reward.awayLabel}</strong>
-          {reward.cappedAt && <span className="welcome-back-cap"> · максимум 8г</span>}
+          You were away for <strong>{reward.awayLabel}</strong>
+          {reward.cappedAt && <span className="welcome-back-cap"> · max 8h</span>}
         </p>
 
         <div className="welcome-back-reward">
           <Coins size={26} className="welcome-back-coin" aria-hidden="true" />
           <span className="welcome-back-gold">+{formatNumber(reward.goldReward)}</span>
-          <span className="welcome-back-gold-label">золота</span>
+          <span className="welcome-back-gold-label">Gold</span>
         </div>
 
         <p className="welcome-back-rate">
-          Загін фармив {formatNumber(reward.passivePower)}/с, поки тебе не було
+          Your Warband earned {formatNumber(reward.passivePower)}/s while you were away
         </p>
 
         <button type="button" className="btn-primary welcome-back-collect" onClick={onCollect}>
-          Забрати
+          Collect
         </button>
       </motion.div>
     </motion.div>

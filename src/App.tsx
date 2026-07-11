@@ -2,6 +2,8 @@
 import { AnimatePresence } from 'framer-motion';
 import { useGameState } from './store/useGameState';
 import { getRiftEnemyVisual } from './game/riftVisuals';
+import { isBossStage } from './game/balance';
+import { ZERO_GAME_NUMBER } from './game/gameNumber';
 import type { ActiveView } from './game/types';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
@@ -55,14 +57,20 @@ function App() {
   }, []);
 
   const gameState = useGameState();
-  const riftVisual = getRiftEnemyVisual(gameState.stage, gameState.isBoss);
+  const presentedStage = gameState.encounterTransition?.defeatedStage ?? gameState.stage;
+  const presentedEnemyIndex = gameState.encounterTransition?.enemyIndex ?? gameState.enemyIndex;
+  const presentedIsBoss = gameState.encounterTransition?.wasBoss ?? isBossStage(presentedStage);
+  const riftVisual = getRiftEnemyVisual(
+    presentedIsBoss ? presentedStage : presentedStage + presentedEnemyIndex,
+    presentedIsBoss,
+  );
   const shellStyle = gameState.activeView === 'rift'
     ? { '--rift-backdrop-image': `url("${riftVisual.backdrop}")` } as CSSProperties
     : undefined;
 
   return (
     <main
-      className={`app-shell view-${gameState.activeView} ${gameState.isBoss ? 'rift-boss' : ''}`}
+      className={`app-shell view-${gameState.activeView} ${presentedIsBoss ? 'rift-boss' : ''}`}
       style={shellStyle}
     >
       <div className="scene-fog" />
@@ -71,7 +79,7 @@ function App() {
         backendStatus={gameState.backendStatus}
         gems={gameState.gems}
         gold={gameState.gold}
-        level={gameState.stage}
+        level={presentedStage}
         onOpenRealmSwitcher={() => {
           setRealmSwitcherOpen(true);
           void gameState.refreshRealmDirectory();
@@ -86,13 +94,14 @@ function App() {
             {gameState.activeView === 'rift' && (
               <TheRift
                 key="rift"
-                monsterHealth={gameState.monsterHealth}
-                monsterMaxHealth={gameState.monsterMaxHealth}
+                monsterHealth={gameState.encounterTransition ? ZERO_GAME_NUMBER : gameState.monsterHealth}
+                monsterMaxHealth={gameState.encounterTransition?.monsterMaxHealth ?? gameState.monsterMaxHealth}
                 dealDamage={gameState.dealDamage}
                 clickPower={gameState.clickPower}
-                enemyIndex={gameState.enemyIndex}
-                stage={gameState.stage}
-                isBoss={gameState.isBoss}
+                enemyIndex={presentedEnemyIndex}
+                stage={presentedStage}
+                isBoss={presentedIsBoss}
+                encounterTransition={gameState.encounterTransition}
                 bossEncounterEndsAt={gameState.bossEncounterEndsAt}
                 bossEnrageSignal={gameState.bossEnrageSignal}
                 snapshotUpdatedAt={gameState.snapshotUpdatedAt}

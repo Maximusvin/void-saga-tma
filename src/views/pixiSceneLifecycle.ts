@@ -32,6 +32,7 @@ export const cleanupOwnedPixiScene = <TScene extends PixiSceneLike, TFrame>(
   application: PixiApplicationLike<TScene, TFrame>,
   scene: TScene,
   animateScene: (frame: TFrame) => void,
+  prepareForDestroy?: () => void,
 ) => {
   if (currentApplication !== application) {
     return false;
@@ -39,6 +40,7 @@ export const cleanupOwnedPixiScene = <TScene extends PixiSceneLike, TFrame>(
 
   application.ticker.remove(animateScene);
   application.stage.removeChild(scene);
+  prepareForDestroy?.();
   scene.destroy(OWNED_PIXI_SCENE_DESTROY_OPTIONS);
   return true;
 };

@@ -309,6 +309,7 @@ export const applyCombatBatchAction = (
   const random = options.random ?? Math.random;
   const activeHeroes = getActiveWarbandHeroes(currentSnapshot);
   const baseClickPower = getBaseClickPower(activeHeroes);
+  let encounterDefeated = false;
 
   for (let index = 0; index < normalizedTapCount; index += 1) {
     const isCrit = random() < GAME_BALANCE.critChance;
@@ -326,6 +327,10 @@ export const applyCombatBatchAction = (
     });
     currentSnapshot = result.snapshot;
     events.push(...result.events);
+    if (result.events.some(event => event.type === 'monster_defeated')) {
+      encounterDefeated = true;
+      break;
+    }
   }
 
   const passiveGrant = grantPassiveTicks(currentSnapshot, normalizedPassiveTicks, nowMs);
@@ -340,7 +345,12 @@ export const applyCombatBatchAction = (
     .filter(hero => isPositiveGameNumber(hero.power))
     .map(hero => ({ damage: hero.power, heroId: hero.id }));
   const passivePower = addGameNumbers(...passiveContributions.map(contribution => contribution.damage));
-  for (let index = 0; index < passiveGrant.granted && isPositiveGameNumber(passivePower); index += 1) {
+  let processedPassiveTicks = 0;
+  for (
+    let index = 0;
+    !encounterDefeated && index < passiveGrant.granted && isPositiveGameNumber(passivePower);
+    index += 1
+  ) {
     const result = applyDamageAction(currentSnapshot, passivePower, 'passive', {
       comboCount,
       heroContributions: passiveContributions,
@@ -348,7 +358,21 @@ export const applyCombatBatchAction = (
     });
     currentSnapshot = result.snapshot;
     events.push(...result.events);
+    processedPassiveTicks += 1;
+    if (result.events.some(event => event.type === 'monster_defeated')) {
+      encounterDefeated = true;
+    }
   }
+
+  const skippedPassiveTicks = passiveGrant.granted - processedPassiveTicks;
+  const grantedWatermarkMs = passiveGrant.lastPassiveTickAt
+    ? Date.parse(passiveGrant.lastPassiveTickAt)
+    : Number.NaN;
+  const lastPassiveTickAt = !encounterDefeated
+    ? passiveGrant.lastPassiveTickAt
+    : processedPassiveTicks === 0
+      ? currentSnapshot.lastPassiveTickAt
+      : new Date(grantedWatermarkMs - skippedPassiveTicks * GAME_BALANCE.passiveTickMs).toISOString();
 
   const comboExpiresAt = normalizedTapCount > 0
     ? new Date(nowMs + GAME_BALANCE.comboDecayMs).toISOString()
@@ -359,7 +383,7 @@ export const applyCombatBatchAction = (
       ...currentSnapshot,
       comboCount,
       comboExpiresAt,
-      lastPassiveTickAt: passiveGrant.lastPassiveTickAt,
+      lastPassiveTickAt,
     }, now),
     events,
   };
