@@ -1115,13 +1115,23 @@ test.describe('average Telegram Android performance profile', () => {
     });
     await page.goto('/');
 
-    const scene = page.locator('.rift-pixi-scene');
-    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
-    await expect(scene).toHaveAttribute('data-render-quality', 'balanced');
-    await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+    const preBossScene = page.locator('.rift-three-scene');
+    await expect(preBossScene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(preBossScene).toHaveAttribute('data-enemy-rig', 'skinned-three');
+    await expect(preBossScene).toHaveAttribute('data-scene-build-count', '1');
     await expect(page.locator('.rift-spark')).toHaveCount(8);
 
-    const initialSceneBuilds = Number(await scene.getAttribute('data-scene-build-count'));
+    const preBossBudget = await preBossScene.evaluate(element => {
+      const canvas = element.querySelector('canvas')!;
+      const bounds = canvas.getBoundingClientRect();
+      return {
+        canvasWidth: canvas.width,
+        canvasCssWidth: bounds.width,
+        renderQuality: document.documentElement.dataset.renderQuality,
+      };
+    });
+    expect(preBossBudget.renderQuality).toBe('balanced');
+    expect(preBossBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(preBossBudget.canvasCssWidth * 1.5));
 
     // Drive the boss transition with an explicit tap. The one-health enemy dies
     // to a single hit, advancing to the stage 150 sovereign, so the rebuild is
@@ -1129,11 +1139,14 @@ test.describe('average Telegram Android performance profile', () => {
     await page.locator('.monster-button').click();
 
     await expect(page.locator('.stage-mark strong')).toHaveText('150', { timeout: 4_000 });
-    await expect(scene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
-    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
-    await expect(scene).toHaveAttribute('data-particle-count', '24');
+    await expect(preBossScene).toHaveCount(0);
+    const bossScene = page.locator('.rift-pixi-scene');
+    await expect(bossScene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
+    await expect(bossScene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(bossScene).toHaveAttribute('data-particle-count', '24');
+    await expect(bossScene).toHaveAttribute('data-scene-build-count', '1');
 
-    const renderBudget = await scene.evaluate(element => {
+    const renderBudget = await bossScene.evaluate(element => {
       const canvas = element.querySelector('canvas')!;
       const bounds = canvas.getBoundingClientRect();
       const beastShell = document.querySelector('.rift-beast-shell')!;
@@ -1148,7 +1161,7 @@ test.describe('average Telegram Android performance profile', () => {
 
     expect(renderBudget.renderQuality).toBe('balanced');
     expect(renderBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(renderBudget.canvasCssWidth * 1.5));
-    expect(renderBudget.sceneBuilds - initialSceneBuilds).toBe(1);
+    expect(renderBudget.sceneBuilds).toBe(1);
     expect(renderBudget.shellAnimations).toBe(0);
     expect(pageErrors).toEqual([]);
   });
