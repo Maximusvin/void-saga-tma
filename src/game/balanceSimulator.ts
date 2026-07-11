@@ -39,6 +39,11 @@ export interface SimulationHeroSeed {
   templateId: string;
 }
 
+export interface SimulationSummonRoll {
+  rarity: number;
+  template: number;
+}
+
 export interface BalanceSimulationConfig {
   allowNewHeroesFromSummons: boolean;
   automaticSummons: boolean;
@@ -48,12 +53,13 @@ export interface BalanceSimulationConfig {
   id: string;
   initialGems: number;
   initialGold: GameNumberInput;
+  initialSummonPity: number;
   initialSummonsConsumed: number;
   maxUpgradesPerStage: number;
   normalTargetTtkSeconds: number;
   bossTargetTtkSeconds: number;
   sustainedComboMultiplier: number;
-  summonSequence: readonly string[];
+  summonRollSequence: readonly SimulationSummonRoll[];
   tapsPerSecond: number;
 }
 
@@ -97,6 +103,8 @@ export interface BalanceSimulationSummary {
   finalGems: number;
   finalTeamPower: GameNumber;
   goldBlockedStages: number;
+  maximumSummonPity: number;
+  pityTriggers: number;
   progressionBlockedStages: number;
   totalSeconds: GameNumber;
   totalAscensions: number;
@@ -129,16 +137,13 @@ export const BASELINE_CHECKPOINT_STAGES = [
   10_000,
 ] as const;
 
-export const DETERMINISTIC_SUMMON_SEQUENCE = (() => {
-  let summonPity = 0;
-  return Array.from({ length: 125 }, (_, index) => {
-    const rarityRoll = ((index * 73 + 37) % 1_000) / 1_000;
-    const templateRoll = ((index * 191 + 17) % 1_000) / 1_000;
-    const template = rollSummonTemplate(rarityRoll, templateRoll, summonPity);
-    summonPity = template.rarity === 'Legendary' ? 0 : summonPity + 1;
-    return template.id;
-  });
-})();
+export const DETERMINISTIC_SUMMON_ROLL_SEQUENCE: readonly SimulationSummonRoll[] = Array.from(
+  { length: 1_000 },
+  (_, index) => ({
+    rarity: ((index * 73 + 37) % 1_000) / 1_000,
+    template: ((index * 191 + 17) % 1_000) / 1_000,
+  }),
+);
 
 export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   allowNewHeroesFromSummons: true,
@@ -152,6 +157,7 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   id: 'baseline-three-summons',
   initialGems: 0,
   initialGold: GAME_BALANCE.initialGold,
+  initialSummonPity: 3,
   initialSummonsConsumed: 3,
   // This is a simulator safety bound, not a gameplay purchase cap. Late-game
   // shard stockpiles can unlock several 50-level ascension bands at once.
@@ -159,7 +165,7 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   normalTargetTtkSeconds: 14,
   bossTargetTtkSeconds: 55,
   sustainedComboMultiplier: 1,
-  summonSequence: DETERMINISTIC_SUMMON_SEQUENCE,
+  summonRollSequence: DETERMINISTIC_SUMMON_ROLL_SEQUENCE,
   tapsPerSecond: 4,
 };
 
@@ -190,9 +196,17 @@ export const SOLO_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
   id: 'solo-common',
 };
 
+export const ADVERSARIAL_RNG_BALANCE_SIMULATION: BalanceSimulationConfig = {
+  ...FIVE_COMMON_BALANCE_SIMULATION,
+  id: 'adversarial-rng-pity',
+  initialSummonPity: 5,
+  summonRollSequence: [{ rarity: 0, template: 0 }],
+};
+
 export const DEFAULT_BALANCE_SIMULATION_SCENARIOS = [
   BASELINE_BALANCE_SIMULATION,
   FIVE_COMMON_BALANCE_SIMULATION,
+  ADVERSARIAL_RNG_BALANCE_SIMULATION,
   SOLO_COMMON_BALANCE_SIMULATION,
 ] as const;
 
@@ -371,6 +385,19 @@ const applySimulationSummon = (
   });
 };
 
+const resolveSimulationSummon = (
+  roll: SimulationSummonRoll,
+  summonPity: number,
+) => {
+  const pityTriggered = summonPity >= GAME_BALANCE.legendaryPityPulls - 1;
+  const template = rollSummonTemplate(roll.rarity, roll.template, summonPity);
+  if (pityTriggered && template.rarity !== 'Legendary') {
+    throw new Error('Hard pity failed to resolve a Legendary summon');
+  }
+
+  return { pityTriggered, template };
+};
+
 const getStageReward = (
   stage: number,
   monsterHealth: GameNumber,
@@ -406,15 +433,30 @@ export const runBalanceSimulation = (
   normalizePositiveNumber(config.tapsPerSecond, 'tapsPerSecond');
   normalizePositiveNumber(config.sustainedComboMultiplier, 'sustainedComboMultiplier');
   normalizeNonNegativeInteger(config.initialGems, 'initialGems');
+  normalizeNonNegativeInteger(config.initialSummonPity, 'initialSummonPity');
   normalizeNonNegativeInteger(config.initialSummonsConsumed, 'initialSummonsConsumed');
-  if (config.summonSequence.length === 0) {
-    throw new RangeError('summonSequence must contain at least one rarity');
+  if (config.initialSummonPity >= GAME_BALANCE.legendaryPityPulls) {
+    throw new RangeError('initialSummonPity must be lower than the hard pity threshold');
+  }
+  if (config.summonRollSequence.length === 0) {
+    throw new RangeError('summonRollSequence must contain at least one value');
+  }
+  if (
+    config.summonRollSequence.some(({ rarity, template }) => (
+      !Number.isFinite(rarity) || rarity < 0 || rarity >= 1 ||
+      !Number.isFinite(template) || template < 0 || template >= 1
+    ))
+  ) {
+    throw new RangeError('summonRollSequence values must be finite numbers from 0 inclusive to 1 exclusive');
   }
 
   const heroes = createSimulationHeroes(config.heroes);
   let gold = gameNumber(config.initialGold);
   let gems = config.initialGems;
   let cumulativeSeconds = ZERO_GAME_NUMBER;
+  let maximumSummonPity = config.initialSummonPity;
+  let pityTriggers = 0;
+  let summonPity = config.initialSummonPity;
   let totalAscensions = 0;
   let totalSummons = 0;
   let totalUpgrades = 0;
@@ -508,12 +550,18 @@ export const runBalanceSimulation = (
     while (config.automaticSummons && gems >= GAME_BALANCE.summonCostGems) {
       const sequenceIndex = (
         config.initialSummonsConsumed + totalSummons
-      ) % config.summonSequence.length;
+      ) % config.summonRollSequence.length;
+      const summon = resolveSimulationSummon(config.summonRollSequence[sequenceIndex], summonPity);
       applySimulationSummon(
         heroes,
-        config.summonSequence[sequenceIndex],
+        summon.template.id,
         config.allowNewHeroesFromSummons,
       );
+      if (summon.pityTriggered) {
+        pityTriggers += 1;
+      }
+      summonPity = summon.template.rarity === 'Legendary' ? 0 : summonPity + 1;
+      maximumSummonPity = Math.max(maximumSummonPity, summonPity);
       gems -= GAME_BALANCE.summonCostGems;
       summonsPurchased += 1;
       totalSummons += 1;
@@ -569,6 +617,8 @@ export const runBalanceSimulation = (
       finalGems: finalRow.gemsAfter,
       finalTeamPower: finalRow.teamPower,
       goldBlockedStages: rows.filter(row => row.blockedByGold).length,
+      maximumSummonPity,
+      pityTriggers,
       progressionBlockedStages: rows.filter(row => row.blockedByProgression).length,
       totalSeconds: finalRow.cumulativeSeconds,
       totalAscensions,
@@ -656,6 +706,8 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
     'gold_blocked_stages',
     'progression_blocked_stages',
     'total_summons',
+    'pity_triggers',
+    'maximum_summon_pity',
     'total_ascensions',
     'total_upgrades',
     'total_seconds',
@@ -675,6 +727,8 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
       summary.goldBlockedStages,
       summary.progressionBlockedStages,
       summary.totalSummons,
+      summary.pityTriggers,
+      summary.maximumSummonPity,
       summary.totalAscensions,
       summary.totalUpgrades,
       summary.totalSeconds,
@@ -699,6 +753,8 @@ export const formatBalanceSimulationSummary = (result: BalanceSimulationResult) 
     `Gold-blocked stages: ${summary.goldBlockedStages}`,
     `Progression-blocked stages: ${summary.progressionBlockedStages}`,
     `Total summons: ${summary.totalSummons}`,
+    `Hard pity triggers: ${summary.pityTriggers}`,
+    `Maximum summon pity: ${summary.maximumSummonPity}`,
     `Total ascensions: ${summary.totalAscensions}`,
     `Total upgrades: ${summary.totalUpgrades}`,
     `Worst normal TTK: ${formatGameNumber(summary.worstNormalTtkSeconds)}s at stage ${summary.worstNormalStage}`,

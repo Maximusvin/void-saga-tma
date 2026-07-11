@@ -13,6 +13,7 @@ import {
   getUpgradeCost,
 } from './balance';
 import {
+  ADVERSARIAL_RNG_BALANCE_SIMULATION,
   BASELINE_BALANCE_SIMULATION,
   DEFAULT_BALANCE_SIMULATION_SCENARIOS,
   renderBalanceScenarioSummaryCsv,
@@ -85,8 +86,8 @@ describe('balance simulation', () => {
     assert.equal(baselineResult.rows.length, 10_000);
     assert.equal(baselineResult.summary.blockedStages, 0);
     assert.equal(baselineResult.summary.totalSummons, 400);
-    assert.equal(baselineResult.summary.totalAscensions, 234);
-    assert.equal(baselineResult.summary.totalUpgrades, 11_895);
+    assert.equal(baselineResult.summary.totalAscensions, 231);
+    assert.equal(baselineResult.summary.totalUpgrades, 11_745);
 
     for (const row of baselineResult.rows) {
       const target = row.isBoss
@@ -115,17 +116,39 @@ describe('balance simulation', () => {
   it('is deterministic, recovers an unlucky start, and makes a solo roster non-optimal', () => {
     const repeatedBaseline = runBalanceSimulation();
     const unluckyResult = scenarioResults[1];
-    const soloResult = scenarioResults[2];
+    const adversarialResult = scenarioResults[2];
+    const soloResult = scenarioResults[3];
 
     assert.deepEqual(baselineResult.summary, repeatedBaseline.summary);
     assert.equal(unluckyResult.summary.blockedStages, 0);
     assert.equal(unluckyResult.summary.finalHeroes.length, 4);
+    assert.equal(adversarialResult.config, ADVERSARIAL_RNG_BALANCE_SIMULATION);
+    assert.equal(adversarialResult.summary.blockedStages, 0);
+    assert.equal(adversarialResult.summary.pityTriggers, 5);
+    assert.equal(
+      adversarialResult.summary.maximumSummonPity,
+      GAME_BALANCE.legendaryPityPulls - 1,
+    );
+    assert.deepEqual(
+      adversarialResult.summary.finalHeroes.map(hero => hero.id),
+      ['void-grunt', 'void-lord'],
+    );
     assert.ok(soloResult.summary.progressionBlockedStages > 0);
     assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 1_660);
     assert.ok(compareGameNumbers(
       soloResult.summary.totalSeconds,
       baselineResult.summary.totalSeconds,
     ) > 0);
+  });
+
+  it('rejects invalid adversarial RNG sequences instead of silently normalizing them', () => {
+    assert.throws(
+      () => runBalanceSimulation({
+        ...ADVERSARIAL_RNG_BALANCE_SIMULATION,
+        summonRollSequence: [{ rarity: 1, template: 0 }],
+      }),
+      /summonRollSequence values/,
+    );
   });
 
   it('keeps committed balance tables synchronized with the simulator', () => {
