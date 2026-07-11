@@ -37,6 +37,7 @@ Ironroot Marauder має постійно виглядати живим, за о
 - Asset-тест читає GLB container, перевіряє один mesh/skin, точний набір кліпів, `EXT_meshopt_compression`, `EXT_texture_webp`, MIME та high/low бюджети.
 - Playwright перевіряє один canvas, `skinned-three`, різний hit для лівого/правого тапу, 10 rapid taps без scene rebuild, death handoff, context-loss cleanup і static fallback.
 - Окремий browser gate для Telegram Android `LOW`, `AVERAGE`, `HIGH` вимірює first-load latency, long tasks, canvas bytes, renderer resource counts і GPU memory proxy; automatic profile не додає ручних налаштувань гравцеві.
+- Shader pipeline компілюється через `WebGLRenderer.compileAsync`, щоб не блокувати перший кадр синхронним compile. GitHub software-WebGL логує фактичний max long task і має лише аварійний regression ceiling 1000 мс; це не заявлений mobile target. Hardware browser QA лишається окремим доказом реальної затримки.
 - Build gate читає Vite manifest, рахує лише додатковий lazy dependency closure відносно initial entry та gzip-ить реальні production chunks. Нульовий або випадково eager test surface не може пройти.
 
 ## Наслідки

@@ -208,7 +208,7 @@ export const RiftThreeEnemyScene = ({
       renderer.forceContextLoss();
     };
 
-    void loader.loadAsync(modelUrl).then(gltf => {
+    void loader.loadAsync(modelUrl).then(async gltf => {
       if (disposed) {
         disposeObject(gltf.scene);
         return;
@@ -351,9 +351,12 @@ export const RiftThreeEnemyScene = ({
         mixer.update(deltaSeconds);
         renderer.render(scene, camera);
       };
-      animationFrame = window.requestAnimationFrame(animate);
-      renderer.compile(scene, camera);
+      await renderer.compileAsync(scene, camera);
+      if (disposed) {
+        return;
+      }
       renderer.render(scene, camera);
+      animationFrame = window.requestAnimationFrame(animate);
       const canvasBufferBytes = canvas.width * canvas.height * 4;
       const textureBufferBytes = estimateTextureBytes(gltf.scene);
       host.dataset.canvasBufferBytes = String(canvasBufferBytes);
