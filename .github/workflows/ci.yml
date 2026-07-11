@@ -82,6 +82,8 @@ jobs:
       - run: npm run build
       - name: Validate production Compose isolation
         run: npm run prod:compose:check
+      - name: Validate production backup runner
+        run: npm run prod:backup:check
       - name: Validate production index cache policy
         run: npm run prod:nginx:check
       - name: Build production images
