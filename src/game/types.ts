@@ -33,7 +33,7 @@ export interface SummonHeroTemplate {
   videoShowcase?: HeroVideoShowcaseSpec;
   rarity: HeroRarity;
   power: number;
-  dropRate: number;
+  summonWeight: number;
   icon: string;
 }
 
@@ -90,6 +90,7 @@ export interface StageBand {
 export interface GameContent {
   version: string;
   heroRarities: readonly HeroRarity[];
+  summonRarityRates: Readonly<Record<HeroRarity, number>>;
   summonPool: readonly SummonHeroTemplate[];
   stageBands: readonly StageBand[];
 }

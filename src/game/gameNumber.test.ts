@@ -23,7 +23,7 @@ describe('game number arithmetic', () => {
   it('keeps stage 10,000 health finite and deterministic', () => {
     const health = getMonsterMaxHealth(10_000);
 
-    assert.equal(health, '5.95212324776694450407159e+794');
+    assert.equal(health, '7.57542958806702027790929e+794');
     assert.equal(compareGameNumbers(health, '1e794') > 0, true);
     assert.doesNotMatch(JSON.stringify({ health }), /Infinity|NaN/);
   });

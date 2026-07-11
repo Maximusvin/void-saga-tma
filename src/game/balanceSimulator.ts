@@ -39,9 +39,10 @@ export interface SimulationHeroSeed {
   templateId: string;
 }
 
-export type SimulationSummonSource =
-  | { kind: 'template-sequence'; values: readonly string[] }
-  | { kind: 'rng-sequence'; values: readonly number[] };
+export interface SimulationSummonRoll {
+  rarity: number;
+  template: number;
+}
 
 export interface BalanceSimulationConfig {
   allowNewHeroesFromSummons: boolean;
@@ -58,7 +59,7 @@ export interface BalanceSimulationConfig {
   normalTargetTtkSeconds: number;
   bossTargetTtkSeconds: number;
   sustainedComboMultiplier: number;
-  summonSource: SimulationSummonSource;
+  summonRollSequence: readonly SimulationSummonRoll[];
   tapsPerSecond: number;
 }
 
@@ -136,22 +137,13 @@ export const BASELINE_CHECKPOINT_STAGES = [
   10_000,
 ] as const;
 
-const RARE_SUMMON_POSITIONS = new Set([3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46]);
-const EPIC_SUMMON_POSITIONS = new Set([10, 20, 30, 40, 45]);
-
-export const DETERMINISTIC_SUMMON_SEQUENCE = Array.from({ length: 50 }, (_, index) => {
-  const position = index + 1;
-  if (position === 50) {
-    return 'void-lord';
-  }
-  if (EPIC_SUMMON_POSITIONS.has(position)) {
-    return 'void-knight';
-  }
-  if (RARE_SUMMON_POSITIONS.has(position)) {
-    return 'void-mage';
-  }
-  return 'void-grunt';
-});
+export const DETERMINISTIC_SUMMON_ROLL_SEQUENCE: readonly SimulationSummonRoll[] = Array.from(
+  { length: 1_000 },
+  (_, index) => ({
+    rarity: ((index * 73 + 37) % 1_000) / 1_000,
+    template: ((index * 191 + 17) % 1_000) / 1_000,
+  }),
+);
 
 export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   allowNewHeroesFromSummons: true,
@@ -167,11 +159,13 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   initialGold: GAME_BALANCE.initialGold,
   initialSummonPity: 3,
   initialSummonsConsumed: 3,
-  maxUpgradesPerStage: 250,
-  normalTargetTtkSeconds: 10,
-  bossTargetTtkSeconds: 40,
+  // This is a simulator safety bound, not a gameplay purchase cap. Late-game
+  // shard stockpiles can unlock several 50-level ascension bands at once.
+  maxUpgradesPerStage: 500,
+  normalTargetTtkSeconds: 14,
+  bossTargetTtkSeconds: 55,
   sustainedComboMultiplier: 1,
-  summonSource: { kind: 'template-sequence', values: DETERMINISTIC_SUMMON_SEQUENCE },
+  summonRollSequence: DETERMINISTIC_SUMMON_ROLL_SEQUENCE,
   tapsPerSecond: 4,
 };
 
@@ -206,7 +200,7 @@ export const ADVERSARIAL_RNG_BALANCE_SIMULATION: BalanceSimulationConfig = {
   ...FIVE_COMMON_BALANCE_SIMULATION,
   id: 'adversarial-rng-pity',
   initialSummonPity: 5,
-  summonSource: { kind: 'rng-sequence', values: [0] },
+  summonRollSequence: [{ rarity: 0, template: 0 }],
 };
 
 export const DEFAULT_BALANCE_SIMULATION_SCENARIOS = [
@@ -392,29 +386,13 @@ const applySimulationSummon = (
 };
 
 const resolveSimulationSummon = (
-  source: SimulationSummonSource,
-  sequenceIndex: number,
+  roll: SimulationSummonRoll,
   summonPity: number,
 ) => {
   const pityTriggered = summonPity >= GAME_BALANCE.legendaryPityPulls - 1;
-  if (pityTriggered) {
-    return {
-      pityTriggered,
-      template: rollSummonTemplate(0, 'Legendary'),
-    };
-  }
-
-  if (source.kind === 'rng-sequence') {
-    return {
-      pityTriggered,
-      template: rollSummonTemplate(source.values[sequenceIndex]),
-    };
-  }
-
-  const templateId = source.values[sequenceIndex];
-  const template = SUMMON_POOL.find(entry => entry.id === templateId);
-  if (!template) {
-    throw new RangeError(`No summon template configured for ${templateId}`);
+  const template = rollSummonTemplate(roll.rarity, roll.template, summonPity);
+  if (pityTriggered && template.rarity !== 'Legendary') {
+    throw new Error('Hard pity failed to resolve a Legendary summon');
   }
 
   return { pityTriggered, template };
@@ -460,14 +438,16 @@ export const runBalanceSimulation = (
   if (config.initialSummonPity >= GAME_BALANCE.legendaryPityPulls) {
     throw new RangeError('initialSummonPity must be lower than the hard pity threshold');
   }
-  if (config.summonSource.values.length === 0) {
-    throw new RangeError('summonSource must contain at least one value');
+  if (config.summonRollSequence.length === 0) {
+    throw new RangeError('summonRollSequence must contain at least one value');
   }
   if (
-    config.summonSource.kind === 'rng-sequence' &&
-    config.summonSource.values.some(value => !Number.isFinite(value) || value < 0 || value >= 1)
+    config.summonRollSequence.some(({ rarity, template }) => (
+      !Number.isFinite(rarity) || rarity < 0 || rarity >= 1 ||
+      !Number.isFinite(template) || template < 0 || template >= 1
+    ))
   ) {
-    throw new RangeError('rng-sequence values must be finite numbers from 0 inclusive to 1 exclusive');
+    throw new RangeError('summonRollSequence values must be finite numbers from 0 inclusive to 1 exclusive');
   }
 
   const heroes = createSimulationHeroes(config.heroes);
@@ -570,8 +550,8 @@ export const runBalanceSimulation = (
     while (config.automaticSummons && gems >= GAME_BALANCE.summonCostGems) {
       const sequenceIndex = (
         config.initialSummonsConsumed + totalSummons
-      ) % config.summonSource.values.length;
-      const summon = resolveSimulationSummon(config.summonSource, sequenceIndex, summonPity);
+      ) % config.summonRollSequence.length;
+      const summon = resolveSimulationSummon(config.summonRollSequence[sequenceIndex], summonPity);
       applySimulationSummon(
         heroes,
         summon.template.id,

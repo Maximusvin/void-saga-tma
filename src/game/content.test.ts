@@ -6,6 +6,7 @@ import {
   HERO_RARITIES,
   STAGE_BANDS,
   SUMMON_POOL,
+  SUMMON_RARITY_RATES,
   getHeroTemplateById,
   getStageBandForStage,
 } from './content';
@@ -14,6 +15,7 @@ import {
   getBossPhaseForHealthPercent,
   getEncounterMaxHealth,
   getEnemiesInStage,
+  getSummonRarityRates,
   getMonsterMaxHealth,
   isBossStage,
   rollSummonTemplate,
@@ -31,15 +33,21 @@ describe('game content invariants', () => {
     const ids = new Set(SUMMON_POOL.map(hero => hero.id));
     assert.equal(ids.size, SUMMON_POOL.length);
 
-    const totalDropRate = SUMMON_POOL.reduce((total, hero) => total + hero.dropRate, 0);
-    assert.ok(Math.abs(totalDropRate - 1) < RATE_TOTAL_EPSILON);
+    const totalRarityRate = Object.values(SUMMON_RARITY_RATES)
+      .reduce((total, rate) => total + rate, 0);
+    assert.ok(Math.abs(totalRarityRate - 1) < RATE_TOTAL_EPSILON);
+    assert.equal(SUMMON_RARITY_RATES.Legendary, 0.008);
+
+    for (const rarity of HERO_RARITIES) {
+      assert.ok(SUMMON_POOL.some(hero => hero.rarity === rarity), `${rarity} summon pool is empty`);
+    }
 
     for (const hero of SUMMON_POOL) {
       assert.ok(hero.id.length > 0);
       assert.ok(hero.name.length > 0);
       assert.ok(HERO_RARITIES.includes(hero.rarity));
       assert.ok(hero.power > 0);
-      assert.ok(hero.dropRate > 0);
+      assert.ok(hero.summonWeight > 0);
       assert.ok(hero.icon.length > 0);
       assert.match(hero.accentColor, /^#[0-9a-f]{6}$/i);
       assert.ok(hero.attackStyle.length > 0);
@@ -99,14 +107,15 @@ describe('game content invariants', () => {
     assert.equal(getStageBandForStage(1001).id, 'void-dominion');
     assert.equal(isBossStage(4), false);
     assert.equal(isBossStage(5), true);
-    assert.equal(getEnemiesInStage(1), 3);
-    assert.equal(getEnemiesInStage(201), 4);
-    assert.equal(getEnemiesInStage(1001), 5);
+    assert.equal(getEnemiesInStage(1), 4);
+    assert.equal(getEnemiesInStage(201), 5);
+    assert.equal(getEnemiesInStage(1001), 6);
     assert.equal(getMonsterMaxHealth(1), '100');
-    assert.equal(getEncounterMaxHealth(1, 1), '115');
-    assert.equal(getEncounterMaxHealth(1, 2), '132.25');
-    assert.equal(getMonsterMaxHealth(5), '1656');
-    assert.equal(getBossAttemptDurationMs(5), 45_000);
+    assert.equal(getEncounterMaxHealth(1, 1), '118');
+    assert.equal(getEncounterMaxHealth(1, 2), '139.24');
+    assert.equal(getEncounterMaxHealth(1, 3), '164.3032');
+    assert.equal(getMonsterMaxHealth(5), '2070');
+    assert.equal(getBossAttemptDurationMs(5), 60_000);
     assert.equal(getBossPhaseForHealthPercent(5, 100).id, 'dominion');
     assert.equal(getBossPhaseForHealthPercent(5, 66).id, 'fracture');
     assert.equal(getBossPhaseForHealthPercent(5, 0).id, 'cataclysm');
@@ -114,11 +123,26 @@ describe('game content invariants', () => {
 
   it('keeps deterministic summon roll boundaries stable', () => {
     assert.equal(rollSummonTemplate(0).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.599999).id, 'void-grunt');
-    assert.equal(rollSummonTemplate(0.6).id, 'void-mage');
-    assert.equal(rollSummonTemplate(0.88).id, 'void-knight');
-    assert.equal(rollSummonTemplate(0.98).id, 'void-lord');
+    assert.equal(rollSummonTemplate(0.649999).id, 'void-grunt');
+    assert.equal(rollSummonTemplate(0.65).id, 'void-mage');
+    assert.equal(rollSummonTemplate(0.911999).id, 'void-mage');
+    assert.equal(rollSummonTemplate(0.912).id, 'void-knight');
+    assert.equal(rollSummonTemplate(0.991999).id, 'void-knight');
+    assert.equal(rollSummonTemplate(0.992).id, 'void-lord');
     assert.equal(rollSummonTemplate(1).id, 'void-lord');
-    assert.equal(rollSummonTemplate(0, 'Legendary').id, 'void-lord');
+    assert.equal(rollSummonTemplate(0, 0, 0, 'Legendary').id, 'void-lord');
+  });
+
+  it('raises only the Legendary chance during soft pity and guarantees pull 80', () => {
+    const baseRates = getSummonRarityRates(0);
+    const softPityRates = getSummonRarityRates(60);
+    const hardPityRates = getSummonRarityRates(79);
+
+    assert.deepEqual(baseRates, SUMMON_RARITY_RATES);
+    assert.equal(softPityRates.Legendary, 0.038);
+    assert.ok(softPityRates.Common < baseRates.Common);
+    assert.ok(Math.abs(Object.values(softPityRates).reduce((sum, rate) => sum + rate, 0) - 1) < RATE_TOTAL_EPSILON);
+    assert.deepEqual(hardPityRates, { Common: 0, Rare: 0, Epic: 0, Legendary: 1 });
+    assert.equal(rollSummonTemplate(0.97, 0, 60).rarity, 'Legendary');
   });
 });

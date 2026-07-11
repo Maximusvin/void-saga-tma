@@ -38,7 +38,7 @@ Economy-значення мають тип `GameNumber`: брендований 
 }
 ```
 
-`normalizeGameSnapshot` приймає legacy numeric values, очищає типовий binary drift до 15 надійних significant digits, повертає актуальну schema v4 і не пропускає `NaN`, `Infinity` або від'ємні economy-значення. Schema v3 не змінювала `GameNumber`-контракт, а додала hero progression fields та об'єднання legacy duplicates; schema v4 додає timestamp boss-спроби, який також не належить до economy-чисел. Repository одразу переписує прочитаний legacy snapshot у канонічному форматі. Старі command events нормалізуються під час replay.
+`normalizeGameSnapshot` приймає legacy numeric values, очищає типовий binary drift до 15 надійних significant digits, повертає актуальну schema v7 і не пропускає `NaN`, `Infinity` або від'ємні economy-значення. Наступні schema versions додали hero progression та legacy merge (v3), timestamp boss-спроби (v4), active Warband (v5), passive tick watermark (v6), encounter index і summon pity (v7), не змінюючи `GameNumber`-контракт. Repository одразу переписує прочитаний legacy snapshot у канонічному форматі. Старі command events нормалізуються під час replay.
 
 UI ніколи не перетворює economy-значення у `number`. Винятки мають обмежений діапазон:
 
