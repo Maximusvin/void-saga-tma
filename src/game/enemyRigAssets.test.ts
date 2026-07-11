@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -13,10 +14,29 @@ interface GlbJson {
   skins?: unknown[];
 }
 
+interface IronrootProvenance {
+  schema: string;
+  provider: string;
+  license: {
+    commercialUseSection: string;
+    freeUserOwnershipSection: string;
+    termsUrl: string;
+  };
+  source: {
+    blend: { path: string; sha256: string };
+    identityReference: { path: string; sha256: string };
+  };
+  runtime: Record<'high' | 'low', { bytes: number; path: string; sha256: string }>;
+}
+
 const assetPath = (filename: string) => fileURLToPath(new URL(
   `../../public/assets/rift/ironroot-3d/${filename}`,
   import.meta.url,
 ));
+
+const repoPath = (path: string) => fileURLToPath(new URL(`../../${path}`, import.meta.url));
+
+const fileSha256 = (path: string) => createHash('sha256').update(readFileSync(repoPath(path))).digest('hex');
 
 const readGlbJson = (filename: string): GlbJson => {
   const bytes = readFileSync(assetPath(filename));
@@ -29,6 +49,27 @@ const readGlbJson = (filename: string): GlbJson => {
 };
 
 describe('Ironroot 3D assets', () => {
+  it('binds the commercial-use evidence to the exact source and runtime binaries', () => {
+    const provenance = JSON.parse(readFileSync(
+      repoPath('art-source/rift/ironroot-3d/provenance.json'),
+      'utf8',
+    )) as IronrootProvenance;
+
+    assert.equal(provenance.schema, 'void-saga.asset-provenance.v1');
+    assert.equal(provenance.provider, 'Tripo API');
+    assert.equal(provenance.license.termsUrl, 'https://www.tripo3d.ai/terms');
+    assert.equal(provenance.license.commercialUseSection, '3.2');
+    assert.equal(provenance.license.freeUserOwnershipSection, '5.2.1');
+
+    for (const source of [provenance.source.identityReference, provenance.source.blend]) {
+      assert.equal(fileSha256(source.path), source.sha256, `${source.path} changed without provenance`);
+    }
+    for (const runtime of Object.values(provenance.runtime)) {
+      assert.equal(statSync(repoPath(runtime.path)).size, runtime.bytes);
+      assert.equal(fileSha256(runtime.path), runtime.sha256, `${runtime.path} changed without provenance`);
+    }
+  });
+
   it('publishes non-empty high and low GLBs within the mobile budgets', () => {
     const high = statSync(assetPath('ironroot-high.glb')).size;
     const low = statSync(assetPath('ironroot-low.glb')).size;

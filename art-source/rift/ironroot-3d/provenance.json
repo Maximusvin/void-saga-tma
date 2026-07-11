@@ -1,0 +1,41 @@
+{
+  "schema": "void-saga.asset-provenance.v1",
+  "asset": "ironroot-marauder",
+  "provider": "Tripo API",
+  "generation": {
+    "date": "2026-07-10",
+    "access": "14-денний developer trial wallet",
+    "model": "P1-20260311",
+    "rig": "v2.5-20260210 biped"
+  },
+  "source": {
+    "identityReference": {
+      "path": "public/assets/rift/ironroot-marauder.webp",
+      "sha256": "0c27b1c7fac8c91d56e97a47ff087de5f9c52d8fef9ce58f7805163f4108a1c2"
+    },
+    "blend": {
+      "path": "art-source/rift/ironroot-3d/ironroot-marauder.blend",
+      "sha256": "4ed96725651d0e83f7ea6d717bdaefcdbffc02a1a264d7da94ecd82e920c201b"
+    }
+  },
+  "runtime": {
+    "high": {
+      "path": "public/assets/rift/ironroot-3d/ironroot-high.glb",
+      "bytes": 2197444,
+      "sha256": "ae6d1ea6f03dce3ac37fb844fd0cf306b06413eff3801426cf2cc49b2d190c69"
+    },
+    "low": {
+      "path": "public/assets/rift/ironroot-3d/ironroot-low.glb",
+      "bytes": 954684,
+      "sha256": "4beddd42b89cd3c8132cc275dade467cbc0fd1de673bc4a7d542199a60e10519"
+    }
+  },
+  "license": {
+    "termsUrl": "https://www.tripo3d.ai/terms",
+    "termsLastUpdated": "2025-07-11",
+    "verifiedAt": "2026-07-11",
+    "commercialUseSection": "3.2",
+    "freeUserOwnershipSection": "5.2.1",
+    "scope": "Tripo дозволяє законне комерційне й некомерційне використання Outputs. Tripo зберігає права на Inputs і Outputs Free Users; output є невиключним і постачається без гарантій."
+  }
+}
