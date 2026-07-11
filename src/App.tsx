@@ -2,15 +2,16 @@
 import { AnimatePresence } from 'framer-motion';
 import { useGameState } from './store/useGameState';
 import { getRiftEnemyVisual } from './game/riftVisuals';
-import { isBossStage } from './game/balance';
+import { GAME_BALANCE, SUMMON_POOL, isBossStage } from './game/balance';
 import { ZERO_GAME_NUMBER } from './game/gameNumber';
+import { MAX_ACTIVE_WARBAND_HEROES } from './game/warband';
 import type { ActiveView } from './game/types';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { RealmSwitcher } from './components/RealmSwitcher';
 import { WelcomeBackModal } from './components/WelcomeBackModal';
 import { TheRift } from './views/TheRift';
-import { Suspense, lazy, useEffect, useState, type CSSProperties } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import './App.css';
 
 // The rift is the landing view. Keeping the other three eager would ship them —
@@ -32,6 +33,8 @@ const VIEW_PRELOADERS: Partial<Record<ActiveView, () => Promise<unknown>>> = {
 const preloadView = (view: ActiveView) => {
   void VIEW_PRELOADERS[view]?.();
 };
+
+const SUMMON_TEMPLATE_IDS: ReadonlySet<string> = new Set(SUMMON_POOL.map(template => template.id));
 
 function App() {
   const [realmSwitcherOpen, setRealmSwitcherOpen] = useState(false);
@@ -67,6 +70,16 @@ function App() {
   const shellStyle = gameState.activeView === 'rift'
     ? { '--rift-backdrop-image': `url("${riftVisual.backdrop}")` } as CSSProperties
     : undefined;
+  const summonReadyCount = Math.floor(gameState.gems / GAME_BALANCE.summonCostGems);
+  const ownedSummonHeroCount = useMemo(() => new Set(
+    gameState.heroes
+      .map(hero => hero.templateId)
+      .filter(templateId => SUMMON_TEMPLATE_IDS.has(templateId)),
+  ).size, [gameState.heroes]);
+  const warbandNeedsAttention = gameState.activeHeroIds.length < Math.min(
+    MAX_ACTIVE_WARBAND_HEROES,
+    gameState.heroes.length,
+  );
 
   return (
     <main
@@ -118,9 +131,13 @@ function App() {
             {gameState.activeView === 'summon' && (
               <SummonCircle
                 key="summon"
+                activeHeroIds={gameState.activeHeroIds}
                 gems={gameState.gems}
+                onOpenHeroes={() => gameState.setActiveView('roster')}
+                ownedHeroCount={ownedSummonHeroCount}
                 summonPity={gameState.summonPity}
                 summonHero={gameState.summonHero}
+                totalHeroCount={SUMMON_POOL.length}
               />
             )}
             {gameState.activeView === 'roster' && (
@@ -140,6 +157,7 @@ function App() {
                 heroCount={gameState.activeHeroes.length}
                 isLocal={gameState.backendStatus === 'local'}
                 leaderboard={gameState.leaderboard}
+                onOpenCampaign={() => gameState.setActiveView('rift')}
                 onRefresh={() => {
                   void gameState.refreshLeaderboard();
                 }}
@@ -156,6 +174,8 @@ function App() {
         activeView={gameState.activeView}
         preloadView={preloadView}
         setActiveView={gameState.setActiveView}
+        summonReadyCount={summonReadyCount}
+        warbandNeedsAttention={warbandNeedsAttention}
       />
       <AnimatePresence>
         {realmSwitcherOpen && (

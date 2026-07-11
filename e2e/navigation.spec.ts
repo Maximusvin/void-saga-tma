@@ -517,6 +517,7 @@ test('bottom navigation exposes campaign and leagues while surviving Pixi remoun
   await page.goto('/');
   await expect(page.getByText('Luminous Verge', { exact: true })).toBeVisible();
   await expect(page.locator('.rift-pixi-canvas')).toHaveCount(1);
+  await expect(page.locator('.nav-btn[data-view="summon"] .nav-badge')).toHaveText('3');
 
   for (let cycle = 0; cycle < 2; cycle += 1) {
     await page.getByRole('button', { name: 'Summon', exact: true }).click();
@@ -531,10 +532,15 @@ test('bottom navigation exposes campaign and leagues while surviving Pixi remoun
     await expect(page.getByRole('heading', { name: 'Rift Leagues' })).toBeVisible();
     await expect(page.getByText('Bronze', { exact: true })).toBeVisible();
     await expect(page.getByText('Practice ranking', { exact: true })).toBeVisible();
+    await expect(page.getByText('49 stages to Silver', { exact: true })).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Division progress' })).toHaveAttribute('aria-valuenow', '0');
     await expect(page.locator('.league-player-row.current')).toHaveCount(1);
     await expect(page.locator('.league-player-row.current')).toContainText('Riftwalker');
 
-    await page.getByRole('button', { name: 'Campaign', exact: true }).click();
+    const campaignAction = page.getByRole('button', { name: 'Return to Campaign' });
+    const campaignActionBounds = await campaignAction.boundingBox();
+    expect(campaignActionBounds?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await campaignAction.click();
     await expect(page.getByText('Luminous Verge', { exact: true })).toBeVisible();
     await expect(page.locator('.rift-pixi-canvas')).toHaveCount(1);
   }
@@ -589,6 +595,11 @@ test('Heroes builds and persists a four-slot Warband without overflowing mobile 
   await expect.poll(() => page.evaluate(() => (
     JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}').activeHeroIds
   ))).toEqual(['void-lord', 'void-knight', 'void-grunt']);
+
+  await page.getByRole('button', { name: 'Campaign', exact: true }).click();
+  await expect(page.locator('.nav-btn[data-view="roster"] .nav-badge.warband')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Heroes', exact: true }).click();
+  await expect(page.locator('.nav-btn[data-view="roster"] .nav-badge.warband')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Add Void Mage to Warband' }).click();
   await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(4);
@@ -678,6 +689,9 @@ test('Heroes keeps a 120-item collection contained and activates only visible po
   });
   await expect(page.locator('.hero-card').last()).toBeVisible();
   await expect(page.getByTestId('game-crash-fallback')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Summon', exact: true }).click();
+  await expect(page.getByText('Rift sanctuary · 4/8 collected', { exact: true })).toBeVisible();
 });
 
 test.describe('high-end Telegram Android angel showcase', () => {
@@ -1370,6 +1384,7 @@ test.describe('average Telegram Android performance profile', () => {
     await page.getByRole('button', { name: 'Summon', exact: true }).click();
     const summonView = page.locator('.summon-view');
     const summonAction = page.locator('.summon-action');
+    await expect(summonView.getByText('Rift sanctuary · 0/8 collected', { exact: true })).toBeVisible();
     await expect(summonView).toHaveAttribute('data-render-quality', 'balanced');
     await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
     await expect(summonAction).toContainText('Legendary guaranteed in 80');
@@ -1406,8 +1421,9 @@ test.describe('average Telegram Android performance profile', () => {
     await expect(resultDialog).toBeVisible({ timeout: 5_000 });
     await expect(resultDialog.getByText('Legendary champion', { exact: true })).toBeVisible();
     await expect(resultDialog.getByText('Celestial · Idle specialist', { exact: true })).toBeVisible();
-    await expect(resultDialog.getByText('Starting power', { exact: true })).toBeVisible();
-    const claimButton = resultDialog.getByRole('button', { name: 'Claim champion' });
+    await expect(resultDialog.getByText('Joined Warband', { exact: true })).toBeVisible();
+    await expect(resultDialog.getByText('Slot 1/4', { exact: true })).toBeVisible();
+    const claimButton = resultDialog.getByRole('button', { name: 'View Warband' });
     const repeatButton = resultDialog.getByRole('button', { name: 'Summon again for 10 gems' });
     await expect(claimButton).toBeVisible();
     await expect(claimButton).toBeFocused();
@@ -1442,12 +1458,26 @@ test.describe('average Telegram Android performance profile', () => {
       return hitTarget?.closest('.summon-result-backdrop') !== null;
     })).toBe(true);
 
-    await repeatButton.click();
+    await claimButton.click();
+    await expect(resultDialog).toHaveCount(0);
+    await expect(page.getByText('Warband', { exact: true })).toBeVisible();
+    await expect(page.locator('.active-hero-slot:not(.empty)')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Summon', exact: true }).click();
+    await summonAction.click();
+    const duplicateDialog = page.getByRole('dialog', { name: 'Seraph Aurelia' });
+    await expect(duplicateDialog).toBeVisible({ timeout: 5_000 });
+    await expect(duplicateDialog.getByText('Echo recovered', { exact: true })).toBeVisible();
+    await expect(duplicateDialog.getByRole('button', { name: 'Claim shards' })).toBeFocused();
+    await expect(page.locator('.resource-item.gem .amount')).toHaveText('480');
+
+    const duplicateRepeatButton = duplicateDialog.getByRole('button', { name: 'Summon again for 10 gems' });
+    await duplicateRepeatButton.click();
     await expect(summonView).toHaveAttribute('data-summon-phase', 'charging');
     await expect(summonView).toHaveAttribute('data-summon-phase', 'result', { timeout: 5_000 });
     const repeatResultDialog = page.getByRole('dialog');
     await expect(repeatResultDialog).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('.resource-item.gem .amount')).toHaveText('480');
+    await expect(page.locator('.resource-item.gem .amount')).toHaveText('470');
     await page.keyboard.press('Escape');
     await expect(repeatResultDialog).toHaveCount(0);
     await expect(summonView).toHaveAttribute('data-summon-phase', 'idle');

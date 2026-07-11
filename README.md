@@ -96,7 +96,7 @@ npm run balance:simulate
 - `src/views/SummonCircle.tsx` - gacha summon flow.
 - `src/views/HeroesRoster.tsx` - чотирислотова active Warband, sorting/filtering і продуктивна collection grid з upgrade.
 - `src/components/HeroPortrait.tsx` - спільний WebP portrait renderer з automatic quality tiers для Heroes, Summon і combat HUD.
-- `src/views/LeaguesHall.tsx` - чесний preseason-екран майбутніх асинхронних ліг без вигаданих рейтингів до появи серверного сезону.
+- `src/views/LeaguesHall.tsx` - realm-scoped all-time leaderboard із реальними гравцями, milestone-дивізіонами та переходом назад у Campaign.
 - `src/utils/telegram.ts` та `src/utils/haptics.ts` - безпечна інтеграція з Telegram WebApp bridge.
 - `src/observability/` - privacy-safe client error contract і доставлення Telegram-authenticated telemetry у backend runtime logs.
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
+  Compass,
   Crown,
   Gem,
   Medal,
@@ -12,19 +13,22 @@ import {
   Users,
 } from 'lucide-react';
 import type { GameNumber } from '../game/gameNumber';
-import type {
-  LeagueDivision,
-  RealmLeaderboard,
-  RealmLeaderboardEntry,
+import {
+  getLeagueProgress,
+  type LeagueDivision,
+  type RealmLeaderboard,
+  type RealmLeaderboardEntry,
 } from '../shared/leaderboard';
 import type { LeaderboardStatus } from '../store/useGameState';
 import { formatNumber } from '../utils/formatNumber';
+import { triggerHaptic } from '../utils/haptics';
 import './LeaguesHall.css';
 
 interface LeaguesHallProps {
   heroCount: number;
   isLocal: boolean;
   leaderboard: RealmLeaderboard | null;
+  onOpenCampaign: () => void;
   onRefresh: () => void;
   passivePower: GameNumber;
   stage: number;
@@ -93,6 +97,7 @@ export const LeaguesHall: React.FC<LeaguesHallProps> = ({
   heroCount,
   isLocal,
   leaderboard,
+  onOpenCampaign,
   onRefresh,
   passivePower,
   stage,
@@ -103,6 +108,15 @@ export const LeaguesHall: React.FC<LeaguesHallProps> = ({
   const divisionMeta = DIVISION_META[division];
   const DivisionIcon = divisionMeta.icon;
   const currentIsInTop = leaderboard?.top.some(entry => entry.isCurrentPlayer) ?? false;
+  const campaignStage = current?.stage ?? stage;
+  const leagueProgress = getLeagueProgress(campaignStage);
+  const nextDivision = leagueProgress.nextDivision
+    ? DIVISION_META[leagueProgress.nextDivision]
+    : null;
+  const openCampaign = () => {
+    triggerHaptic('light');
+    onOpenCampaign();
+  };
   return (
     <motion.section
       className="view-container leagues-view"
@@ -152,6 +166,35 @@ export const LeaguesHall: React.FC<LeaguesHallProps> = ({
               <Sparkles size={14} aria-hidden="true" />
               <span>Power</span>
               <strong>{formatNumber(current?.passivePower ?? passivePower)}/s</strong>
+            </div>
+          </div>
+          <div className="league-promotion">
+            <div className="league-promotion-copy">
+              <span>{nextDivision
+                ? `${leagueProgress.stagesRemaining} stages to ${nextDivision.label}`
+                : 'Highest division reached'}</span>
+              <strong>{leagueProgress.nextStage
+                ? `Reach Stage ${leagueProgress.nextStage}`
+                : 'Mythic standing secured'}</strong>
+            </div>
+            <button
+              aria-label="Return to Campaign"
+              onClick={openCampaign}
+              title="Campaign"
+              type="button"
+            >
+              <Compass aria-hidden="true" size={15} />
+              <span>Campaign</span>
+            </button>
+            <div
+              aria-label="Division progress"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={Math.round(leagueProgress.progressPercent)}
+              className="league-promotion-track"
+              role="progressbar"
+            >
+              <span style={{ width: `${leagueProgress.progressPercent}%` }} />
             </div>
           </div>
         </section>
