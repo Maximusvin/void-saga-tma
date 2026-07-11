@@ -24,6 +24,7 @@ import { getGameRenderProfile } from '../utils/renderQuality';
 import { getRiftEnemyVisual, hasSkinnedThreeRig } from '../game/riftVisuals';
 import { BossClock } from './BossClock';
 import { RiftWarband } from './RiftWarband';
+import { loadRiftThreeEnemyRuntime, scheduleRiftThreePreload } from './riftThreeRuntime';
 import './TheRift.css';
 
 const RiftPixiScene = lazy(async () => {
@@ -32,7 +33,7 @@ const RiftPixiScene = lazy(async () => {
 });
 
 const RiftThreeEnemyScene = lazy(async () => {
-  const module = await import('./RiftThreeEnemyScene');
+  const module = await loadRiftThreeEnemyRuntime();
   return { default: module.RiftThreeEnemyScene };
 });
 
@@ -470,6 +471,29 @@ export const TheRift: React.FC<TheRiftProps> = ({
   const bossPhases = getStageBandForStage(stage).boss.phases;
   const bossPhase = getBossPhaseForHealthPercent(stage, healthPercent);
   const bossPhaseIndex = Math.max(1, bossPhases.findIndex(phase => phase.id === bossPhase.id) + 1);
+
+  useEffect(() => {
+    if (usesSkinnedRig) {
+      return;
+    }
+
+    const currentEnemies = getEnemiesInStage(enemySceneEncounter.stage);
+    const nextStage = enemySceneEncounter.enemyIndex + 1 < currentEnemies
+      ? enemySceneEncounter.stage
+      : enemySceneEncounter.stage + 1;
+    const nextEnemyIndex = nextStage === enemySceneEncounter.stage
+      ? enemySceneEncounter.enemyIndex + 1
+      : 0;
+    const nextVisual = getRiftEnemyVisual(nextStage + nextEnemyIndex, isBossStage(nextStage));
+    if (!hasSkinnedThreeRig(nextVisual)) {
+      return;
+    }
+
+    const modelUrl = renderProfile.quality === 'high'
+      ? nextVisual.rig.high.model
+      : nextVisual.rig.low.model;
+    return scheduleRiftThreePreload(modelUrl);
+  }, [enemySceneEncounter, renderProfile.quality, usesSkinnedRig]);
 
   return (
     <motion.section

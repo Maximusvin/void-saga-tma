@@ -21,13 +21,13 @@
   "runtime": {
     "high": {
       "path": "public/assets/rift/ironroot-3d/ironroot-high.glb",
-      "bytes": 2197444,
-      "sha256": "ae6d1ea6f03dce3ac37fb844fd0cf306b06413eff3801426cf2cc49b2d190c69"
+      "bytes": 704812,
+      "sha256": "1e95e50de5b7b98953258ece74f39b0c6730371b72a9b45602e9692d7ca305ff"
     },
     "low": {
       "path": "public/assets/rift/ironroot-3d/ironroot-low.glb",
-      "bytes": 954684,
-      "sha256": "4beddd42b89cd3c8132cc275dade467cbc0fd1de673bc4a7d542199a60e10519"
+      "bytes": 505544,
+      "sha256": "db1d253b7f0ffe92eb5839f3f054bb770a2720ff11692ed273448f1e9ea62693"
     }
   },
   "license": {

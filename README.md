@@ -106,6 +106,8 @@ npm run balance:simulate
 
 `PixiJS` рендерить істоту Rift, hit/death particles і shockwaves через Canvas/WebGL. Він завантажується окремим lazy chunk, а один `Application` живе протягом усього бойового екрану; зміна stage перебудовує лише display tree, не WebGL-контекст. React лишається власником HUD і меню.
 
+Ironroot Marauder використовує цілісний skinned Three.js GLB із `Idle`, directional hit і `Death`. Runtime та versioned WebP/Meshopt модель preload-яться лише перед потрібним encounter, автоматично обирають low/high asset за Telegram render profile і повністю звільняють WebGL context при поверненні до Pixi. Бюджети перевіряє `npm run perf:ironroot:check`; деталі й GPU-memory proxy описані в [`docs/adr/0004-layered-enemy-animation.md`](docs/adr/0004-layered-enemy-animation.md).
+
 Hero collection використовує оптимізовані WebP portrait assets та обмежений CSS 2.5D motion тільки в active formation, summon reveal і combat volley. Grid лишається статичним і не створює Pixi contexts. Повноцінні premium skeletal heroes пізніше підключаються через Spine Pixi лише разом із готовими rig assets; рішення описане в [`docs/adr/0003-hero-portrait-rendering.md`](docs/adr/0003-hero-portrait-rendering.md).
 
 ## Примітки для розвитку

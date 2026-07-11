@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "balance:simulate": "tsx scripts/simulate-balance.ts",
+    "asset:ironroot:optimize": "node scripts/optimize-ironroot-assets.mjs",
     "dev": "vite",
     "build": "tsc -b && npm run server:check && npm run server:bundle && vite build",
     "lint": "oxlint",
     "test:server": "tsx --test server/**/*.test.ts src/api/**/*.test.ts src/components/**/*.test.ts src/game/**/*.test.ts src/observability/**/*.test.ts src/shared/**/*.test.ts src/views/**/*.test.ts",
     "test:e2e": "npm run build && playwright test",
     "preview": "vite preview",
+    "perf:ironroot:check": "node scripts/assert-ironroot-runtime-budget.mjs",
     "prod:compose:check": "node scripts/assert-production-compose.mjs",
     "prod:backup:check": "node scripts/assert-production-backup-runner.mjs",
     "prod:nginx:check": "node scripts/assert-production-nginx.mjs",
@@ -30,6 +32,7 @@
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "4.4.1",
     "@playwright/test": "1.61.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.13.2",
