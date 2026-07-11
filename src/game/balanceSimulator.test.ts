@@ -4,9 +4,13 @@ import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   GAME_BALANCE,
+  getBaseDuplicateShardReward,
   getAscensionShardCost,
   getDuplicateShardReward,
+  getHeroCombatFocus,
   getHeroLevelCap,
+  getHeroPassivePower,
+  getHeroTapPower,
   getHeroUpgradeQuote,
   getNextHeroPower,
   getStageBandForStage,
@@ -37,8 +41,10 @@ describe('balance formulas', () => {
     assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Common' }), 3);
     assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Rare' }), 2);
     assert.equal(getAscensionShardCost({ ascension: 99, rarity: 'Legendary' }), 3);
-    assert.equal(getDuplicateShardReward('Common'), 1);
-    assert.equal(getDuplicateShardReward('Legendary'), 5);
+    assert.equal(getDuplicateShardReward('Common'), 2);
+    assert.equal(getDuplicateShardReward('Legendary'), 10);
+    assert.equal(getBaseDuplicateShardReward('Common'), 1);
+    assert.equal(getBaseDuplicateShardReward('Legendary'), 5);
   });
 
   it('quotes exact partial, capped, and bounded bulk upgrades', () => {
@@ -79,6 +85,32 @@ describe('balance formulas', () => {
     assert.equal(quote.levelsGained, GAME_BALANCE.maxBulkUpgradeLevels);
     assert.doesNotMatch(JSON.stringify(quote), /Infinity|NaN/);
   });
+
+  it('gives specialist profiles equal four-tap output without flattening their play style', () => {
+    const scavenger = {
+      power: gameNumber(100),
+      templateId: 'rift-scavenger',
+    };
+    const seraph = {
+      power: gameNumber(100),
+      templateId: 'seraph-aurelia',
+    };
+
+    assert.equal(getHeroTapPower(scavenger), '18');
+    assert.equal(getHeroPassivePower(scavenger), '64.8');
+    assert.equal(getHeroCombatFocus(scavenger), 'Tap');
+    assert.equal(getHeroTapPower(seraph), '4.5');
+    assert.equal(getHeroPassivePower(seraph), '124.2');
+    assert.equal(getHeroCombatFocus(seraph), 'Idle');
+    const expectedCritMultiplier = 1 +
+      GAME_BALANCE.critChance * (GAME_BALANCE.critMultiplier - 1);
+    assert.equal(
+      Number(getHeroPassivePower(scavenger)) +
+        Number(getHeroTapPower(scavenger)) * 4 * expectedCritMultiplier,
+      Number(getHeroPassivePower(seraph)) +
+        Number(getHeroTapPower(seraph)) * 4 * expectedCritMultiplier,
+    );
+  });
 });
 
 describe('balance simulation', () => {
@@ -86,8 +118,8 @@ describe('balance simulation', () => {
     assert.equal(baselineResult.rows.length, 10_000);
     assert.equal(baselineResult.summary.blockedStages, 0);
     assert.equal(baselineResult.summary.totalSummons, 400);
-    assert.equal(baselineResult.summary.totalAscensions, 231);
-    assert.equal(baselineResult.summary.totalUpgrades, 11_745);
+    assert.equal(baselineResult.summary.totalAscensions, 458);
+    assert.equal(baselineResult.summary.totalUpgrades, 23_291);
 
     for (const row of baselineResult.rows) {
       const target = row.isBoss
@@ -121,7 +153,7 @@ describe('balance simulation', () => {
 
     assert.deepEqual(baselineResult.summary, repeatedBaseline.summary);
     assert.equal(unluckyResult.summary.blockedStages, 0);
-    assert.equal(unluckyResult.summary.finalHeroes.length, 4);
+    assert.equal(unluckyResult.summary.finalHeroes.length, 8);
     assert.equal(adversarialResult.config, ADVERSARIAL_RNG_BALANCE_SIMULATION);
     assert.equal(adversarialResult.summary.blockedStages, 0);
     assert.equal(adversarialResult.summary.pityTriggers, 5);
@@ -134,7 +166,7 @@ describe('balance simulation', () => {
       ['void-grunt', 'void-lord'],
     );
     assert.ok(soloResult.summary.progressionBlockedStages > 0);
-    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 1_660);
+    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 330);
     assert.ok(compareGameNumbers(
       soloResult.summary.totalSeconds,
       baselineResult.summary.totalSeconds,

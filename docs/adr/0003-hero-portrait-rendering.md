@@ -10,7 +10,7 @@
 
 ## Рішення
 
-1. Базовий asset кожного героя - оригінальний квадратний `512x512 WebP` без тексту, рамки та локалізованих елементів.
+1. Базовий asset кожного героя - оригінальний квадратний `512x512 WebP` без тексту, рамки та локалізованих елементів. Автоматичний gate перевіряє розмір `512x512` і payload не більше `120 KB` для кожного live template.
 2. Collection grid рендерить звичайні `<img>` з lazy loading, async decoding, `content-visibility: auto` та containment. У сітці портрети статичні.
 3. Легкий 2.5D motion дозволений лише в active formation, summon reveal і короткому combat volley. Common лишається статичним; Rare отримує aura, Epic - aura/embers, Legendary - breathe/light/motes. `prefers-reduced-motion` та автоматичний render profile вимикають або скорочують ефекти без ручного меню графіки.
 4. Поточний Heroes-екран має бюджет не більше восьми одночасних portrait animations навіть на high profile. Сітка зі 120 героями перевіряється browser test.

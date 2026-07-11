@@ -10,11 +10,12 @@
 - boss gems автоматично витрачаються на summon;
 - deterministic summon sequence використовує production rarity roll `65/26.2/8/0.8`, soft pity після 60 невдач і hard pity на 80-й спробі;
 - adversarial RNG sequence завжди повертає Common roll, але проходить через ті самі soft/hard pity, що й серверне ядро;
-- duplicate дає rarity-scaled shards; ascension коштує 3 shards для Common, 2 для Rare/Epic і 3 для Legendary та відкриває наступні 50 рівнів;
+- duplicate дає pool-scaled shards, щоб шанс розвитку конкретного template не падав зі збільшенням пулу; ascension коштує 3 shards для Common, 2 для Rare/Epic і 3 для Legendary та відкриває наступні 50 рівнів;
 - звичайний stage містить 4 encounters до stage 200, 5 до stage 1000 і 6 далі; boss-stage містить одного боса;
 - цільовий TTK: до 14 секунд на звичайного ворога та до 55 секунд для боса;
 - hard limit boss-спроби зростає від 60 до 75 секунд за difficulty band; simulator окремо перевіряє target TTK і серверний enrage deadline;
-- перед боєм купується найкращий доступний апгрейд, поки TTK не вкладається в ціль;
+- у бій виходять максимум чотири герої з найвищим фактичним DPS для заданого tap rate;
+- перед боєм інвестиційна четвірка обирається за довгостроковим combat ROI, після чого купується найкращий доступний апгрейд, поки TTK не вкладається в ціль;
 - ROI з різницею до 0,1% вважається еквівалентним, тоді прокачується герой нижчого рівня;
 - click gold оцінюється за часткою tap damage у загальному DPS.
 
@@ -27,9 +28,9 @@
 - `adversarial-rng-pity`: нескінченна серія найгіршого Common roll; кожен 80-й summon примусово дає Legendary;
 - `solo-common`: гравець використовує Common duplicates, але свідомо ігнорує нових героїв.
 
-Baseline, невдалий Common-only старт і adversarial RNG не мають TTK walls до stage 10 000. Adversarial сценарій окремо доводить, що hard pity спрацьовує навіть тоді, коли RNG ніколи сам не дає Legendary. `solo-common` уперше виходить за TTK budget на stage 1 660 і накопичує 6 655 progression-blocked stages. Отже, невдала випадкова серія лишається відновлюваною, але довгострокова відмова від колекціонування більше не є оптимальною.
+Baseline, невдалий Common-only старт і adversarial RNG не мають TTK walls до stage 10 000. Adversarial сценарій окремо доводить, що hard pity спрацьовує навіть тоді, коли RNG ніколи сам не дає Legendary. `solo-common` уперше виходить за TTK budget на stage 330 і накопичує 6 835 progression-blocked stages. Отже, невдала випадкова серія лишається відновлюваною, але довгострокова відмова від колекціонування більше не є оптимальною.
 
-Baseline досягає stage 150 приблизно за 93,5 хвилини модельного active combat, stage 1000 за 11,8 години, а stage 10 000 за 119 годин. Він виконує 11 745 окремих level increases як математичні кроки. UI не має вимагати стільки команд: bounded `MAX` групує до 50 послідовних рівнів, не змінюючи gold/power результат симуляції.
+Baseline досягає stage 150 приблизно за 93,5 хвилини модельного active combat, stage 1000 за 11,8 години, а stage 10 000 за 120 годин. Він відкриває всі вісім live templates і виконує 23 291 окреме level increase як математичні кроки. UI не має вимагати стільки команд: bounded `MAX` групує до 50 послідовних рівнів, не змінюючи gold/power результат симуляції.
 
 Production repository окремо записує перший перетин ключових stage у `progression_milestones`. Це дає реальну cohort-тривалість без залежності від bounded command ledger і без довіри до клієнтського часу; контракт описаний у [Economy v3](economy-v3.md).
 
