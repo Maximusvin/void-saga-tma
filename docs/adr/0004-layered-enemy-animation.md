@@ -17,11 +17,12 @@ Ironroot Marauder має постійно виглядати живим, за о
 5. `Death` є one-shot clip із `clampWhenFinished`; чинна затримка scene handoff лишає Ironroot на екрані до завершення падіння. Backend, `monster_hit`, batching, damage та economy не змінюються.
 6. `prefers-reduced-motion` вимикає idle, зменшує вагу hit і пришвидшує короткий death feedback.
 7. Якщо WebGL, GLB, Meshopt або KTX2 не завантажуються, компонент показує чинний `ironroot-marauder.webp`. Інші противники залишаються на статичному Pixi pipeline.
+8. Tripo API trial output використовується на невиключній комерційній основі згідно з пунктом 3.2 чинних Tripo Terms. Tripo зберігає права Free User output за пунктом 5.2.1; проєкт не заявляє ексклюзивне володіння. Ліцензійний висновок прив'язано SHA-256 до конкретних source/runtime binaries у `art-source/rift/ironroot-3d/provenance.json`.
 
 ## Арт-пайплайн і бюджети
 
 - Authoring source: `art-source/rift/ironroot-3d/ironroot-marauder.blend`, поза `public`.
-- Геометрія: 11 881 triangles, 55 bones, один skinned mesh, один material.
+- Геометрія: 11 881 triangles, 56 source bones, один skinned mesh, один material.
 - High runtime: `1024px KTX2 + Meshopt`, 2 197 444 байти.
 - Low runtime: `512px KTX2 + Meshopt`, 954 684 байти.
 - Runtime animation payload усередині GLB: `Idle`, два directional hit clips і `Death`; окремі відео або sprite sheets не постачаються.
