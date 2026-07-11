@@ -25,10 +25,21 @@ describe('cleanupOwnedPixiScene', () => {
       },
     };
 
-    const cleaned = cleanupOwnedPixiScene(application, application, scene, animateScene);
+    const cleaned = cleanupOwnedPixiScene(
+      application,
+      application,
+      scene,
+      animateScene,
+      () => calls.push('prepareForDestroy'),
+    );
 
     assert.equal(cleaned, true);
-    assert.deepEqual(calls, ['ticker.remove', 'stage.removeChild', 'scene.destroy']);
+    assert.deepEqual(calls, [
+      'ticker.remove',
+      'stage.removeChild',
+      'prepareForDestroy',
+      'scene.destroy',
+    ]);
     assert.deepEqual(destroyOptions, OWNED_PIXI_SCENE_DESTROY_OPTIONS);
   });
 
