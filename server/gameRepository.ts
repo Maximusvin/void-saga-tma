@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createInitialGameSnapshot } from '../src/game/engine';
 import { normalizeGameSnapshot, normalizeStoredGameEvents } from '../src/game/snapshot';
+import { getCrossedProgressionMilestones } from '../src/game/progression';
 import type { GameActionResult, GameEvent, GameSnapshot } from '../src/game/types';
 
 const COMMAND_RETENTION_PER_PLAYER = 128;
@@ -75,7 +76,7 @@ export class GameRepository {
     return { playerId, snapshot };
   }
 
-  savePlayer(playerId: string, snapshot: GameSnapshot) {
+  savePlayer(playerId: string, snapshot: GameSnapshot, previousStage?: number) {
     const now = new Date().toISOString();
     this.database
       .prepare(`
@@ -100,6 +101,16 @@ export class GameRepository {
         snapshot.enemyIndex,
         playerId,
       );
+
+    if (previousStage !== undefined) {
+      const insertMilestone = this.database.prepare(`
+        INSERT OR IGNORE INTO progression_milestones (player_id, stage, reached_at)
+        VALUES (?, ?, ?)
+      `);
+      for (const stage of getCrossedProgressionMilestones(previousStage, snapshot.stage)) {
+        insertMilestone.run(playerId, stage, now);
+      }
+    }
 
     return { playerId, snapshot };
   }
@@ -128,7 +139,11 @@ export class GameRepository {
 
       const playerState = this.getOrCreatePlayer(playerId);
       const actionResult = mutation(playerState.snapshot);
-      const savedState = this.savePlayer(playerId, actionResult.snapshot);
+      const savedState = this.savePlayer(
+        playerId,
+        actionResult.snapshot,
+        playerState.snapshot.stage,
+      );
       const result: GameCommandResult = {
         ...savedState,
         events: actionResult.events,

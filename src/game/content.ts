@@ -1,8 +1,15 @@
 import type { BossPhaseRule, GameContent, HeroRarity, StageBand, SummonHeroTemplate } from './types';
 
-export const GAME_CONTENT_VERSION = 'void-saga-content-007';
+export const GAME_CONTENT_VERSION = 'void-saga-content-008';
 
 export const HERO_RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const satisfies readonly HeroRarity[];
+
+export const SUMMON_RARITY_RATES = {
+  Common: 0.65,
+  Rare: 0.262,
+  Epic: 0.08,
+  Legendary: 0.008,
+} as const satisfies Readonly<Record<HeroRarity, number>>;
 
 export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
   {
@@ -15,7 +22,7 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     portraitMotion: 'still',
     rarity: 'Common',
     power: 5,
-    dropRate: 0.6,
+    summonWeight: 1,
     icon: '🛡️',
   },
   {
@@ -34,7 +41,7 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     },
     rarity: 'Rare',
     power: 10,
-    dropRate: 0.28,
+    summonWeight: 1,
     icon: '✨',
   },
   {
@@ -47,7 +54,7 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     portraitMotion: 'embers',
     rarity: 'Epic',
     power: 20,
-    dropRate: 0.1,
+    summonWeight: 1,
     icon: '⚔️',
   },
   {
@@ -69,7 +76,7 @@ export const SUMMON_POOL: readonly SummonHeroTemplate[] = [
     },
     rarity: 'Legendary',
     power: 50,
-    dropRate: 0.02,
+    summonWeight: 1,
     icon: '👑',
   },
 ] as const;
@@ -111,13 +118,13 @@ export const STAGE_BANDS = [
     fromStage: 1,
     baseMonsterHealth: 100,
     monsterHealthGrowth: 1.2,
-    normalEnemiesPerStage: 3,
-    normalEnemyHealthGrowth: 1.15,
+    normalEnemiesPerStage: 4,
+    normalEnemyHealthGrowth: 1.18,
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
-      attemptSeconds: 45,
+      attemptSeconds: 60,
       everyStages: 5,
-      healthMultiplier: 8,
+      healthMultiplier: 10,
       goldMultiplier: 1.25,
       gemReward: 2,
       emoji: BOSS_EMOJI,
@@ -130,13 +137,13 @@ export const STAGE_BANDS = [
     fromStage: 201,
     baseMonsterHealth: 100,
     monsterHealthGrowth: 1.2,
-    normalEnemiesPerStage: 4,
-    normalEnemyHealthGrowth: 1.12,
+    normalEnemiesPerStage: 5,
+    normalEnemyHealthGrowth: 1.15,
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
-      attemptSeconds: 50,
+      attemptSeconds: 65,
       everyStages: 5,
-      healthMultiplier: 9,
+      healthMultiplier: 11,
       goldMultiplier: 1.2,
       gemReward: 2,
       emoji: BOSS_EMOJI,
@@ -149,13 +156,13 @@ export const STAGE_BANDS = [
     fromStage: 1001,
     baseMonsterHealth: 100,
     monsterHealthGrowth: 1.2,
-    normalEnemiesPerStage: 5,
-    normalEnemyHealthGrowth: 1.1,
+    normalEnemiesPerStage: 6,
+    normalEnemyHealthGrowth: 1.12,
     monsterEmojis: MONSTER_EMOJIS,
     boss: {
-      attemptSeconds: 60,
+      attemptSeconds: 75,
       everyStages: 5,
-      healthMultiplier: 11,
+      healthMultiplier: 14,
       goldMultiplier: 1.15,
       gemReward: 2,
       emoji: BOSS_EMOJI,
@@ -167,6 +174,7 @@ export const STAGE_BANDS = [
 export const GAME_CONTENT = {
   version: GAME_CONTENT_VERSION,
   heroRarities: HERO_RARITIES,
+  summonRarityRates: SUMMON_RARITY_RATES,
   summonPool: SUMMON_POOL,
   stageBands: STAGE_BANDS,
 } as const satisfies GameContent;

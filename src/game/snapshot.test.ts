@@ -184,10 +184,10 @@ describe('game snapshot normalization', () => {
     ]);
     assert.equal(events[2]?.type === 'monster_defeated' ? events[2].goldReward : null, '50');
     assert.equal(events[2]?.type === 'monster_defeated' ? events[2].stageCleared : null, true);
-    assert.equal(events[2]?.type === 'monster_defeated' ? events[2].enemiesInStage : null, 3);
+    assert.equal(events[2]?.type === 'monster_defeated' ? events[2].enemiesInStage : null, 4);
     assert.equal(events[3]?.type === 'hero_summoned' ? events[3].isDuplicate : null, false);
     assert.equal(events[3]?.type === 'hero_summoned' ? events[3].legendaryPityTriggered : null, false);
-    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].summonsUntilLegendaryPity : null, 60);
+    assert.equal(events[3]?.type === 'hero_summoned' ? events[3].summonsUntilLegendaryPity : null, 80);
     assert.equal(events[3]?.type === 'hero_summoned' ? events[3].hero.templateId : null, 'void-grunt');
     assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].fromLevel : null, 1);
     assert.equal(events[4]?.type === 'hero_upgraded' ? events[4].levelsGained : null, 1);

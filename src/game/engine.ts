@@ -374,7 +374,9 @@ export const summonHeroAction = (snapshot: GameSnapshot, randomValue?: number): 
 
   const legendaryPityTriggered = snapshot.summonPity >= GAME_BALANCE.legendaryPityPulls - 1;
   const template = rollSummonTemplate(
-    randomValue,
+    randomValue ?? Math.random(),
+    randomValue ?? Math.random(),
+    snapshot.summonPity,
     legendaryPityTriggered ? 'Legendary' : undefined,
   );
   const summonPity = template.rarity === 'Legendary' ? 0 : snapshot.summonPity + 1;

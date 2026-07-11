@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { GAME_BALANCE } from './balance';
+import { GAME_BALANCE, getBossAttemptDurationMs, getEnemiesInStage } from './balance';
 import {
   applyDamageAction,
   applyCombatBatchAction,
@@ -282,10 +282,10 @@ describe('hero summons', () => {
     assert.equal(duplicate.snapshot.heroes[0]?.shards, 1);
     assert.equal(duplicate.snapshot.gems, 10);
     assert.equal(duplicate.snapshot.summonPity, 2);
-    assert.equal(duplicateEvent.summonsUntilLegendaryPity, 58);
+    assert.equal(duplicateEvent.summonsUntilLegendaryPity, 78);
   });
 
-  it('forces a server-authoritative Legendary on the sixtieth summon', () => {
+  it('forces a server-authoritative Legendary on the eightieth summon', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
       gems: GAME_BALANCE.summonCostGems,
@@ -372,7 +372,7 @@ describe('server-authoritative combat batches', () => {
   it('advances the stage only after the final normal encounter', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
-      enemyIndex: 2,
+      enemyIndex: getEnemiesInStage(1) - 1,
       monsterHealth: gameNumber(1),
       monsterMaxHealth: gameNumber(1),
     };
@@ -460,7 +460,7 @@ describe('server-authoritative combat batches', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
       stage: 4,
-      enemyIndex: 2,
+      enemyIndex: getEnemiesInStage(4) - 1,
       monsterMaxHealth: gameNumber(1),
       monsterHealth: gameNumber(1),
     };
@@ -470,7 +470,10 @@ describe('server-authoritative combat batches', () => {
     });
 
     assert.equal(result.snapshot.stage, 5);
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
+    assert.equal(
+      result.snapshot.bossEncounterEndsAt,
+      new Date(NOW_MS + getBossAttemptDurationMs(5)).toISOString(),
+    );
   });
 
   it('resets boss health and combo before applying a hit after enrage', () => {
@@ -492,7 +495,10 @@ describe('server-authoritative combat batches', () => {
     assert.equal(result.events[0]?.type === 'boss_enraged' ? result.events[0].monsterHealth : null, '1000');
     assert.equal(result.snapshot.monsterHealth, '999');
     assert.equal(result.snapshot.comboCount, 1);
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
+    assert.equal(
+      result.snapshot.bossEncounterEndsAt,
+      new Date(NOW_MS + getBossAttemptDurationMs(5)).toISOString(),
+    );
   });
 
   it('preserves boss progress while an attempt is active', () => {
@@ -528,6 +534,9 @@ describe('server-authoritative combat batches', () => {
 
     assert.deepEqual(result.events.map(event => event.type), ['monster_hit']);
     assert.equal(result.snapshot.monsterHealth, '1034');
-    assert.equal(result.snapshot.bossEncounterEndsAt, '2026-07-09T12:00:45.000Z');
+    assert.equal(
+      result.snapshot.bossEncounterEndsAt,
+      new Date(NOW_MS + getBossAttemptDurationMs(5)).toISOString(),
+    );
   });
 });

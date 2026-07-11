@@ -85,8 +85,8 @@ describe('balance simulation', () => {
     assert.equal(baselineResult.rows.length, 10_000);
     assert.equal(baselineResult.summary.blockedStages, 0);
     assert.equal(baselineResult.summary.totalSummons, 400);
-    assert.equal(baselineResult.summary.totalAscensions, 236);
-    assert.equal(baselineResult.summary.totalUpgrades, 11_995);
+    assert.equal(baselineResult.summary.totalAscensions, 234);
+    assert.equal(baselineResult.summary.totalUpgrades, 11_895);
 
     for (const row of baselineResult.rows) {
       const target = row.isBoss
@@ -102,9 +102,10 @@ describe('balance simulation', () => {
       }
     }
 
-    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 3_300) >= 0);
-    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 4_800) <= 0);
-    assert.ok(compareGameNumbers(baselineResult.summary.totalSeconds, 280_000) >= 0);
+    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 5_400) >= 0);
+    assert.ok(compareGameNumbers(baselineResult.rows[149].cumulativeSeconds, 5_800) <= 0);
+    assert.ok(compareGameNumbers(baselineResult.summary.totalSeconds, 420_000) >= 0);
+    assert.ok(compareGameNumbers(baselineResult.summary.totalSeconds, 450_000) <= 0);
 
     for (const hero of baselineResult.summary.finalHeroes) {
       assert.ok(hero.level <= hero.levelCap);
@@ -120,7 +121,7 @@ describe('balance simulation', () => {
     assert.equal(unluckyResult.summary.blockedStages, 0);
     assert.equal(unluckyResult.summary.finalHeroes.length, 4);
     assert.ok(soloResult.summary.progressionBlockedStages > 0);
-    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 774);
+    assert.equal(soloResult.rows.find(row => row.targetMissed)?.stage, 1_660);
     assert.ok(compareGameNumbers(
       soloResult.summary.totalSeconds,
       baselineResult.summary.totalSeconds,

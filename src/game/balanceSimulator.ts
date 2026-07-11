@@ -13,6 +13,7 @@ import {
   getUpgradeCost,
   isHeroAtLevelCap,
   isBossStage,
+  rollSummonTemplate,
 } from './balance';
 import {
   ZERO_GAME_NUMBER,
@@ -128,22 +129,16 @@ export const BASELINE_CHECKPOINT_STAGES = [
   10_000,
 ] as const;
 
-const RARE_SUMMON_POSITIONS = new Set([3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46]);
-const EPIC_SUMMON_POSITIONS = new Set([10, 20, 30, 40, 45]);
-
-export const DETERMINISTIC_SUMMON_SEQUENCE = Array.from({ length: 50 }, (_, index) => {
-  const position = index + 1;
-  if (position === 50) {
-    return 'void-lord';
-  }
-  if (EPIC_SUMMON_POSITIONS.has(position)) {
-    return 'void-knight';
-  }
-  if (RARE_SUMMON_POSITIONS.has(position)) {
-    return 'void-mage';
-  }
-  return 'void-grunt';
-});
+export const DETERMINISTIC_SUMMON_SEQUENCE = (() => {
+  let summonPity = 0;
+  return Array.from({ length: 125 }, (_, index) => {
+    const rarityRoll = ((index * 73 + 37) % 1_000) / 1_000;
+    const templateRoll = ((index * 191 + 17) % 1_000) / 1_000;
+    const template = rollSummonTemplate(rarityRoll, templateRoll, summonPity);
+    summonPity = template.rarity === 'Legendary' ? 0 : summonPity + 1;
+    return template.id;
+  });
+})();
 
 export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   allowNewHeroesFromSummons: true,
@@ -158,9 +153,11 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   initialGems: 0,
   initialGold: GAME_BALANCE.initialGold,
   initialSummonsConsumed: 3,
-  maxUpgradesPerStage: 250,
-  normalTargetTtkSeconds: 10,
-  bossTargetTtkSeconds: 40,
+  // This is a simulator safety bound, not a gameplay purchase cap. Late-game
+  // shard stockpiles can unlock several 50-level ascension bands at once.
+  maxUpgradesPerStage: 500,
+  normalTargetTtkSeconds: 14,
+  bossTargetTtkSeconds: 55,
   sustainedComboMultiplier: 1,
   summonSequence: DETERMINISTIC_SUMMON_SEQUENCE,
   tapsPerSecond: 4,

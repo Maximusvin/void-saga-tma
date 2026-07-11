@@ -22,9 +22,9 @@ import { HeroPortrait } from '../components/HeroPortrait';
 import { triggerHaptic, triggerHapticNotification } from '../utils/haptics';
 import {
   GAME_BALANCE,
+  HERO_RARITIES,
   RARITY_COLORS,
   RARITY_ORDER,
-  SUMMON_POOL,
   getSummonDropPercent,
   getSummonsUntilLegendaryPity,
 } from '../game/balance';
@@ -64,8 +64,8 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
   const timeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   const isMountedRef = useRef(true);
 
-  const sortedSummonPool = useMemo(
-    () => [...SUMMON_POOL].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]),
+  const sortedSummonRarities = useMemo(
+    () => [...HERO_RARITIES].sort((a, b) => RARITY_ORDER[b] - RARITY_ORDER[a]),
     [],
   );
   const celebrationParticleCount = Math.max(28, Math.round(150 * renderProfile.burstScale));
@@ -217,16 +217,16 @@ export const SummonCircle = ({ gems, summonPity, summonHero }: SummonCircleProps
 
       <div className="summon-dock">
         <div className="summon-rates" aria-label="Summon drop rates" role="list">
-          {sortedSummonPool.map(template => (
+          {sortedSummonRarities.map(rarity => (
             <div
-              aria-label={`${template.rarity} ${getSummonDropPercent(template)}%`}
-              className={`summon-rate rarity-${template.rarity.toLowerCase()}`}
-              key={template.rarity}
+              aria-label={`${rarity} ${getSummonDropPercent(rarity, summonPity)}%`}
+              className={`summon-rate rarity-${rarity.toLowerCase()}`}
+              key={rarity}
               role="listitem"
             >
-              <SummonHeroGlyph rarity={template.rarity} size={17} />
-              <span aria-hidden="true">{template.rarity}</span>
-              <strong>{getSummonDropPercent(template)}%</strong>
+              <SummonHeroGlyph rarity={rarity} size={17} />
+              <span aria-hidden="true">{rarity}</span>
+              <strong>{getSummonDropPercent(rarity, summonPity)}%</strong>
             </div>
           ))}
         </div>

@@ -193,6 +193,40 @@ export const GAME_MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 5,
+    name: 'create_progression_milestones',
+    sql: `
+      CREATE TABLE progression_milestones (
+        player_id TEXT NOT NULL,
+        stage INTEGER NOT NULL CHECK (stage > 1),
+        reached_at TEXT NOT NULL,
+        PRIMARY KEY (player_id, stage),
+        FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX progression_milestones_stage_reached_idx
+        ON progression_milestones(stage, reached_at);
+    `,
+  },
+  {
+    version: 6,
+    name: 'preserve_legacy_summon_pity',
+    sql: `
+      UPDATE players
+      SET snapshot_json = json_set(
+        snapshot_json,
+        '$.summonPity',
+        MIN(
+          79,
+          MAX(
+            0,
+            COALESCE(CAST(json_extract(snapshot_json, '$.summonPity') AS INTEGER), 0)
+          ) + 20
+        )
+      );
+    `,
+  },
 ];
 
 export const applyGameMigrations = (database: DatabaseSync) => {

@@ -1015,7 +1015,7 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
 
   await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'death', { timeout: 1_000 });
   await expect(page.locator('.stage-mark strong')).toHaveText('2');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
   await page.waitForTimeout(720);
   await expect(scene).toHaveAttribute('data-enemy-id', 'ashveil-oracle');
@@ -1060,13 +1060,13 @@ test('advances through enemy waves before increasing the campaign stage', async 
   await page.goto('/');
 
   await expect(page.locator('.stage-mark strong')).toHaveText('1');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 1/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 1/4');
   await page.locator('.monster-button').click();
 
   await expect(page.locator('.stage-mark strong')).toHaveText('1');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   await expect(page.locator('.rift-clear-banner')).toContainText('Enemy Defeated');
-  await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/3');
+  await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/4');
   expect(pageErrors).toEqual([]);
 });
 
@@ -1093,7 +1093,7 @@ test.describe('average Telegram Android performance profile', () => {
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
-        enemyIndex: 2,
+        enemyIndex: 3,
         gems: 50,
         gold: '1000',
         heroes: [
@@ -1154,7 +1154,7 @@ test.describe('average Telegram Android performance profile', () => {
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.setViewportSize({ width: 320, height: 568 });
     await page.addInitScript(() => {
-      Math.random = () => 0;
+      Math.random = () => 0.999;
       const now = new Date().toISOString();
       localStorage.setItem('rift_heroes_save', JSON.stringify({
         schemaVersion: 4,
@@ -1166,7 +1166,7 @@ test.describe('average Telegram Android performance profile', () => {
         gold: '1000',
         heroes: [],
         stage: 1,
-        summonPity: 59,
+        summonPity: 0,
         monsterMaxHealth: '100',
         monsterHealth: '100',
         lastSeenAt: now,
@@ -1180,9 +1180,9 @@ test.describe('average Telegram Android performance profile', () => {
     const summonAction = page.locator('.summon-action');
     await expect(summonView).toHaveAttribute('data-render-quality', 'balanced');
     await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
-    await expect(summonAction).toContainText('Legendary guaranteed in 1');
-    await expect(summonView.getByText('2%', { exact: true })).toBeVisible();
-    await expect(summonView.getByLabel('Legendary 2%')).toBeVisible();
+    await expect(summonAction).toContainText('Legendary guaranteed in 80');
+    await expect(summonView.getByText('0.8%', { exact: true })).toBeVisible();
+    await expect(summonView.getByLabel('Legendary 0.8%')).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       getComputedStyle(document.querySelector('.app-shell')!).backgroundImage
     ))).toContain('/assets/summon/rift-sanctuary.webp');
@@ -1297,7 +1297,7 @@ test('boss attempt exposes phases and resets through the shared engine after enr
     const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
     return snapshot.monsterHealth;
   })).toBe('1034');
-  await expect(page.getByRole('timer')).toContainText(/4[0-5]s/);
+  await expect(page.getByRole('timer')).toContainText(/(?:5[5-9]|60)s/);
 });
 
 test('authoritative passive volleys animate every hero without overflowing the combat footer', async ({ page }) => {
