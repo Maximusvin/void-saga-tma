@@ -119,7 +119,10 @@ Hero collection використовує оптимізовані WebP portrait 
 - Backend приймає лише кількість taps/passive ticks, сам рахує combo/crit/damage і зберігає результат команди транзакційно; клієнт не може передати власний damage або summon RNG.
 - Passive tick повертає один агрегований hit із per-hero `heroContributions`; warband HUD і projectiles відтворюють лише цей підтверджений event, не локальний декоративний DPS-таймер.
 - Gold, power, HP, damage, costs і rewards використовують `GameNumber` на базі `decimal.js-light` та серіалізуються як decimal strings; legacy numeric snapshots мігрують під час читання.
-- Snapshot schema v5 зберігає серверний deadline boss-спроби та ordered `activeHeroIds` максимум із чотирьох owned героїв. Hero progression із v3 лишається незмінною: один герой на content template, duplicate summon дає shards, ascension за 2 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- Snapshot schema v7 зберігає серверний deadline boss-спроби, `enemyIndex`, Legendary pity та ordered `activeHeroIds` максимум із чотирьох owned героїв. Один герой відповідає одному content template, duplicate summon дає rarity-scaled shards, ascension за 2–3 shards відкриває наступні 50 рівнів, а backend відхиляє upgrade понад level cap.
+- Standard summon спочатку визначає rarity (`65/26.2/8/0.8`), потім template за внутрішньою вагою; soft pity починається після 60 невдач, hard pity гарантує Legendary на 80-й спробі.
+- Migration v5 додає ідемпотентні `progression_milestones`, щоб вимірювати реальний час до ключових stages незалежно від bounded command ledger.
+- Migration v6 зберігає кількість спроб до вже обіцяного pity для наявних профілів під час переходу з 60 на 80; нові профілі стартують із нуля.
 - Tap bonus, passive damage, `heroContributions` і offline rewards рахуються лише з active Warband. `set_active_warband` серверно перевіряє ліміт, унікальність та ownership; новий summon автоматично займає вільний слот.
 - `upgrade_hero` підтримує `amount: 1 | 10 | "max"`: сервер сам рахує точну сумарну ціну, купує доступні рівні до cap і обмежує одну команду 50 рівнями. Відсутній `amount` backward-compatible означає `1`.
 - Frontend групує taps у 80 ms batches до 20 taps, а підтверджена команда видаляється з outbox лише після відповіді API.

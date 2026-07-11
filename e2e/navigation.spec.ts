@@ -1015,7 +1015,7 @@ test('plays Ironroot death before handing the canvas to the next enemy', async (
 
   await expect(scene).toHaveAttribute('data-hit-reaction-phase', 'death', { timeout: 1_000 });
   await expect(page.locator('.stage-mark strong')).toHaveText('2');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   await expect(scene).toHaveAttribute('data-enemy-id', 'ironroot-marauder');
   await page.waitForTimeout(720);
   await expect(scene).toHaveCount(0);
@@ -1064,13 +1064,13 @@ test('advances through enemy waves before increasing the campaign stage', async 
   await page.goto('/');
 
   await expect(page.locator('.stage-mark strong')).toHaveText('1');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 1/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 1/4');
   await page.locator('.monster-button').click();
 
   await expect(page.locator('.stage-mark strong')).toHaveText('1');
-  await expect(page.locator('.stage-mark')).toContainText('Wave 2/3');
+  await expect(page.locator('.stage-mark')).toContainText('Wave 2/4');
   await expect(page.locator('.rift-clear-banner')).toContainText('Enemy Defeated');
-  await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/3');
+  await expect(page.locator('.rift-clear-banner')).toContainText('Wave 2/4');
   expect(pageErrors).toEqual([]);
 });
 
@@ -1097,7 +1097,7 @@ test.describe('average Telegram Android performance profile', () => {
         bossEncounterEndsAt: null,
         comboCount: 0,
         comboExpiresAt: null,
-        enemyIndex: 2,
+        enemyIndex: 3,
         gems: 50,
         gold: '1000',
         heroes: [
@@ -1115,13 +1115,23 @@ test.describe('average Telegram Android performance profile', () => {
     });
     await page.goto('/');
 
-    const scene = page.locator('.rift-pixi-scene');
-    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
-    await expect(scene).toHaveAttribute('data-render-quality', 'balanced');
-    await expect(scene).toHaveAttribute('data-scene-build-count', '1');
+    const preBossScene = page.locator('.rift-three-scene');
+    await expect(preBossScene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(preBossScene).toHaveAttribute('data-enemy-rig', 'skinned-three');
+    await expect(preBossScene).toHaveAttribute('data-scene-build-count', '1');
     await expect(page.locator('.rift-spark')).toHaveCount(8);
 
-    const initialSceneBuilds = Number(await scene.getAttribute('data-scene-build-count'));
+    const preBossBudget = await preBossScene.evaluate(element => {
+      const canvas = element.querySelector('canvas')!;
+      const bounds = canvas.getBoundingClientRect();
+      return {
+        canvasWidth: canvas.width,
+        canvasCssWidth: bounds.width,
+        renderQuality: document.documentElement.dataset.renderQuality,
+      };
+    });
+    expect(preBossBudget.renderQuality).toBe('balanced');
+    expect(preBossBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(preBossBudget.canvasCssWidth * 1.5));
 
     // Drive the boss transition with an explicit tap. The one-health enemy dies
     // to a single hit, advancing to the stage 150 sovereign, so the rebuild is
@@ -1129,11 +1139,14 @@ test.describe('average Telegram Android performance profile', () => {
     await page.locator('.monster-button').click();
 
     await expect(page.locator('.stage-mark strong')).toHaveText('150', { timeout: 4_000 });
-    await expect(scene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
-    await expect(scene).toHaveAttribute('data-art-loaded', 'true');
-    await expect(scene).toHaveAttribute('data-particle-count', '24');
+    await expect(preBossScene).toHaveCount(0);
+    const bossScene = page.locator('.rift-pixi-scene');
+    await expect(bossScene).toHaveAttribute('data-enemy-id', 'crowned-rift-sovereign');
+    await expect(bossScene).toHaveAttribute('data-art-loaded', 'true');
+    await expect(bossScene).toHaveAttribute('data-particle-count', '24');
+    await expect(bossScene).toHaveAttribute('data-scene-build-count', '1');
 
-    const renderBudget = await scene.evaluate(element => {
+    const renderBudget = await bossScene.evaluate(element => {
       const canvas = element.querySelector('canvas')!;
       const bounds = canvas.getBoundingClientRect();
       const beastShell = document.querySelector('.rift-beast-shell')!;
@@ -1148,7 +1161,7 @@ test.describe('average Telegram Android performance profile', () => {
 
     expect(renderBudget.renderQuality).toBe('balanced');
     expect(renderBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(renderBudget.canvasCssWidth * 1.5));
-    expect(renderBudget.sceneBuilds - initialSceneBuilds).toBe(1);
+    expect(renderBudget.sceneBuilds).toBe(1);
     expect(renderBudget.shellAnimations).toBe(0);
     expect(pageErrors).toEqual([]);
   });
@@ -1158,7 +1171,7 @@ test.describe('average Telegram Android performance profile', () => {
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.setViewportSize({ width: 320, height: 568 });
     await page.addInitScript(() => {
-      Math.random = () => 0;
+      Math.random = () => 0.999;
       const now = new Date().toISOString();
       localStorage.setItem('rift_heroes_save', JSON.stringify({
         schemaVersion: 4,
@@ -1170,7 +1183,7 @@ test.describe('average Telegram Android performance profile', () => {
         gold: '1000',
         heroes: [],
         stage: 1,
-        summonPity: 59,
+        summonPity: 0,
         monsterMaxHealth: '100',
         monsterHealth: '100',
         lastSeenAt: now,
@@ -1184,9 +1197,9 @@ test.describe('average Telegram Android performance profile', () => {
     const summonAction = page.locator('.summon-action');
     await expect(summonView).toHaveAttribute('data-render-quality', 'balanced');
     await expect(summonView).toHaveAttribute('data-celebration-particle-count', '98');
-    await expect(summonAction).toContainText('Legendary guaranteed in 1');
-    await expect(summonView.getByText('2%', { exact: true })).toBeVisible();
-    await expect(summonView.getByLabel('Legendary 2%')).toBeVisible();
+    await expect(summonAction).toContainText('Legendary guaranteed in 80');
+    await expect(summonView.getByText('0.8%', { exact: true })).toBeVisible();
+    await expect(summonView.getByLabel('Legendary 0.8%')).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       getComputedStyle(document.querySelector('.app-shell')!).backgroundImage
     ))).toContain('/assets/summon/rift-sanctuary.webp');
@@ -1301,7 +1314,7 @@ test('boss attempt exposes phases and resets through the shared engine after enr
     const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
     return snapshot.monsterHealth;
   })).toBe('1034');
-  await expect(page.getByRole('timer')).toContainText(/4[0-5]s/);
+  await expect(page.getByRole('timer')).toContainText(/(?:5[5-9]|60)s/);
 });
 
 test('authoritative passive volleys animate every hero without overflowing the combat footer', async ({ page }) => {

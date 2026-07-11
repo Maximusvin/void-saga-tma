@@ -35,6 +35,7 @@ describe('game database migrations', () => {
         'realm_operations',
         'realm_entitlements',
         'account_profiles',
+        'progression_milestones',
       ]) {
         assert.ok(database.prepare(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -49,6 +50,9 @@ describe('game database migrations', () => {
       );
       assert.ok(database.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'players_progress_idx'",
+      ).get());
+      assert.ok(database.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'progression_milestones_stage_reached_idx'",
       ).get());
       database.close();
       database = null;
@@ -79,13 +83,23 @@ describe('game database migrations', () => {
           updated_at TEXT NOT NULL,
           snapshot_json TEXT NOT NULL
         );
-        INSERT INTO players VALUES ('legacy-player', 'created', 'updated', '{}');
+        INSERT INTO players VALUES (
+          'legacy-player', 'created', 'updated', '{"summonPity":12}'
+        );
+        INSERT INTO players VALUES (
+          'near-pity-player', 'created', 'updated', '{"summonPity":59}'
+        );
       `);
       legacyDatabase.close();
 
       migrated = openDatabase(databasePath);
-      const player = migrated.prepare('SELECT id FROM players WHERE id = ?').get('legacy-player') as { id: string };
+      const player = migrated.prepare('SELECT id, snapshot_json FROM players WHERE id = ?')
+        .get('legacy-player') as { id: string; snapshot_json: string };
       assert.equal(player.id, 'legacy-player');
+      assert.equal(JSON.parse(player.snapshot_json).summonPity, 32);
+      const nearPityPlayer = migrated.prepare('SELECT snapshot_json FROM players WHERE id = ?')
+        .get('near-pity-player') as { snapshot_json: string };
+      assert.equal(JSON.parse(nearPityPlayer.snapshot_json).summonPity, 79);
       const character = migrated.prepare(`
         SELECT id, account_id, origin_realm_id
         FROM realm_characters

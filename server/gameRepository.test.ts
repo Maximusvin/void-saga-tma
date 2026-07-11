@@ -36,13 +36,22 @@ describe('game repository persistence', () => {
         bossEncounterEndsAt: '2026-07-09T12:00:35.000Z',
       };
 
-      firstRepository.savePlayer('dev:persistent-player', persistedSnapshot);
+      firstRepository.savePlayer(
+        'dev:persistent-player',
+        persistedSnapshot,
+        initialState.snapshot.stage,
+      );
       firstDatabase.close();
       firstDatabase = null;
 
       secondDatabase = openDatabase(databasePath);
       const secondRepository = new GameRepository(secondDatabase);
       const restoredState = secondRepository.getOrCreatePlayer('dev:persistent-player');
+      const milestone = secondDatabase.prepare(`
+        SELECT stage, reached_at
+        FROM progression_milestones
+        WHERE player_id = ?
+      `).get('dev:persistent-player') as { reached_at: string; stage: number };
       secondDatabase.close();
       secondDatabase = null;
 
@@ -51,6 +60,8 @@ describe('game repository persistence', () => {
       assert.equal(restoredState.snapshot.gold, persistedSnapshot.gold);
       assert.equal(restoredState.snapshot.monsterHealth, persistedSnapshot.monsterHealth);
       assert.equal(restoredState.snapshot.bossEncounterEndsAt, persistedSnapshot.bossEncounterEndsAt);
+      assert.equal(milestone.stage, 5);
+      assert.ok(Number.isFinite(Date.parse(milestone.reached_at)));
     } finally {
       firstDatabase?.close();
       secondDatabase?.close();
@@ -116,6 +127,41 @@ describe('game repository persistence', () => {
     } finally {
       firstDatabase?.close();
       secondDatabase?.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('records a crossed milestone once when a command is replayed', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-milestone-replay-'));
+    const databasePath = join(tempDir, 'game.sqlite');
+    let database: DatabaseSync | null = null;
+
+    try {
+      database = openDatabase(databasePath);
+      const repository = new GameRepository(database);
+      const mutation = (snapshot: ReturnType<GameRepository['getOrCreatePlayer']>['snapshot']) => ({
+        snapshot: {
+          ...snapshot,
+          stage: 25,
+          enemyIndex: 0,
+          monsterHealth: getMonsterMaxHealth(25),
+          monsterMaxHealth: getMonsterMaxHealth(25),
+        },
+        events: [],
+      });
+
+      repository.runIdempotentCommand('dev:milestone-player', 'cmd:milestone-0001', mutation);
+      repository.runIdempotentCommand('dev:milestone-player', 'cmd:milestone-0001', mutation);
+
+      const milestones = database.prepare(`
+        SELECT stage
+        FROM progression_milestones
+        WHERE player_id = ?
+        ORDER BY stage
+      `).all('dev:milestone-player') as Array<{ stage: number }>;
+      assert.deepEqual(milestones.map(({ stage }) => stage), [5, 10, 25]);
+    } finally {
+      database?.close();
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

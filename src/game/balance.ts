@@ -10,10 +10,11 @@ import {
   RARITY_ORDER,
   STAGE_BANDS,
   SUMMON_POOL,
+  SUMMON_RARITY_RATES,
   getHeroTemplateById,
   getStageBandForStage,
 } from './content';
-import type { Hero, HeroRarity, HeroUpgradeAmount, SummonHeroTemplate } from './types';
+import type { Hero, HeroRarity, HeroUpgradeAmount } from './types';
 import {
   ONE_GAME_NUMBER,
   ZERO_GAME_NUMBER,
@@ -38,6 +39,7 @@ export {
   RARITY_ORDER,
   STAGE_BANDS,
   SUMMON_POOL,
+  SUMMON_RARITY_RATES,
   getHeroTemplateById,
   getStageBandForStage,
 };
@@ -73,7 +75,9 @@ export const GAME_BALANCE = {
   // interrupts the player after a meaningful absence so tab-aways stay silent.
   offlineRewardModalMinSeconds: 5 * 60,
   summonCostGems: 10,
-  legendaryPityPulls: 60,
+  legendaryPityPulls: 80,
+  legendarySoftPityStartsAt: 60,
+  legendarySoftPityRateIncrease: 0.03,
   summonChargeMs: 1500,
   summonRevealMs: 1500,
   ascensionBaseLevelCap: 50,
@@ -255,8 +259,33 @@ export const getHeroIcon = (rarity: HeroRarity) => {
   return SUMMON_POOL.find(hero => hero.rarity === rarity)?.icon ?? '🛡️';
 };
 
-export const getSummonDropPercent = (template: SummonHeroTemplate) => {
-  return Math.round(template.dropRate * 100);
+export const getSummonRarityRates = (summonPity = 0): Record<HeroRarity, number> => {
+  const normalizedPity = Number.isFinite(summonPity) ? Math.max(0, Math.floor(summonPity)) : 0;
+  const hardPityIndex = GAME_BALANCE.legendaryPityPulls - 1;
+  const legendaryRate = normalizedPity >= hardPityIndex
+    ? 1
+    : Math.min(
+      1,
+      SUMMON_RARITY_RATES.Legendary + (
+        normalizedPity >= GAME_BALANCE.legendarySoftPityStartsAt
+          ? (normalizedPity - GAME_BALANCE.legendarySoftPityStartsAt + 1) *
+            GAME_BALANCE.legendarySoftPityRateIncrease
+          : 0
+      ),
+    );
+  const baseNonLegendaryRate = 1 - SUMMON_RARITY_RATES.Legendary;
+  const nonLegendaryScale = (1 - legendaryRate) / baseNonLegendaryRate;
+
+  return {
+    Common: SUMMON_RARITY_RATES.Common * nonLegendaryScale,
+    Rare: SUMMON_RARITY_RATES.Rare * nonLegendaryScale,
+    Epic: SUMMON_RARITY_RATES.Epic * nonLegendaryScale,
+    Legendary: legendaryRate,
+  };
+};
+
+export const getSummonDropPercent = (rarity: HeroRarity, summonPity = 0) => {
+  return Math.round(getSummonRarityRates(summonPity)[rarity] * 1_000) / 10;
 };
 
 export const getSummonsUntilLegendaryPity = (summonPity: number) => {
@@ -265,19 +294,34 @@ export const getSummonsUntilLegendaryPity = (summonPity: number) => {
 };
 
 export const rollSummonTemplate = (
-  randomValue = Math.random(),
+  rarityRandomValue = Math.random(),
+  templateRandomValue = Math.random(),
+  summonPity = 0,
   guaranteedRarity?: HeroRarity,
 ) => {
-  const normalizedRoll = Math.max(0, Math.min(randomValue, 0.999999));
-  const pool = guaranteedRarity
-    ? SUMMON_POOL.filter(hero => hero.rarity === guaranteedRarity)
-    : SUMMON_POOL;
-  const totalRate = pool.reduce((total, hero) => total + hero.dropRate, 0);
-  let cumulativeRate = 0;
+  const normalizedRarityRoll = Math.max(0, Math.min(rarityRandomValue, 0.999999));
+  const normalizedTemplateRoll = Math.max(0, Math.min(templateRandomValue, 0.999999));
+  const rarityRates = getSummonRarityRates(summonPity);
+  let rarity = guaranteedRarity ?? HERO_RARITIES[HERO_RARITIES.length - 1];
+  let cumulativeRarityRate = 0;
+
+  if (!guaranteedRarity) {
+    for (const candidateRarity of HERO_RARITIES) {
+      cumulativeRarityRate += rarityRates[candidateRarity];
+      if (normalizedRarityRoll < cumulativeRarityRate) {
+        rarity = candidateRarity;
+        break;
+      }
+    }
+  }
+
+  const pool = SUMMON_POOL.filter(hero => hero.rarity === rarity);
+  const totalWeight = pool.reduce((total, hero) => total + hero.summonWeight, 0);
+  let cumulativeTemplateWeight = 0;
 
   for (const hero of pool) {
-    cumulativeRate += hero.dropRate / totalRate;
-    if (normalizedRoll < cumulativeRate) {
+    cumulativeTemplateWeight += hero.summonWeight / totalWeight;
+    if (normalizedTemplateRoll < cumulativeTemplateWeight) {
       return hero;
     }
   }
