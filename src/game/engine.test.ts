@@ -473,6 +473,41 @@ describe('server-authoritative combat batches', () => {
     assert.equal(result.snapshot.monsterHealth, '65');
   });
 
+  it('applies hero combat profiles to authoritative tap and passive batches', () => {
+    const scavenger = {
+      ...hero(100),
+      id: 'rift-scavenger',
+      name: 'Rift Scavenger',
+      templateId: 'rift-scavenger',
+    };
+    const seraph = {
+      ...hero(100),
+      id: 'seraph-aurelia',
+      name: 'Seraph Aurelia',
+      rarity: 'Legendary' as const,
+      templateId: 'seraph-aurelia',
+    };
+    const snapshot = {
+      ...createSnapshot(atOffsetMs(-1_000), [scavenger, seraph]),
+      lastPassiveTickAt: atOffsetMs(-1_000),
+      monsterHealth: gameNumber(1_000),
+      monsterMaxHealth: gameNumber(1_000),
+    };
+
+    const tap = applyCombatBatchAction(snapshot, 1, 0, { nowMs: NOW_MS, random: NEVER_CRIT });
+    const passive = applyCombatBatchAction(snapshot, 0, 1, { nowMs: NOW_MS, random: NEVER_CRIT });
+
+    assert.equal(tap.events[0]?.type === 'monster_hit' ? tap.events[0].damage : null, '23.5');
+    assert.equal(passive.events[0]?.type === 'monster_hit' ? passive.events[0].damage : null, '189');
+    assert.deepEqual(
+      passive.events[0]?.type === 'monster_hit' ? passive.events[0].heroContributions : null,
+      [
+        { damage: '64.8', heroId: 'rift-scavenger' },
+        { damage: '124.2', heroId: 'seraph-aurelia' },
+      ],
+    );
+  });
+
   it('resets an expired combo before resolving the next batch', () => {
     const snapshot = {
       ...createSnapshot('2026-07-09T11:59:00.000Z'),
@@ -488,6 +523,36 @@ describe('server-authoritative combat batches', () => {
     assert.equal(hit.type, 'monster_hit');
     assert.equal(hit.damage, '1');
     assert.equal(result.snapshot.comboCount, 1);
+  });
+
+  it('applies deterministic enemy traits and boss phase vulnerabilities', () => {
+    const hitDamage = (snapshot: GameSnapshot, source: 'tap' | 'passive') => {
+      const event = applyDamageAction(snapshot, gameNumber(10), source).events[0];
+      return event?.type === 'monster_hit' ? event.damage : null;
+    };
+    const armoredEnemy = {
+      ...createSnapshot(atOffsetMs(0)),
+      stage: 7,
+      monsterHealth: gameNumber(1_000),
+      monsterMaxHealth: gameNumber(1_000),
+    };
+    const dominionBoss = {
+      ...armoredEnemy,
+      stage: 5,
+      monsterHealth: gameNumber(1_000),
+      monsterMaxHealth: gameNumber(1_000),
+    };
+    const fractureBoss = {
+      ...dominionBoss,
+      monsterHealth: gameNumber(600),
+    };
+
+    assert.equal(hitDamage(armoredEnemy, 'tap'), '12');
+    assert.equal(hitDamage(armoredEnemy, 'passive'), '8');
+    assert.equal(hitDamage(dominionBoss, 'tap'), '8.5');
+    assert.equal(hitDamage(dominionBoss, 'passive'), '11.5');
+    assert.equal(hitDamage(fractureBoss, 'tap'), '13');
+    assert.equal(hitDamage(fractureBoss, 'passive'), '7');
   });
 
   it('starts a timed attempt when stage progression enters a boss', () => {
@@ -527,7 +592,7 @@ describe('server-authoritative combat batches', () => {
 
     assert.deepEqual(result.events.map(event => event.type), ['boss_enraged', 'monster_hit']);
     assert.equal(result.events[0]?.type === 'boss_enraged' ? result.events[0].monsterHealth : null, '1000');
-    assert.equal(result.snapshot.monsterHealth, '999');
+    assert.equal(result.snapshot.monsterHealth, '999.15');
     assert.equal(result.snapshot.comboCount, 1);
     assert.equal(
       result.snapshot.bossEncounterEndsAt,
@@ -549,7 +614,7 @@ describe('server-authoritative combat batches', () => {
     });
 
     assert.equal(result.events.some(event => event.type === 'boss_enraged'), false);
-    assert.equal(result.snapshot.monsterHealth, '99');
+    assert.equal(result.snapshot.monsterHealth, '99.15');
     assert.equal(result.snapshot.bossEncounterEndsAt, snapshot.bossEncounterEndsAt);
   });
 
@@ -567,7 +632,7 @@ describe('server-authoritative combat batches', () => {
     });
 
     assert.deepEqual(result.events.map(event => event.type), ['monster_hit']);
-    assert.equal(result.snapshot.monsterHealth, '1034');
+    assert.equal(result.snapshot.monsterHealth, '1034.15');
     assert.equal(
       result.snapshot.bossEncounterEndsAt,
       new Date(NOW_MS + getBossAttemptDurationMs(5)).toISOString(),

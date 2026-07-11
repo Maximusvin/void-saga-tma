@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   GAME_CONTENT,
   GAME_CONTENT_VERSION,
+  ENEMY_TRAITS,
   HERO_RARITIES,
   STAGE_BANDS,
   SUMMON_POOL,
@@ -14,7 +15,9 @@ import {
   GAME_BALANCE,
   getBossAttemptDurationMs,
   getBossPhaseForHealthPercent,
+  getEncounterCombatRule,
   getEncounterMaxHealth,
+  getEnemyTraitForEncounter,
   getEnemiesInStage,
   getSummonRarityRates,
   getMonsterMaxHealth,
@@ -38,6 +41,7 @@ describe('game content invariants', () => {
       .reduce((total, rate) => total + rate, 0);
     assert.ok(Math.abs(totalRarityRate - 1) < RATE_TOTAL_EPSILON);
     assert.equal(SUMMON_RARITY_RATES.Legendary, 0.008);
+    assert.deepEqual(GAME_CONTENT.enemyTraits, ENEMY_TRAITS);
 
     for (const rarity of HERO_RARITIES) {
       const rarityTemplates = SUMMON_POOL.filter(hero => hero.rarity === rarity);
@@ -101,6 +105,10 @@ describe('game content invariants', () => {
       assert.ok(stageBand.monsterHealthGrowth >= 1);
       assert.ok(stageBand.normalEnemiesPerStage >= 2);
       assert.ok(stageBand.normalEnemyHealthGrowth >= 1);
+      assert.ok(stageBand.normalEnemyTraitIds.length > 0);
+      assert.ok(stageBand.normalEnemyTraitIds.every(traitId => (
+        ENEMY_TRAITS.some(trait => trait.id === traitId)
+      )));
       assert.ok(stageBand.monsterEmojis.length > 0);
       assert.ok(stageBand.boss.everyStages > 1);
       assert.ok(stageBand.boss.attemptSeconds >= 30);
@@ -116,8 +124,32 @@ describe('game content invariants', () => {
           stageBand.boss.phases[index].minimumHealthPercent,
         );
       }
+      for (const phase of stageBand.boss.phases) {
+        assert.ok(phase.hint.length > 0);
+        assert.ok(phase.tapDamageMultiplier > 0);
+        assert.ok(phase.passiveDamageMultiplier > 0);
+      }
       previousFromStage = stageBand.fromStage;
     }
+  });
+
+  it('cycles readable enemy traits and resolves boss vulnerabilities from health', () => {
+    assert.equal(new Set(ENEMY_TRAITS.map(trait => trait.id)).size, ENEMY_TRAITS.length);
+    assert.equal(
+      ENEMY_TRAITS.reduce((total, trait) => total + trait.tapDamageMultiplier, 0) / ENEMY_TRAITS.length,
+      1,
+    );
+    assert.equal(
+      ENEMY_TRAITS.reduce((total, trait) => total + trait.passiveDamageMultiplier, 0) / ENEMY_TRAITS.length,
+      1,
+    );
+    assert.equal(getEnemyTraitForEncounter(1, 0).id, 'unbound');
+    assert.equal(getEnemyTraitForEncounter(7, 0).id, 'carapace');
+    assert.equal(getEnemyTraitForEncounter(7, 1).id, 'phaseborn');
+    assert.equal(getEnemyTraitForEncounter(7, 2).id, 'unbound');
+    assert.equal(getEncounterCombatRule(5, 0, 100).id, 'dominion');
+    assert.equal(getEncounterCombatRule(5, 0, 60).id, 'fracture');
+    assert.equal(getEncounterCombatRule(5, 0, 20).id, 'cataclysm');
   });
 
   it('resolves stages and boss health from content', () => {

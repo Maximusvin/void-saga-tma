@@ -4,6 +4,7 @@ export type HeroRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
 export type HeroUpgradeAmount = 1 | 10 | 'max';
 export type ActiveView = 'rift' | 'summon' | 'leagues' | 'roster';
 export type BossPhaseId = 'dominion' | 'fracture' | 'cataclysm';
+export type EnemyTraitId = 'unbound' | 'carapace' | 'phaseborn';
 export type HeroAttackStyle = 'slash' | 'bolt' | 'hex' | 'nova';
 export type HeroCombatRole =
   | 'Vanguard'
@@ -84,8 +85,19 @@ export interface BossRule {
 
 export interface BossPhaseRule {
   id: BossPhaseId;
+  hint: string;
   label: string;
   minimumHealthPercent: number;
+  passiveDamageMultiplier: number;
+  tapDamageMultiplier: number;
+}
+
+export interface EnemyTraitRule {
+  hint: string;
+  id: EnemyTraitId;
+  label: string;
+  passiveDamageMultiplier: number;
+  tapDamageMultiplier: number;
 }
 
 export interface StageBand {
@@ -96,12 +108,14 @@ export interface StageBand {
   monsterHealthGrowth: number;
   normalEnemiesPerStage: number;
   normalEnemyHealthGrowth: number;
+  normalEnemyTraitIds: readonly EnemyTraitId[];
   monsterEmojis: readonly string[];
   boss: BossRule;
 }
 
 export interface GameContent {
   version: string;
+  enemyTraits: readonly EnemyTraitRule[];
   heroRarities: readonly HeroRarity[];
   summonRarityRates: Readonly<Record<HeroRarity, number>>;
   summonPool: readonly SummonHeroTemplate[];

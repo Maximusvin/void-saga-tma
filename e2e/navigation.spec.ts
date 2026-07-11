@@ -1257,7 +1257,7 @@ test.describe('average Telegram Android performance profile', () => {
       localStorage.setItem('rift_heroes_save', JSON.stringify({
         schemaVersion: 5,
         // No active warband on purpose: a passive tick would otherwise kill the
-        // one-health enemy within a second, racing the async art load, so the
+        // near-defeated enemy within a second, racing the async art load, so the
         // pre-boss scene sometimes never rendered and the transition below could
         // not be observed. With no idle damage the enemy waits for an explicit
         // tap, making the 149 -> 150 handoff deterministic.
@@ -1276,7 +1276,7 @@ test.describe('average Telegram Android performance profile', () => {
         ],
         stage: 149,
         monsterMaxHealth: '52338878808753',
-        monsterHealth: '1',
+        monsterHealth: '0.5',
         lastSeenAt: now,
         updatedAt: now,
       }));
@@ -1288,6 +1288,8 @@ test.describe('average Telegram Android performance profile', () => {
     await expect(preBossScene).toHaveAttribute('data-enemy-rig', 'skinned-three');
     await expect(preBossScene).toHaveAttribute('data-scene-build-count', '1');
     await expect(page.locator('.rift-spark')).toHaveCount(8);
+    await expect(page.getByText('Phaseborn', { exact: true })).toBeVisible();
+    await expect(page.getByText('Auto +20%', { exact: true })).toBeVisible();
 
     const preBossBudget = await preBossScene.evaluate(element => {
       const canvas = element.querySelector('canvas')!;
@@ -1301,9 +1303,9 @@ test.describe('average Telegram Android performance profile', () => {
     expect(preBossBudget.renderQuality).toBe('balanced');
     expect(preBossBudget.canvasWidth).toBeLessThanOrEqual(Math.ceil(preBossBudget.canvasCssWidth * 1.5));
 
-    // Drive the boss transition with an explicit tap. The one-health enemy dies
-    // to a single hit, advancing to the stage 150 sovereign, so the rebuild is
-    // caused by a test-controlled event rather than a timer racing asset loads.
+    // Drive the boss transition with an explicit tap. Even Phaseborn's reduced
+    // tap multiplier defeats the seeded 0.5 HP, so the rebuild is caused by a
+    // test-controlled event rather than a timer racing asset loads.
     await page.locator('.monster-button').click();
 
     await expect(page.locator('.rift-view')).toHaveAttribute('data-encounter-transition', 'death');
@@ -1455,6 +1457,7 @@ test.describe('average Telegram Android performance profile', () => {
 
 test('boss attempt exposes phases and resets through the shared engine after enrage', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     Math.random = () => 0.5;
     const now = Date.now();
@@ -1477,18 +1480,37 @@ test('boss attempt exposes phases and resets through the shared engine after enr
   await page.goto('/');
 
   await expect(page.getByRole('button', { name: 'Attack Crowned Rift Sovereign' })).toBeVisible();
-  await expect(page.getByText('Phase 3 · Cataclysm', { exact: true })).toBeVisible();
+  await expect(page.getByText('P3 · Cataclysm flux', { exact: true })).toBeVisible();
+  await expect(page.getByText('Auto +15%', { exact: true })).toBeVisible();
   await expect(page.getByRole('timer')).toContainText('0s');
 
   await page.getByRole('button', { name: 'Attack Crowned Rift Sovereign' }).click();
 
   await expect(page.getByRole('status')).toContainText('HP restored');
-  await expect(page.getByText('Phase 1 · Dominion', { exact: true })).toBeVisible();
+  await expect(page.getByText('P1 · Dominion veil', { exact: true })).toBeVisible();
+  await expect(page.getByText('Auto +15%', { exact: true })).toBeVisible();
+  await expect(page.locator('.elite-tag')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => {
     const snapshot = JSON.parse(localStorage.getItem('rift_heroes_save') ?? '{}');
     return snapshot.monsterHealth;
-  })).toBe('1034');
+  })).toBe('1034.15');
   await expect(page.getByRole('timer')).toContainText(/(?:5[5-9]|60)s/);
+
+  const combatHeaderLayout = await page.evaluate(() => {
+    const rank = document.querySelector('.encounter-rank')!.getBoundingClientRect();
+    const status = document.querySelector('.combat-status-right')!.getBoundingClientRect();
+    const clock = document.querySelector('.boss-clock')!.getBoundingClientRect();
+    return {
+      bodyWidth: document.body.scrollWidth,
+      clockWidth: clock.width,
+      rankRight: rank.right,
+      statusLeft: status.left,
+      viewportWidth: innerWidth,
+    };
+  });
+  expect(combatHeaderLayout.bodyWidth).toBe(combatHeaderLayout.viewportWidth);
+  expect(combatHeaderLayout.rankRight).toBeLessThan(combatHeaderLayout.statusLeft);
+  expect(combatHeaderLayout.clockWidth).toBeGreaterThanOrEqual(72);
 });
 
 test('authoritative passive volleys animate every hero without overflowing the combat footer', async ({ page }) => {

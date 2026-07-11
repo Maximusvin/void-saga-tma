@@ -12,6 +12,8 @@
 - adversarial RNG sequence завжди повертає Common roll, але проходить через ті самі soft/hard pity, що й серверне ядро;
 - duplicate дає pool-scaled shards, щоб шанс розвитку конкретного template не падав зі збільшенням пулу; ascension коштує 3 shards для Common, 2 для Rare/Epic і 3 для Legendary та відкриває наступні 50 рівнів;
 - звичайний stage містить 4 encounters до stage 200, 5 до stage 1000 і 6 далі; boss-stage містить одного боса;
+- після stage 5 normal encounters циклічно застосовують neutral, `Tap ±20%` та `Auto ±20%` traits із середнім multiplier `1.0` для кожного damage source;
+- boss TTK рахується як сума трьох HP-сегментів із content multipliers `Auto +15%`, `Tap +30%`, `Auto +15%`; click gold використовує зважену частку HP, реально зняту taps;
 - цільовий TTK: до 14 секунд на звичайного ворога та до 55 секунд для боса;
 - hard limit boss-спроби зростає від 60 до 75 секунд за difficulty band; simulator окремо перевіряє target TTK і серверний enrage deadline;
 - у бій виходять максимум чотири герої з найвищим фактичним DPS для заданого tap rate;
@@ -28,7 +30,7 @@
 - `adversarial-rng-pity`: нескінченна серія найгіршого Common roll; кожен 80-й summon примусово дає Legendary;
 - `solo-common`: гравець використовує Common duplicates, але свідомо ігнорує нових героїв.
 
-Baseline, невдалий Common-only старт і adversarial RNG не мають TTK walls до stage 10 000. Adversarial сценарій окремо доводить, що hard pity спрацьовує навіть тоді, коли RNG ніколи сам не дає Legendary. `solo-common` уперше виходить за TTK budget на stage 330 і накопичує 6 835 progression-blocked stages. Отже, невдала випадкова серія лишається відновлюваною, але довгострокова відмова від колекціонування більше не є оптимальною.
+Baseline, невдалий Common-only старт і adversarial RNG не мають TTK walls до stage 10 000. Adversarial сценарій окремо доводить, що hard pity спрацьовує навіть тоді, коли RNG ніколи сам не дає Legendary. `solo-common` уперше виходить за TTK budget на stage 330 і накопичує 6 838 progression-blocked stages. Отже, невдала випадкова серія лишається відновлюваною, але довгострокова відмова від колекціонування більше не є оптимальною.
 
 Baseline досягає stage 150 приблизно за 93,5 хвилини модельного active combat, stage 1000 за 11,8 години, а stage 10 000 за 120 годин. Він відкриває всі вісім live templates і виконує 23 291 окреме level increase як математичні кроки. UI не має вимагати стільки команд: bounded `MAX` групує до 50 послідовних рівнів, не змінюючи gold/power результат симуляції.
 

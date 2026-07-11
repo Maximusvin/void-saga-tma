@@ -1,6 +1,7 @@
 import {
   BOSS_EMOJI,
   BOSS_PHASES,
+  ENEMY_TRAITS,
   GAME_CONTENT,
   GAME_CONTENT_VERSION,
   HERO_RARITIES,
@@ -12,6 +13,7 @@ import {
   SUMMON_POOL,
   SUMMON_RARITY_RATES,
   getHeroTemplateById,
+  getEnemyTraitById,
   getStageBandForStage,
 } from './content';
 import type { Hero, HeroCombatProfile, HeroRarity, HeroUpgradeAmount } from './types';
@@ -30,6 +32,7 @@ import {
 export {
   BOSS_EMOJI,
   BOSS_PHASES,
+  ENEMY_TRAITS,
   GAME_CONTENT,
   GAME_CONTENT_VERSION,
   HERO_RARITIES,
@@ -41,6 +44,7 @@ export {
   SUMMON_POOL,
   SUMMON_RARITY_RATES,
   getHeroTemplateById,
+  getEnemyTraitById,
   getStageBandForStage,
 };
 
@@ -135,6 +139,28 @@ export const getBossPhaseForHealthPercent = (stage: number, healthPercent: numbe
     : 100;
   const phases = getStageBandForStage(normalizeStage(stage)).boss.phases;
   return phases.find(phase => normalizedPercent >= phase.minimumHealthPercent) ?? phases[phases.length - 1];
+};
+
+export const getEnemyTraitForEncounter = (stage: number, enemyIndex: number) => {
+  const normalizedStage = normalizeStage(stage);
+  const stageBand = getStageBandForStage(normalizedStage);
+  if (isBossStage(normalizedStage) || normalizedStage < 6) {
+    return getEnemyTraitById('unbound');
+  }
+
+  const normalizedEnemyIndex = normalizeEnemyIndex(normalizedStage, enemyIndex);
+  const traitIndex = (normalizedStage + normalizedEnemyIndex) % stageBand.normalEnemyTraitIds.length;
+  return getEnemyTraitById(stageBand.normalEnemyTraitIds[traitIndex]);
+};
+
+export const getEncounterCombatRule = (
+  stage: number,
+  enemyIndex: number,
+  healthPercent: number,
+) => {
+  return isBossStage(stage)
+    ? getBossPhaseForHealthPercent(stage, healthPercent)
+    : getEnemyTraitForEncounter(stage, enemyIndex);
 };
 
 export const getMonsterMaxHealth = (stage: number) => {
