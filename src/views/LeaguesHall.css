@@ -417,7 +417,7 @@
 }
 
 .league-empty-state {
-  min-height: 150px;
+  min-height: 120px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -426,7 +426,7 @@
 }
 
 .league-empty-state button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid rgba(117, 246, 222, 0.36);
   border-radius: 7px;
