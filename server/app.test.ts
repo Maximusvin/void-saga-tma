@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { GAME_BALANCE } from '../src/game/balance';
 import { GAME_SNAPSHOT_SCHEMA_VERSION, type GameEvent, type GameSnapshot } from '../src/game/types';
 import { gameNumber, subtractGameNumbers } from '../src/game/gameNumber';
 import type { PlayerProfile } from '../src/shared/playerProfile';
@@ -175,6 +176,73 @@ describe('game API persistence', () => {
       });
       assert.equal(oversizedPayload.response.status, 413);
       assert.equal(oversizedPayload.body.error, 'payload_too_large');
+    } finally {
+      if (serverStarted) {
+        await closeServer(server);
+      }
+      database.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('replays a summon command without charging gems or advancing pity twice', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'void-saga-api-summon-replay-'));
+    const database = openDatabase(join(tempDir, 'game.sqlite'));
+    const repository = new GameRepository(database);
+    const realmRepository = new RealmRepository(database);
+    const server = createServer(createGameRequestHandler(
+      repository,
+      realmRepository,
+      new LeaderboardRepository(database),
+    ));
+    const playerId = 'dev:http-summon-replay-player';
+    let serverStarted = false;
+
+    try {
+      await listen(server);
+      serverStarted = true;
+      const { port } = server.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const initial = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
+      );
+      const command = {
+        playerId,
+        commandId: 'cmd:http-summon-replay-0001',
+        action: { type: 'summon' },
+      };
+      const first = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify(command),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const replay = await requestJson<GameActionResponse>(`${baseUrl}/api/game/action`, {
+        body: JSON.stringify(command),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const summonEvent = first.body.events[0];
+
+      assert.equal(first.response.status, 200);
+      assert.equal(first.body.replayed, false);
+      assert.equal(summonEvent.type, 'hero_summoned');
+      assert.equal(
+        first.body.snapshot.summonPity,
+        summonEvent.hero.rarity === 'Legendary' ? 0 : 1,
+      );
+      assert.equal(
+        first.body.snapshot.gems,
+        initial.body.snapshot.gems - GAME_BALANCE.summonCostGems,
+      );
+      assert.equal(replay.response.status, 200);
+      assert.equal(replay.body.replayed, true);
+      assert.deepEqual(replay.body.snapshot, first.body.snapshot);
+      assert.deepEqual(replay.body.events, first.body.events);
+
+      const restored = await requestJson<PlayerStateResponse>(
+        `${baseUrl}/api/game/state?playerId=${encodeURIComponent(playerId)}`,
+      );
+      assert.deepEqual(restored.body.snapshot, first.body.snapshot);
     } finally {
       if (serverStarted) {
         await closeServer(server);

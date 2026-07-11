@@ -13,6 +13,7 @@ import {
   getUpgradeCost,
   isHeroAtLevelCap,
   isBossStage,
+  rollSummonTemplate,
 } from './balance';
 import {
   ZERO_GAME_NUMBER,
@@ -38,6 +39,10 @@ export interface SimulationHeroSeed {
   templateId: string;
 }
 
+export type SimulationSummonSource =
+  | { kind: 'template-sequence'; values: readonly string[] }
+  | { kind: 'rng-sequence'; values: readonly number[] };
+
 export interface BalanceSimulationConfig {
   allowNewHeroesFromSummons: boolean;
   automaticSummons: boolean;
@@ -47,12 +52,13 @@ export interface BalanceSimulationConfig {
   id: string;
   initialGems: number;
   initialGold: GameNumberInput;
+  initialSummonPity: number;
   initialSummonsConsumed: number;
   maxUpgradesPerStage: number;
   normalTargetTtkSeconds: number;
   bossTargetTtkSeconds: number;
   sustainedComboMultiplier: number;
-  summonSequence: readonly string[];
+  summonSource: SimulationSummonSource;
   tapsPerSecond: number;
 }
 
@@ -96,6 +102,8 @@ export interface BalanceSimulationSummary {
   finalGems: number;
   finalTeamPower: GameNumber;
   goldBlockedStages: number;
+  maximumSummonPity: number;
+  pityTriggers: number;
   progressionBlockedStages: number;
   totalSeconds: GameNumber;
   totalAscensions: number;
@@ -157,12 +165,13 @@ export const BASELINE_BALANCE_SIMULATION: BalanceSimulationConfig = {
   id: 'baseline-three-summons',
   initialGems: 0,
   initialGold: GAME_BALANCE.initialGold,
+  initialSummonPity: 3,
   initialSummonsConsumed: 3,
   maxUpgradesPerStage: 250,
   normalTargetTtkSeconds: 10,
   bossTargetTtkSeconds: 40,
   sustainedComboMultiplier: 1,
-  summonSequence: DETERMINISTIC_SUMMON_SEQUENCE,
+  summonSource: { kind: 'template-sequence', values: DETERMINISTIC_SUMMON_SEQUENCE },
   tapsPerSecond: 4,
 };
 
@@ -193,9 +202,17 @@ export const SOLO_COMMON_BALANCE_SIMULATION: BalanceSimulationConfig = {
   id: 'solo-common',
 };
 
+export const ADVERSARIAL_RNG_BALANCE_SIMULATION: BalanceSimulationConfig = {
+  ...FIVE_COMMON_BALANCE_SIMULATION,
+  id: 'adversarial-rng-pity',
+  initialSummonPity: 5,
+  summonSource: { kind: 'rng-sequence', values: [0] },
+};
+
 export const DEFAULT_BALANCE_SIMULATION_SCENARIOS = [
   BASELINE_BALANCE_SIMULATION,
   FIVE_COMMON_BALANCE_SIMULATION,
+  ADVERSARIAL_RNG_BALANCE_SIMULATION,
   SOLO_COMMON_BALANCE_SIMULATION,
 ] as const;
 
@@ -374,6 +391,35 @@ const applySimulationSummon = (
   });
 };
 
+const resolveSimulationSummon = (
+  source: SimulationSummonSource,
+  sequenceIndex: number,
+  summonPity: number,
+) => {
+  const pityTriggered = summonPity >= GAME_BALANCE.legendaryPityPulls - 1;
+  if (pityTriggered) {
+    return {
+      pityTriggered,
+      template: rollSummonTemplate(0, 'Legendary'),
+    };
+  }
+
+  if (source.kind === 'rng-sequence') {
+    return {
+      pityTriggered,
+      template: rollSummonTemplate(source.values[sequenceIndex]),
+    };
+  }
+
+  const templateId = source.values[sequenceIndex];
+  const template = SUMMON_POOL.find(entry => entry.id === templateId);
+  if (!template) {
+    throw new RangeError(`No summon template configured for ${templateId}`);
+  }
+
+  return { pityTriggered, template };
+};
+
 const getStageReward = (
   stage: number,
   monsterHealth: GameNumber,
@@ -409,15 +455,28 @@ export const runBalanceSimulation = (
   normalizePositiveNumber(config.tapsPerSecond, 'tapsPerSecond');
   normalizePositiveNumber(config.sustainedComboMultiplier, 'sustainedComboMultiplier');
   normalizeNonNegativeInteger(config.initialGems, 'initialGems');
+  normalizeNonNegativeInteger(config.initialSummonPity, 'initialSummonPity');
   normalizeNonNegativeInteger(config.initialSummonsConsumed, 'initialSummonsConsumed');
-  if (config.summonSequence.length === 0) {
-    throw new RangeError('summonSequence must contain at least one rarity');
+  if (config.initialSummonPity >= GAME_BALANCE.legendaryPityPulls) {
+    throw new RangeError('initialSummonPity must be lower than the hard pity threshold');
+  }
+  if (config.summonSource.values.length === 0) {
+    throw new RangeError('summonSource must contain at least one value');
+  }
+  if (
+    config.summonSource.kind === 'rng-sequence' &&
+    config.summonSource.values.some(value => !Number.isFinite(value) || value < 0 || value >= 1)
+  ) {
+    throw new RangeError('rng-sequence values must be finite numbers from 0 inclusive to 1 exclusive');
   }
 
   const heroes = createSimulationHeroes(config.heroes);
   let gold = gameNumber(config.initialGold);
   let gems = config.initialGems;
   let cumulativeSeconds = ZERO_GAME_NUMBER;
+  let maximumSummonPity = config.initialSummonPity;
+  let pityTriggers = 0;
+  let summonPity = config.initialSummonPity;
   let totalAscensions = 0;
   let totalSummons = 0;
   let totalUpgrades = 0;
@@ -511,12 +570,18 @@ export const runBalanceSimulation = (
     while (config.automaticSummons && gems >= GAME_BALANCE.summonCostGems) {
       const sequenceIndex = (
         config.initialSummonsConsumed + totalSummons
-      ) % config.summonSequence.length;
+      ) % config.summonSource.values.length;
+      const summon = resolveSimulationSummon(config.summonSource, sequenceIndex, summonPity);
       applySimulationSummon(
         heroes,
-        config.summonSequence[sequenceIndex],
+        summon.template.id,
         config.allowNewHeroesFromSummons,
       );
+      if (summon.pityTriggered) {
+        pityTriggers += 1;
+      }
+      summonPity = summon.template.rarity === 'Legendary' ? 0 : summonPity + 1;
+      maximumSummonPity = Math.max(maximumSummonPity, summonPity);
       gems -= GAME_BALANCE.summonCostGems;
       summonsPurchased += 1;
       totalSummons += 1;
@@ -572,6 +637,8 @@ export const runBalanceSimulation = (
       finalGems: finalRow.gemsAfter,
       finalTeamPower: finalRow.teamPower,
       goldBlockedStages: rows.filter(row => row.blockedByGold).length,
+      maximumSummonPity,
+      pityTriggers,
       progressionBlockedStages: rows.filter(row => row.blockedByProgression).length,
       totalSeconds: finalRow.cumulativeSeconds,
       totalAscensions,
@@ -659,6 +726,8 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
     'gold_blocked_stages',
     'progression_blocked_stages',
     'total_summons',
+    'pity_triggers',
+    'maximum_summon_pity',
     'total_ascensions',
     'total_upgrades',
     'total_seconds',
@@ -678,6 +747,8 @@ export const renderBalanceScenarioSummaryCsv = (results: readonly BalanceSimulat
       summary.goldBlockedStages,
       summary.progressionBlockedStages,
       summary.totalSummons,
+      summary.pityTriggers,
+      summary.maximumSummonPity,
       summary.totalAscensions,
       summary.totalUpgrades,
       summary.totalSeconds,
@@ -702,6 +773,8 @@ export const formatBalanceSimulationSummary = (result: BalanceSimulationResult) 
     `Gold-blocked stages: ${summary.goldBlockedStages}`,
     `Progression-blocked stages: ${summary.progressionBlockedStages}`,
     `Total summons: ${summary.totalSummons}`,
+    `Hard pity triggers: ${summary.pityTriggers}`,
+    `Maximum summon pity: ${summary.maximumSummonPity}`,
     `Total ascensions: ${summary.totalAscensions}`,
     `Total upgrades: ${summary.totalUpgrades}`,
     `Worst normal TTK: ${formatGameNumber(summary.worstNormalTtkSeconds)}s at stage ${summary.worstNormalStage}`,
