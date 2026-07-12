@@ -9,6 +9,8 @@ interface BottomNavProps {
   activeView: ActiveView;
   preloadView: (view: ActiveView) => void;
   setActiveView: (view: ActiveView) => void;
+  summonReadyCount: number;
+  warbandNeedsAttention: boolean;
 }
 
 interface NavigationItem {
@@ -29,6 +31,8 @@ export const BottomNav = memo(function BottomNav({
   activeView,
   preloadView,
   setActiveView,
+  summonReadyCount,
+  warbandNeedsAttention,
 }: BottomNavProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -46,6 +50,8 @@ export const BottomNav = memo(function BottomNav({
       {NAVIGATION_ITEMS.map(item => {
         const Icon = item.icon;
         const isActive = item.view === activeView;
+        const summonBadge = item.view === 'summon' && summonReadyCount > 0;
+        const warbandBadge = item.view === 'roster' && warbandNeedsAttention;
 
         return (
           <motion.button
@@ -53,6 +59,7 @@ export const BottomNav = memo(function BottomNav({
             aria-current={isActive ? 'page' : undefined}
             aria-label={item.label}
             className={`nav-btn ${item.primary ? 'nav-primary' : ''} ${isActive ? 'active' : ''}`}
+            data-view={item.view}
             onFocus={() => preloadView(item.view)}
             onClick={() => navigate(item.view)}
             onPointerDown={() => preloadView(item.view)}
@@ -71,6 +78,15 @@ export const BottomNav = memo(function BottomNav({
             <span className="nav-icon-shell" aria-hidden="true">
               <Icon className="nav-icon" size={item.primary ? 25 : 22} strokeWidth={2.35} />
             </span>
+            {!isActive && (summonBadge || warbandBadge) && (
+              <span
+                aria-hidden="true"
+                className={`nav-badge ${summonBadge ? 'summon' : 'warband'}`}
+              >
+                {summonBadge ? Math.min(9, summonReadyCount) : ''}
+                {summonBadge && summonReadyCount > 9 ? '+' : ''}
+              </span>
+            )}
             <span className="nav-label">{item.label}</span>
           </motion.button>
         );

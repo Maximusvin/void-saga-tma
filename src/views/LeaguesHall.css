@@ -178,6 +178,80 @@
   white-space: nowrap;
 }
 
+.league-promotion {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 9px;
+  margin-top: 5px;
+  padding: 7px 6px 1px;
+  border-top: 1px solid color-mix(in srgb, var(--division-color) 30%, transparent);
+}
+
+.league-promotion-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.league-promotion-copy span {
+  overflow: hidden;
+  color: var(--division-color);
+  font-size: 0.52rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.league-promotion-copy strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.league-promotion button {
+  min-width: 82px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--division-color) 52%, transparent);
+  border-radius: 7px;
+  color: #ffffff;
+  background: color-mix(in srgb, var(--division-color) 16%, rgba(3, 22, 25, 0.9));
+  font-size: 0.6rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.league-promotion button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.league-promotion-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.league-promotion-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #74efd8, var(--division-color));
+  box-shadow: 0 0 9px color-mix(in srgb, var(--division-color) 48%, transparent);
+}
+
 .realm-standings {
   margin-top: 10px;
 }
@@ -343,7 +417,7 @@
 }
 
 .league-empty-state {
-  min-height: 150px;
+  min-height: 120px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -352,7 +426,7 @@
 }
 
 .league-empty-state button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid rgba(117, 246, 222, 0.36);
   border-radius: 7px;
